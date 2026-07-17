@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=1920, initial-scale=1" />
+    <title>GameLoop Mock Host — Cloud Cafe</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body tabindex="-1">
+    <div id="splash">Loading</div>
+
+    <!-- LEFT NAV: vertical column of mock host controls (~480px wide) -->
+    <nav id="mockhost-nav">
+      <h1>Mock Host</h1>
+      <button data-focusable data-action="reloadIframe">Reload Iframe</button>
+      <button data-focusable data-action="focusIframe">Focus Iframe</button>
+      <button data-focusable data-action="adMessage:ads.started">adMessage: ads.started</button>
+      <button data-focusable data-action="adMessage:ads.inProgress">adMessage: ads.inProgress</button>
+      <button data-focusable data-action="adMessage:ads.skipped">adMessage: ads.skipped</button>
+      <button data-focusable data-action="adMessage:ads.completed">adMessage: ads.completed</button>
+    </nav>
+
+    <!-- RIGHT STAGE: game iframe rendered at native 1920x1080, transform-scaled to 1280x720 -->
+    <div id="stage-wrapper">
+      <iframe id="game-frame" title="game" allow="autoplay"></iframe>
+    </div>
+
+    <!-- BOTTOM-RIGHT LOG STRIP -->
+    <section id="log-panel">
+      <h2>Outbound / Inbound Log (newest at bottom)</h2>
+      <textarea id="log" readonly rows="10" cols="100"></textarea>
+    </section>
+
+    <!-- INBOUND QP INSPECTION PANEL (debug aid; shows the QPs the host injected) -->
+    <section id="qp-panel">
+      <h2>Injected QPs (host -&gt; game)</h2>
+      <pre id="qp-display"></pre>
+    </section>
+
+    <script type="module" src="./main.js"></script>
+  </body>
+</html>

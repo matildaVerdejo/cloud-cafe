@@ -1,0 +1,89 @@
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.App {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
+  background-color: #f0f0f0;
+}
+/* --- GameLoop scaffolding: exit confirm, ad curtain, suspend, focus --- */
+
+.gl-exit-confirm-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+}
+
+.gl-exit-confirm-dialog {
+  background: #fefee9;
+  border: 3px solid #295105;
+  border-radius: 12px;
+  padding: 32px 40px;
+  text-align: center;
+  color: #1e2e10;
+  font-size: 22px;
+}
+
+.gl-exit-confirm-buttons {
+  margin-top: 20px;
+  display: flex;
+  gap: 16px;
+  justify-content: center;
+}
+
+.gl-exit-confirm-buttons button {
+  padding: 10px 24px;
+  font-size: 18px;
+  border: 2px solid #295105;
+  background: #ffffff;
+  color: #1e2e10;
+  cursor: default;
+}
+
+.gl-exit-confirm-buttons button:focus-visible {
+  outline: 4px solid #ffd166;
+  outline-offset: 2px;
+}
+
+.gl-ad-curtain {
+  position: fixed;
+  inset: 0;
+  background: #000;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 28px;
+  z-index: 9998;
+}
+
+/* Suspended (backgrounded) state: freeze CSS animations app-wide so nothing
+   burns CPU while hidden. Individual components' keyframe animations inherit
+   this via the shared ancestor class. */
+body.gl-suspended * {
+  animation-play-state: paused !important;
+}
+
+/* Visible focus ring for keyboard/D-pad navigation across the app. Never
+   :hover as a focus substitute. */
+button:focus-visible,
+[tabindex]:focus-visible {
+  outline: 4px solid #ffd166;
+  outline-offset: 2px;
+}

@@ -1,0 +1,133 @@
+@import url('https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@400&display=swap');
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Fixed 16:9 canvas -- same convention as the other screens. */
+.milk-selection-container {
+  position: relative;
+  width: 1920px;
+  max-width: 92vw;
+  aspect-ratio: 16 / 9;
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 15px 30px rgba(0, 0, 0, 0.2);
+  /* Matches the art's own counter tone. This image is 1392x768 (~1.813),
+     slightly wider than 16:9 (1.778), so object-fit: contain below leaves a
+     ~1% letterbox top/bottom -- this keeps it invisible. */
+  background-color: #ab9d94;
+}
+
+.milk-selection-content {
+  width: 100%;
+  height: 100%;
+  position: relative;
+}
+
+.milk-selection-art {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+  animation: milkArtFadeIn 1s ease-out both;
+}
+
+@keyframes milkArtFadeIn {
+  0% {
+    opacity: 0;
+    transform: scale(1.03);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* Same style as .ordering-back-button / .matcha-back-button, placed on the
+   counter directly below the ice box (ice box spans image x 35-320,
+   y 550-705 of 1392x768; button centered under it at x 115-240, y 703-762).
+   Keep all three in sync if the shared style changes. */
+.milk-back-button {
+  position: absolute;
+  left: 8.26%;
+  top: 90.75%;
+  width: 8.98%;
+  height: 7.53%;
+  font-family: 'Pixelify Sans', cursive;
+  font-size: 22px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: transform 0.15s ease;
+  background: rgba(255, 255, 255, 0.85);
+  border: 2px solid #8a7a6a;
+  color: #5c4a3a;
+}
+
+.milk-back-button:hover {
+  transform: scale(1.05);
+}
+
+.milk-back-button:active {
+  transform: scale(0.95);
+}
+
+/* Glass cup: starts sitting on the leftmost cabinet slot on the wall
+   (image x 990-1080, y 202-298 of 1392x768) and can be dragged down to the
+   table, where it renders 3x bigger (as if set down closer to camera).
+   Table left/top in MilkSelection.js are picked so the enlarged box's
+   bottom edge lands at y=605 -- the same level the milk bottles' bases sit
+   at (measured y 601-610 across the four bottles) -- and is horizontally
+   centered on the table (x=696, half of the 1392-wide art). Enter/Select on
+   the focused cup toggles shelf <-> table as the D-pad equivalent of
+   dragging (see handleCupKeyDown in MilkSelection.js). left/top/width/
+   height are set inline per-render since they're state-driven, not fixed --
+   only the static visual properties live here. */
+.glass-cup {
+  position: absolute;
+  cursor: grab;
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+  filter: drop-shadow(0 6px 8px rgba(0, 0, 0, 0.25));
+  transition: left 0.25s ease, top 0.25s ease, width 0.25s ease, height 0.25s ease;
+}
+
+.glass-cup.dragging {
+  cursor: grabbing;
+  transition: none;
+}
+
+/* Three ice cubes, scattered inside the ice box (image x 95-285,
+   y 574-676 of 1392x768 -- see ICE_BOX_SPOTS in MilkSelection.js for each
+   cube's exact spot). Each can be dragged onto the cup (only registers
+   once the cup is on the table) or, once selected via D-pad, placed with
+   Enter. Once placed it shrinks down and sits near the cup's rim and stops
+   being interactive -- see .ice-cube.placed below. */
+.ice-cube {
+  position: absolute;
+  cursor: grab;
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+  filter: drop-shadow(0 3px 4px rgba(0, 0, 0, 0.2));
+  transition: left 0.2s ease, top 0.2s ease, width 0.2s ease, height 0.2s ease;
+}
+
+.ice-cube.dragging {
+  cursor: grabbing;
+  transition: none;
+}
+
+.ice-cube.placed {
+  cursor: default;
+  pointer-events: none;
+}

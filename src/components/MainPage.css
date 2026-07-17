@@ -1,0 +1,132 @@
+@import url('https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@400&display=swap');
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Fixed 16:9 -- the standard GameLoop/TV app canvas ratio. Use this ratio
+   for every screen from now on. */
+.main-container {
+  position: relative;
+  width: 1920px;
+  max-width: 92vw;
+  aspect-ratio: 16 / 9;
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 15px 30px rgba(0, 0, 0, 0.2);
+  animation: gentleContainerFloat 8s ease-in-out infinite;
+  /* Matches the art's own backdrop color, so when the art isn't natively
+     16:9 (this one is 1024x924, nearly square) the letterbox bars left by
+     object-fit: contain below are invisible instead of showing raw white. */
+  background-color: #ab9d94;
+}
+
+@keyframes gentleContainerFloat {
+  0%, 100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-8px);
+  }
+}
+
+.main-content {
+  width: 100%;
+  height: 100%;
+  position: relative;
+}
+
+/* object-fit: contain (not cover) so art that isn't natively 16:9 never
+   gets cropped -- it's letterboxed against the background-color above
+   instead. Because of this, .play-button's percentages below are NOT
+   simply the hotspot's position within the source image; they're
+   recomputed against the full 16:9 container. See the formula in the
+   comment above .play-button when swapping in new art. */
+.home-art {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+  animation: artFadeIn 1s ease-out both;
+}
+
+@keyframes artFadeIn {
+  0% {
+    opacity: 0;
+    transform: scale(1.03);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* This sign was drawn in by us (composited onto the source art with PIL,
+   white fill + dark brown outline per request) since the source image had
+   no "play" affordance, at pixel box x 640-770, y 467-533 on the 1024x924
+   art (62.5%/50.54%/12.7%/7.14% of the IMAGE itself).
+
+   Since .main-container is now a fixed 16:9 and the 1024x924 art is
+   letterboxed (pillarboxed, in this case) inside it via object-fit:
+   contain, the button's percentages here are relative to the CONTAINER,
+   not the image, and need one extra conversion step vs. the image-relative
+   numbers above:
+     scale         = (imgW/imgH) / (16/9)
+     containerLeft = (1 - scale) / 2 * 100 + imageLeft% * scale
+     containerWidth = imageWidth% * scale
+     containerTop/Height stay = imageTop%/imageHeight% (unchanged) when the
+       image is pillarboxed (narrower than 16:9, letterboxed left/right);
+       swap the axis (recompute top/height, leave left/width unchanged) if
+       a future image is WIDER than 16:9 and gets letterboxed top/bottom
+       instead.
+   For this art: scale = (1024/924)/(16/9) = 0.6233 ->
+     left = 57.79%, width = 7.92%, top/height unchanged. */
+.play-button {
+  position: absolute;
+  left: 57.79%;
+  top: 50.54%;
+  width: 7.92%;
+  height: 7.14%;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: transform 0.15s ease;
+  animation: playButtonPulse 2.2s ease-in-out 2s infinite;
+  /* Matches the Back button on the Customer Ordering screen
+     (.ordering-back-button in CustomerOrdering.css) -- same fill, border,
+     text color, font, and pill shape. Keep these two in sync. */
+  background: rgba(255, 255, 255, 0.85);
+  border: 2px solid #8a7a6a;
+  color: #5c4a3a;
+  font-family: 'Pixelify Sans', cursive;
+  font-size: 22px;
+  border-radius: 999px;
+}
+
+@keyframes playButtonPulse {
+  0%, 100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.05);
+  }
+}
+
+.play-button:hover {
+  transform: scale(1.08);
+  animation-play-state: paused;
+}
+
+.play-button:active {
+  transform: scale(0.95);
+}

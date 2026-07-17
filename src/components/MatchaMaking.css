@@ -1,0 +1,121 @@
+@import url('https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@400&display=swap');
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Fixed 16:9 canvas -- same convention as MainPage / CustomerOrdering. */
+.matcha-making-container {
+  position: relative;
+  width: 1920px;
+  max-width: 92vw;
+  aspect-ratio: 16 / 9;
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 15px 30px rgba(0, 0, 0, 0.2);
+  /* Matches the art's own counter tone. This image is 1392x768 (~1.813),
+     slightly wider than 16:9 (1.778), so object-fit: contain below leaves a
+     ~1% letterbox top/bottom -- this keeps it invisible. */
+  background-color: #ab9d94;
+}
+
+.matcha-making-content {
+  width: 100%;
+  height: 100%;
+  position: relative;
+}
+
+.matcha-making-art {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+  animation: matchaArtFadeIn 1s ease-out both;
+}
+
+@keyframes matchaArtFadeIn {
+  0% {
+    opacity: 0;
+    transform: scale(1.03);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* Same style as .ordering-back-button in CustomerOrdering.css, placed on
+   the empty counter space bottom-left (image x 20-145, y 650-709 of
+   1392x768, clear of the stove's corner). Keep these two in sync if the
+   shared style changes. */
+.matcha-back-button {
+  position: absolute;
+  left: 1.44%;
+  top: 83.98%;
+  width: 8.98%;
+  height: 7.53%;
+  font-family: 'Pixelify Sans', cursive;
+  font-size: 22px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: transform 0.15s ease;
+  background: rgba(255, 255, 255, 0.85);
+  border: 2px solid #8a7a6a;
+  color: #5c4a3a;
+}
+
+.matcha-back-button:hover {
+  transform: scale(1.05);
+}
+
+.matcha-back-button:active {
+  transform: scale(0.95);
+}
+
+/* Same style as .start-order-button in CustomerOrdering.css, placed on the
+   empty counter stretch below the bowl/whisk (image x 590-860, y 675-733
+   of 1392x768), well clear of the tins on the right and the Back button on
+   the left. Keep these two in sync if the shared style changes. */
+.mix-drink-button {
+  position: absolute;
+  left: 42.39%;
+  top: 87.16%;
+  width: 19.40%;
+  height: 7.41%;
+  font-family: 'Pixelify Sans', cursive;
+  font-size: 22px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: transform 0.15s ease;
+  background: #e8f8e0;
+  border: 3px solid #5a8a4f;
+  color: #2f4a28;
+  font-weight: 600;
+  animation: mixDrinkPulse 2.2s ease-in-out 2s infinite;
+}
+
+@keyframes mixDrinkPulse {
+  0%, 100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.04);
+  }
+}
+
+.mix-drink-button:hover {
+  transform: scale(1.06);
+  animation-play-state: paused;
+}
+
+.mix-drink-button:active {
+  transform: scale(0.96);
+}

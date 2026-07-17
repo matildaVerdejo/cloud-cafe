@@ -1,0 +1,140 @@
+@import url('https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@400&display=swap');
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Fixed 16:9 canvas -- same convention as MainPage. */
+.ordering-container {
+  position: relative;
+  width: 1920px;
+  max-width: 92vw;
+  aspect-ratio: 16 / 9;
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 15px 30px rgba(0, 0, 0, 0.2);
+  /* Matches the art's own backdrop (a very light mint), so the sliver of
+     letterboxing from object-fit: contain below is invisible -- this art
+     is 2752x1536 (~1.792), already almost exactly 16:9 (1.778), so the
+     bars are under half a percent either way. */
+  background-color: #effae9;
+}
+
+.ordering-content {
+  width: 100%;
+  height: 100%;
+  position: relative;
+}
+
+.ordering-art {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+  animation: orderingArtFadeIn 1s ease-out both;
+}
+
+@keyframes orderingArtFadeIn {
+  0% {
+    opacity: 0;
+    transform: scale(1.03);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* Both buttons sit on the empty cabinet band along the bottom of the art
+   (image y 1310-1430 of 1536), converted to container-relative percentages
+   per the formula documented in MainPage.css (this art is close enough to
+   16:9 that the correction is under half a percent). */
+.start-order-button,
+.ordering-back-button {
+  position: absolute;
+  top: 85.02%;
+  height: 7.75%;
+  font-family: 'Pixelify Sans', cursive;
+  font-size: 22px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: transform 0.15s ease;
+}
+
+.start-order-button {
+  left: 39.97%;
+  width: 19.98%;
+  background: #e8f8e0;
+  border: 3px solid #5a8a4f;
+  color: #2f4a28;
+  font-weight: 600;
+  animation: startOrderPulse 2.2s ease-in-out 2s infinite;
+}
+
+@keyframes startOrderPulse {
+  0%, 100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.04);
+  }
+}
+
+.start-order-button:hover {
+  transform: scale(1.06);
+  animation-play-state: paused;
+}
+
+.start-order-button:active {
+  transform: scale(0.96);
+}
+
+.ordering-back-button {
+  left: 2.91%;
+  width: 9.08%;
+  background: rgba(255, 255, 255, 0.85);
+  border: 2px solid #8a7a6a;
+  color: #5c4a3a;
+}
+
+.ordering-back-button:hover {
+  transform: scale(1.05);
+}
+
+.ordering-back-button:active {
+  transform: scale(0.95);
+}
+
+/* Largest rectangle that fits inside the speech-bubble oval in the art
+   (bubble spans image x 658-1184, y 484-800 of 2752x1536; inscribed-in-
+   ellipse rectangle at 45 degrees = center +/- semi-axis/sqrt(2)), nudged
+   down slightly per feedback so the text sits centered in the bubble rather
+   than hugging its top. This art is ~16:9 already so the container-relative
+   correction from MainPage.css's formula is negligible and folded straight
+   into these numbers. Purely decorative text -- not focusable, not a
+   button. */
+.order-text {
+  position: absolute;
+  left: 26.71%;
+  top: 38%;
+  width: 13.52%;
+  height: 14%;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  font-family: 'Pixelify Sans', cursive;
+  font-size: 17px;
+  line-height: 1.25;
+  color: #2f4a28;
+  pointer-events: none;
+}

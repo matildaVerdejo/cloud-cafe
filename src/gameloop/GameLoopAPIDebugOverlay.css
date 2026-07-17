@@ -1,0 +1,59 @@
+/* Removable GameLoop V1 debug overlay — validation UI only, not gameplay. */
+.gl-debug-overlay {
+  position: fixed;
+  top: 24px;
+  right: 24px;
+  z-index: 9999;
+  width: 340px;
+  background: rgba(10, 16, 36, 0.92);
+  border: 2px solid #ffd166;
+  border-radius: 8px;
+  padding: 16px;
+  color: #ffffff;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 14px;
+}
+
+.gl-debug-overlay h2 {
+  margin: 0 0 8px;
+  font-size: 15px;
+  color: #ffd166;
+}
+
+.gl-debug-overlay .gl-status-line {
+  margin: 0 0 10px;
+  color: #aab3d0;
+}
+
+.gl-debug-overlay ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.gl-debug-overlay button {
+  width: 100%;
+  text-align: left;
+  background: #11183a;
+  border: 2px solid #2a3366;
+  color: #ffffff;
+  padding: 8px 10px;
+  font: inherit;
+  cursor: default;
+}
+
+.gl-debug-overlay button:focus-visible {
+  outline: 3px solid #ffd166;
+  outline-offset: 2px;
+}
+
+.gl-debug-overlay .gl-log {
+  margin-top: 10px;
+  max-height: 90px;
+  overflow-y: auto;
+  color: #7fd0ff;
+  white-space: pre-wrap;
+}
