@@ -8,9 +8,12 @@ import { getActionFromKeyEvent, shouldDebounceEnter } from '../gameloop/pal';
 // is bigger once it's on the table (as if set down closer to camera) and
 // its bottom edge lands at the same level the milk bottles stand at,
 // centered horizontally on the table.
+// top values are offset by -0.96 vs. the raw image math (see
+// object-position: top on .milk-selection-art in MilkSelection.css) so the
+// cup/ice tracks the art now that it's anchored to the top of the frame.
 const CUP_SPOTS = {
-  shelf: { left: 71.12, top: 26.75 },
-  table: { left: 40.30, top: 41.06 },
+  shelf: { left: 71.12, top: 25.79 },
+  table: { left: 40.30, top: 40.10 },
 };
 const SHELF_SIZE = { width: 6.47, height: 12.39 };
 const TABLE_SIZE = { width: 19.40, height: 37.16 }; // same aspect ratio, 3x
@@ -20,9 +23,9 @@ const TABLE_SIZE = { width: 19.40, height: 37.16 }; // same aspect ratio, 3x
 // slot (near the rim) so placement order doesn't matter -- cube 0 always
 // ends up in slot 0, etc.
 const ICE_BOX_SPOTS = [
-  { left: 6.825, top: 74.26 },
-  { left: 11.135, top: 78.11 },
-  { left: 15.445, top: 74.26 },
+  { left: 6.825, top: 73.30 },
+  { left: 11.135, top: 77.15 },
+  { left: 15.445, top: 73.30 },
 ];
 const ICE_BOX_SIZE = { width: 5.03, height: 9.196 };
 const ICE_CUP_SIZE = { width: 4, height: 4.11 };

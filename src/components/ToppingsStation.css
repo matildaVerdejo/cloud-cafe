@@ -23,7 +23,9 @@
   box-shadow: 0 15px 30px rgba(0, 0, 0, 0.2);
   /* Matches the art's own counter tone. This image is 1394x768 (~1.815),
      slightly wider than 16:9 (1.778), so object-fit: contain below leaves a
-     ~1% letterbox top/bottom -- this keeps it invisible. */
+     ~2.06% letterbox -- pushed entirely to the bottom (see object-position
+     on .toppings-art) so the seam sits against the counter color instead
+     of splitting a thin sliver across the top too. */
   background-color: #ab9a92;
 }
 
@@ -37,6 +39,10 @@
   width: 100%;
   height: 100%;
   object-fit: contain;
+  /* Anchors the image to the top of the container so all ~1.03% of
+     leftover vertical space falls at the bottom instead of being split
+     top/bottom -- button top% values below are offset by -1.03 to match. */
+  object-position: top;
   display: block;
   animation: toppingsArtFadeIn 1s ease-out both;
 }
@@ -58,7 +64,7 @@
 .toppings-back-button {
   position: absolute;
   left: 6.46%;
-  top: 86.47%;
+  top: 85.44%;
   width: 8.97%;
   height: 7.52%;
   font-family: 'Pixelify Sans', cursive;
@@ -86,7 +92,7 @@
 .finish-drink-button {
   position: absolute;
   left: 40.17%;
-  top: 86.47%;
+  top: 85.44%;
   width: 20.09%;
   height: 7.65%;
   font-family: 'Pixelify Sans', cursive;

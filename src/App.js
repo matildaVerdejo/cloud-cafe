@@ -22,7 +22,10 @@ import {
 
 function App() {
   const [currentPage, setCurrentPage] = useState('main');
-  const [selectedMilk, setSelectedMilk] = useState(null);
+  // Only the setter is used now (FinalCombination no longer displays a milk
+  // summary) -- skip naming the read value so CRA's CI lint pass doesn't
+  // flag it as unused.
+  const [, setSelectedMilk] = useState(null);
   const [showExitConfirm, setShowExitConfirm] = useState(false);
   const [adPlaying, setAdPlaying] = useState(false);
   // currentPage is read inside a window-level keydown listener that is
@@ -210,7 +213,6 @@ function App() {
         {currentPage === 'final-combination' && (
           <div className="page-slide">
             <FinalCombination
-              selectedMilk={selectedMilk}
               onBack={handleBackToToppings}
               onComplete={handleBackToMain}
             />

@@ -23,7 +23,9 @@
   box-shadow: 0 15px 30px rgba(0, 0, 0, 0.2);
   /* Matches the art's own counter tone. This image is 1392x768 (~1.813),
      slightly wider than 16:9 (1.778), so object-fit: contain below leaves a
-     ~1% letterbox top/bottom -- this keeps it invisible. */
+     ~1.93% letterbox -- pushed entirely to the bottom (see object-position
+     on .matcha-making-art) so the seam sits against the counter color
+     instead of splitting a thin sliver across the top too. */
   background-color: #ab9d94;
 }
 
@@ -37,6 +39,10 @@
   width: 100%;
   height: 100%;
   object-fit: contain;
+  /* Anchors the image to the top of the container so all ~0.96% of leftover
+     vertical space falls at the bottom instead of being split top/bottom --
+     button top% values below are offset by -0.96 to match. */
+  object-position: top;
   display: block;
   animation: matchaArtFadeIn 1s ease-out both;
 }
@@ -59,7 +65,7 @@
 .matcha-back-button {
   position: absolute;
   left: 1.44%;
-  top: 83.98%;
+  top: 83.02%;
   width: 8.98%;
   height: 7.53%;
   font-family: 'Pixelify Sans', cursive;
@@ -87,7 +93,7 @@
 .mix-drink-button {
   position: absolute;
   left: 42.39%;
-  top: 87.16%;
+  top: 86.20%;
   width: 19.40%;
   height: 7.41%;
   font-family: 'Pixelify Sans', cursive;

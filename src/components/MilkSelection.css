@@ -23,7 +23,9 @@
   box-shadow: 0 15px 30px rgba(0, 0, 0, 0.2);
   /* Matches the art's own counter tone. This image is 1392x768 (~1.813),
      slightly wider than 16:9 (1.778), so object-fit: contain below leaves a
-     ~1% letterbox top/bottom -- this keeps it invisible. */
+     ~1.93% letterbox -- pushed entirely to the bottom (see object-position
+     on .milk-selection-art) so the seam sits against the counter color
+     instead of splitting a thin sliver across the top too. */
   background-color: #ab9d94;
 }
 
@@ -37,6 +39,11 @@
   width: 100%;
   height: 100%;
   object-fit: contain;
+  /* Anchors the image to the top of the container so all ~0.96% of leftover
+     vertical space falls at the bottom instead of being split top/bottom --
+     all top% values below (buttons, cup spots, ice box spots in
+     MilkSelection.js) are offset by -0.96 to match. */
+  object-position: top;
   display: block;
   animation: milkArtFadeIn 1s ease-out both;
 }
@@ -59,7 +66,7 @@
 .milk-back-button {
   position: absolute;
   left: 8.26%;
-  top: 90.75%;
+  top: 89.79%;
   width: 8.98%;
   height: 7.53%;
   font-family: 'Pixelify Sans', cursive;
@@ -86,7 +93,7 @@
 .add-toppings-button {
   position: absolute;
   left: 40%;
-  top: 90.75%;
+  top: 89.79%;
   width: 20%;
   height: 7.53%;
   font-family: 'Pixelify Sans', cursive;
