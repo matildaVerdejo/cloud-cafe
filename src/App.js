@@ -6,7 +6,10 @@ import MatchaMaking from './components/MatchaMaking';
 import MilkSelection from './components/MilkSelection';
 import ToppingsStation from './components/ToppingsStation';
 import FinalCombination from './components/FinalCombination';
-import GameLoopAPIDebugOverlay from './gameloop/GameLoopAPIDebugOverlay';
+// Debug overlay is currently unused (see the commented-out JSX below) --
+// import left commented out too so CRA's CI lint pass (unused-import) doesn't
+// fail the Vercel build. Uncomment both together to bring it back.
+// import GameLoopAPIDebugOverlay from './gameloop/GameLoopAPIDebugOverlay';
 import { getActionFromKeyEvent } from './gameloop/pal';
 import {
   initGameLoopBridge,
