@@ -34,8 +34,10 @@ const FinalCombination = ({ selectedMilk, onBack, onComplete }) => {
             <img src="./Wisked.png" alt="Whisked Matcha" className="summary-image" />
           </div>
           <div className="milk-summary">
-            <h3>Milk: {selectedMilk}</h3>
-            <img src={`./${selectedMilk.toLowerCase()}.png`} alt={selectedMilk} className="summary-image" />
+            <h3>Milk: {selectedMilk || 'Mixed'}</h3>
+            {selectedMilk && (
+              <img src={`./${selectedMilk.toLowerCase()}.png`} alt={selectedMilk} className="summary-image" />
+            )}
           </div>
         </div>
 
@@ -54,7 +56,7 @@ const FinalCombination = ({ selectedMilk, onBack, onComplete }) => {
 
         <div className="navigation-buttons">
           <button className="back-button" data-focusable onClick={onBack}>
-            Back to Milk Selection
+            Back to Toppings
           </button>
           <button className="combine-button" data-focusable autoFocus onClick={handleCombine}>
             Create Matcha Latte

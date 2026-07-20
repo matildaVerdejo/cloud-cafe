@@ -1,0 +1,120 @@
+@import url('https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@400&display=swap');
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Fixed 16:9 canvas -- same convention as the other screens. */
+.toppings-container {
+  position: relative;
+  width: 1920px;
+  max-width: 92vw;
+  aspect-ratio: 16 / 9;
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 15px 30px rgba(0, 0, 0, 0.2);
+  /* Matches the art's own counter tone. This image is 1394x768 (~1.815),
+     slightly wider than 16:9 (1.778), so object-fit: contain below leaves a
+     ~1% letterbox top/bottom -- this keeps it invisible. */
+  background-color: #ab9a92;
+}
+
+.toppings-content {
+  width: 100%;
+  height: 100%;
+  position: relative;
+}
+
+.toppings-art {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+  animation: toppingsArtFadeIn 1s ease-out both;
+}
+
+@keyframes toppingsArtFadeIn {
+  0% {
+    opacity: 0;
+    transform: scale(1.03);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* Same style as the other screens' back buttons, placed on the counter
+   below the syrup bottles on the left (image x 90-215, y 670-729 of
+   1394x768). Keep these in sync if the shared style changes. */
+.toppings-back-button {
+  position: absolute;
+  left: 6.46%;
+  top: 86.47%;
+  width: 8.97%;
+  height: 7.52%;
+  font-family: 'Pixelify Sans', cursive;
+  font-size: 22px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: transform 0.15s ease;
+  background: rgba(255, 255, 255, 0.85);
+  border: 2px solid #8a7a6a;
+  color: #5c4a3a;
+}
+
+.toppings-back-button:hover {
+  transform: scale(1.05);
+}
+
+.toppings-back-button:active {
+  transform: scale(0.95);
+}
+
+/* Same style as the other screens' primary action buttons, centered on the
+   wide empty counter stretch (image x 560-840, y 670-730 of 1394x768),
+   clear of the bottles on the left and the jars/bowl on the right. Keep
+   these in sync if the shared style changes. */
+.finish-drink-button {
+  position: absolute;
+  left: 40.17%;
+  top: 86.47%;
+  width: 20.09%;
+  height: 7.65%;
+  font-family: 'Pixelify Sans', cursive;
+  font-size: 22px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: transform 0.15s ease;
+  background: #e8f8e0;
+  border: 3px solid #5a8a4f;
+  color: #2f4a28;
+  font-weight: 600;
+  animation: finishDrinkPulse 2.2s ease-in-out 2s infinite;
+}
+
+@keyframes finishDrinkPulse {
+  0%, 100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.04);
+  }
+}
+
+.finish-drink-button:hover {
+  transform: scale(1.06);
+  animation-play-state: paused;
+}
+
+.finish-drink-button:active {
+  transform: scale(0.96);
+}

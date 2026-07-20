@@ -4,6 +4,7 @@ import MainPage from './components/MainPage';
 import CustomerOrdering from './components/CustomerOrdering';
 import MatchaMaking from './components/MatchaMaking';
 import MilkSelection from './components/MilkSelection';
+import ToppingsStation from './components/ToppingsStation';
 import FinalCombination from './components/FinalCombination';
 import GameLoopAPIDebugOverlay from './gameloop/GameLoopAPIDebugOverlay';
 import { getActionFromKeyEvent } from './gameloop/pal';
@@ -93,8 +94,11 @@ function App() {
         case 'milk-selection':
           handleBackToMatcha();
           break;
-        case 'final-combination':
+        case 'toppings':
           handleBackToMilk();
+          break;
+        case 'final-combination':
+          handleBackToToppings();
           break;
         default:
           break;
@@ -122,6 +126,14 @@ function App() {
     setCurrentPage('final-combination');
   };
 
+  const handleAddToppings = () => {
+    setCurrentPage('toppings');
+  };
+
+  const handleToppingsComplete = () => {
+    setCurrentPage('final-combination');
+  };
+
   const handleBackToMain = () => {
     setCurrentPage('main');
     setSelectedMilk(null);
@@ -138,6 +150,10 @@ function App() {
 
   const handleBackToMilk = () => {
     setCurrentPage('milk-selection');
+  };
+
+  const handleBackToToppings = () => {
+    setCurrentPage('toppings');
   };
 
   // Natural ad break point: matcha latte finished.
@@ -176,14 +192,23 @@ function App() {
         )}
         {currentPage === 'milk-selection' && (
           <div className="page-slide">
-            <MilkSelection onMilkSelected={handleMilkSelected} onBack={handleBackToMatcha} />
+            <MilkSelection
+              onMilkSelected={handleMilkSelected}
+              onAddToppings={handleAddToppings}
+              onBack={handleBackToMatcha}
+            />
+          </div>
+        )}
+        {currentPage === 'toppings' && (
+          <div className="page-slide">
+            <ToppingsStation onComplete={handleToppingsComplete} onBack={handleBackToMilk} />
           </div>
         )}
         {currentPage === 'final-combination' && (
           <div className="page-slide">
             <FinalCombination
               selectedMilk={selectedMilk}
-              onBack={handleBackToMilk}
+              onBack={handleBackToToppings}
               onComplete={handleBackToMain}
             />
           </div>
@@ -208,8 +233,11 @@ function App() {
 
       {adPlaying && <div className="gl-ad-curtain">Ad playing…</div>}
 
-      {/* Removable GameLoop V1 debug overlay — comment out this single line to hide it. */}
-      <GameLoopAPIDebugOverlay />
+      {/* Removable GameLoop V1 debug overlay — hidden for now (design work in
+          progress). Uncomment to bring it back for validating appReady/
+          adOpportunity/close/focusHost; the bridge and Back handling keep
+          working either way. */}
+      {/* <GameLoopAPIDebugOverlay /> */}
     </div>
   );
 }

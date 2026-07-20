@@ -58,7 +58,7 @@ function isOverCup(leftPct, topPct, cupSpot) {
   );
 }
 
-const MilkSelection = ({ onBack }) => {
+const MilkSelection = ({ onBack, onAddToppings }) => {
   const containerRef = useRef(null);
   useFlatFocusNav(containerRef);
 
@@ -240,6 +240,14 @@ const MilkSelection = ({ onBack }) => {
           onClick={onBack}
         >
           Back
+        </button>
+        <button
+          type="button"
+          className="add-toppings-button"
+          data-focusable
+          onClick={onAddToppings}
+        >
+          Add Toppings
         </button>
       </div>
     </div>
