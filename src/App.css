@@ -56,14 +56,17 @@ body {
   padding: 10px 24px;
   font-size: min(18px, 0.9375vw);
   border: 2px solid #295105;
+  border-radius: 10px;
   background: #ffffff;
   color: #1e2e10;
   cursor: default;
+  transition: box-shadow 0.15s ease, transform 0.15s ease;
 }
 
 .gl-exit-confirm-buttons button:focus-visible {
-  outline: 4px solid #ffd166;
-  outline-offset: 2px;
+  outline: none;
+  box-shadow: 0 0 0 4px rgba(255, 209, 102, 0.9), 0 0 16px 5px rgba(255, 209, 102, 0.55);
+  transform: scale(1.06);
 }
 
 .gl-ad-curtain {
@@ -85,10 +88,15 @@ body.gl-suspended * {
   animation-play-state: paused !important;
 }
 
-/* Visible focus ring for keyboard/D-pad navigation across the app. Never
-   :hover as a focus substitute. */
+/* Visible focus treatment for keyboard/D-pad navigation across the app.
+   Never :hover as a focus substitute. Uses a soft glow (box-shadow) plus a
+   slight scale-up instead of a rectangular outline -- box-shadow respects
+   each element's own border-radius, so it hugs pill-shaped buttons and
+   circular dots instead of drawing a box around them. */
 button:focus-visible,
 [tabindex]:focus-visible {
-  outline: 4px solid #ffd166;
-  outline-offset: 2px;
+  outline: none;
+  box-shadow: 0 0 0 4px rgba(255, 209, 102, 0.9), 0 0 16px 5px rgba(255, 209, 102, 0.55);
+  transform: scale(1.05);
+  transition: box-shadow 0.15s ease, transform 0.15s ease;
 }

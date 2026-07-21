@@ -71,6 +71,24 @@
   transform: scale(0.95);
 }
 
+/* Override the generic global button:focus-visible glow (App.css) here --
+   that rule targets the whole button, but .progress-step's clickable box
+   wraps a circle + text label stacked vertically, so glowing the whole
+   button would draw a tall rectangle-ish glow around both. Instead, reset
+   the button itself and move the glow onto just the circular dot, where it
+   reads as a clean focus ring around the round element the eye actually
+   tracks. */
+.progress-step:focus-visible {
+  outline: none;
+  box-shadow: none;
+  transform: none;
+}
+
+.progress-step:focus-visible .progress-step-dot {
+  box-shadow: 0 0 0 4px rgba(255, 209, 102, 0.9), 0 0 14px 4px rgba(255, 209, 102, 0.6);
+  transform: scale(1.15);
+}
+
 /* aspect-ratio: 1 keeps this a true circle at any size -- only the width
    needs to scale, the height follows automatically. */
 .progress-step-dot {
@@ -85,6 +103,7 @@
   color: #5c4a3a;
   font-size: min(20px, 0.9583vw);
   font-weight: 700;
+  transition: box-shadow 0.15s ease, transform 0.15s ease;
 }
 
 .progress-step-label {
