@@ -68,7 +68,11 @@
   width: 8.97%;
   height: 7.55%;
   font-family: 'Pixelify Sans', cursive;
-  font-size: 22px;
+  /* Scales with the game card (width: 1920px; max-width: 92vw on
+     .final-combination-container) instead of a fixed px size, so button
+     text stays proportional to the button itself as the window is
+     resized. */
+  font-size: min(22px, 1.0542vw);
   border-radius: 999px;
   cursor: pointer;
   transition: transform 0.15s ease;
@@ -97,7 +101,7 @@
   width: 13.99%;
   height: 7.55%;
   font-family: 'Pixelify Sans', cursive;
-  font-size: 22px;
+  font-size: min(22px, 1.0542vw);
   border-radius: 999px;
   cursor: pointer;
   transition: transform 0.15s ease;

@@ -109,7 +109,10 @@
   border: 2px solid #8a7a6a;
   color: #5c4a3a;
   font-family: 'Pixelify Sans', cursive;
-  font-size: 22px;
+  /* Scales with the game card (width: 1920px; max-width: 92vw on
+     .main-container) instead of a fixed px size, so button text stays
+     proportional to the button itself as the window is resized/zoomed. */
+  font-size: min(22px, 1.0542vw);
   border-radius: 999px;
 }
 

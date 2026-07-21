@@ -63,7 +63,10 @@
   top: 85.02%;
   height: 7.75%;
   font-family: 'Pixelify Sans', cursive;
-  font-size: 22px;
+  /* Scales with the game card (width: 1920px; max-width: 92vw on
+     .ordering-container) instead of a fixed px size, so button text stays
+     proportional to the button itself as the window is resized/zoomed. */
+  font-size: min(22px, 1.0542vw);
   border-radius: 999px;
   cursor: pointer;
   transition: transform 0.15s ease;
@@ -124,7 +127,7 @@
 .order-text {
   position: absolute;
   left: 26.71%;
-  top: 38%;
+  top: 37%;
   width: 13.52%;
   height: 14%;
   margin: 0;
@@ -133,7 +136,13 @@
   justify-content: center;
   text-align: center;
   font-family: 'Pixelify Sans', cursive;
-  font-size: 17px;
+  /* Same card-relative scaling as the buttons above -- keeps the dialogue
+     proportional to the speech bubble as the window is resized/zoomed.
+     Bumped up from 17px -> 22px -> 25px -> 29px -> 33px per feedback; the
+     bubble box still has headroom (up to ~3 lines at this size before it
+     would overflow). top also nudged from 38% -> 35% -> 37% per
+     feedback. */
+  font-size: min(33px, 1.5813vw);
   line-height: 1.25;
   color: #2f4a28;
   pointer-events: none;

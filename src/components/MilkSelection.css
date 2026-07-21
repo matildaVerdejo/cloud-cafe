@@ -70,7 +70,10 @@
   width: 8.98%;
   height: 7.53%;
   font-family: 'Pixelify Sans', cursive;
-  font-size: 22px;
+  /* Scales with the game card (width: 1920px; max-width: 92vw on
+     .milk-selection-container) instead of a fixed px size, so button text
+     stays proportional to the button itself as the window is resized. */
+  font-size: min(22px, 1.0542vw);
   border-radius: 999px;
   cursor: pointer;
   transition: transform 0.15s ease;
@@ -97,7 +100,7 @@
   width: 20%;
   height: 7.53%;
   font-family: 'Pixelify Sans', cursive;
-  font-size: 22px;
+  font-size: min(22px, 1.0542vw);
   border-radius: 999px;
   cursor: pointer;
   transition: transform 0.15s ease;
@@ -152,12 +155,13 @@
   transition: none;
 }
 
-/* Three ice cubes, scattered inside the ice box (image x 95-285,
-   y 574-676 of 1392x768 -- see ICE_BOX_SPOTS in MilkSelection.js for each
-   cube's exact spot). Each can be dragged onto the cup (only registers
-   once the cup is on the table) or, once selected via D-pad, placed with
-   Enter. Once placed it shrinks down and sits near the cup's rim and stops
-   being interactive -- see .ice-cube.placed below. */
+/* Seven ice cubes, piled inside the ice box in two vertical columns (image
+   x 100-290, y 574-691 of 1392x768 -- see ICE_BOX_SPOTS in MilkSelection.js
+   for each cube's exact spot). Each can be dragged onto the cup (only
+   registers once the cup is on the table) or, once selected via D-pad,
+   placed with Enter. Once placed it shrinks down and sits near the cup's
+   rim -- it stays interactive (see .ice-cube.placed below) so it can be
+   dragged back out to the ice box the same way. */
 .ice-cube {
   position: absolute;
   cursor: grab;
@@ -174,6 +178,5 @@
 }
 
 .ice-cube.placed {
-  cursor: default;
-  pointer-events: none;
+  cursor: grab;
 }

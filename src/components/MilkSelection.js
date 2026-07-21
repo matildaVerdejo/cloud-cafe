@@ -18,21 +18,38 @@ const CUP_SPOTS = {
 const SHELF_SIZE = { width: 6.47, height: 12.39 };
 const TABLE_SIZE = { width: 19.40, height: 37.16 }; // same aspect ratio, 3x
 
-// Three ice cubes start scattered inside the ice box (see the pixel math in
-// MilkSelection.css above .ice-cube). Each cube has its own fixed "in cup"
-// slot (near the rim) so placement order doesn't matter -- cube 0 always
-// ends up in slot 0, etc.
+// Seven ice cubes start piled inside the ice box in two vertical columns
+// (4 left, 3 right), each cube overlapping the one above it so the stack
+// stays within the box's shallow depth without spilling past its bottom
+// edge into the Back button below (see the pixel math in MilkSelection.css
+// above .ice-cube). Each cube has its own fixed "in cup" slot (near the
+// rim) so placement order doesn't matter -- cube 0 always ends up in
+// slot 0, etc.
 const ICE_BOX_SPOTS = [
-  { left: 6.825, top: 73.30 },
-  { left: 11.135, top: 77.15 },
-  { left: 15.445, top: 73.30 },
+  { left: 7.18, top: 73.30 },
+  { left: 7.18, top: 75.21 },
+  { left: 7.18, top: 77.13 },
+  { left: 7.18, top: 79.04 },
+  { left: 12.93, top: 73.30 },
+  { left: 12.93, top: 75.21 },
+  { left: 12.93, top: 77.13 },
 ];
 const ICE_BOX_SIZE = { width: 5.03, height: 9.196 };
 const ICE_CUP_SIZE = { width: 4, height: 4.11 };
+// Cluster near the bottom of the glass instead of floating at the rim --
+// y values follow the taper of GlassCup.png (verified against a stretched
+// preview of the art). Five cubes form a front row along the glass floor;
+// the other two sit as a back layer tucked above/behind the outer front
+// cubes (rather than spread out to the sides, which is what used to poke
+// them slightly outside the glass's tapered walls).
 const ICE_CUP_SLOT_FRACTIONS = [
-  { x: 0.32, y: 0.2 },
-  { x: 0.5, y: 0.14 },
-  { x: 0.68, y: 0.2 },
+  { x: 0.28, y: 0.68 },
+  { x: 0.72, y: 0.68 },
+  { x: 0.30, y: 0.756 },
+  { x: 0.40, y: 0.789 },
+  { x: 0.50, y: 0.80 },
+  { x: 0.60, y: 0.789 },
+  { x: 0.70, y: 0.756 },
 ];
 
 function getIceCupSlotPos(index) {
@@ -58,6 +75,27 @@ function isOverCup(leftPct, topPct, cupSpot) {
     leftPct <= cup.left + TABLE_SIZE.width + margin &&
     topPct >= cup.top - margin &&
     topPct <= cup.top + TABLE_SIZE.height + margin
+  );
+}
+
+// Bounding box around every ICE_BOX_SPOTS position, derived automatically
+// so it stays correct if the pile's layout changes again later. Used as the
+// symmetric "is this drop point back over the ice box" hit-test for
+// dragging a placed cube back out of the cup.
+const ICE_BOX_BOUNDS = {
+  left: Math.min(...ICE_BOX_SPOTS.map((s) => s.left)),
+  top: Math.min(...ICE_BOX_SPOTS.map((s) => s.top)),
+  right: Math.max(...ICE_BOX_SPOTS.map((s) => s.left)) + ICE_BOX_SIZE.width,
+  bottom: Math.max(...ICE_BOX_SPOTS.map((s) => s.top)) + ICE_BOX_SIZE.height,
+};
+
+function isOverIceBox(leftPct, topPct) {
+  const margin = 3;
+  return (
+    leftPct >= ICE_BOX_BOUNDS.left - margin &&
+    leftPct <= ICE_BOX_BOUNDS.right + margin &&
+    topPct >= ICE_BOX_BOUNDS.top - margin &&
+    topPct <= ICE_BOX_BOUNDS.bottom + margin
   );
 }
 
@@ -111,18 +149,27 @@ const MilkSelection = ({ onBack, onAddToppings }) => {
   };
 
   const cupRenderPos = cupDragPos || CUP_SPOTS[cupSpot];
-  const cupRenderSize = !cupDragPos && cupSpot === 'table' ? TABLE_SIZE : SHELF_SIZE;
+  // Sized by the cup's current spot the whole time -- cupSpot only flips on
+  // drop (see handleCupPointerUp/handleCupKeyDown), so grabbing it off the
+  // table keeps it at TABLE_SIZE for the full drag instead of snapping down
+  // to SHELF_SIZE the instant you pick it up (which used to yank it out
+  // from under the cursor and made it impossible to drag back to the
+  // shelf). It shrinks/grows only at the moment cupSpot actually changes.
+  const cupRenderSize = cupSpot === 'table' ? TABLE_SIZE : SHELF_SIZE;
 
   // ---- Ice cubes: ice box -> cup ----------------------------------------
-  // Whether each of the 3 cubes has been placed in the cup yet.
-  const [icePlaced, setIcePlaced] = useState([false, false, false]);
+  // Whether each of the 7 cubes has been placed in the cup yet.
+  const [icePlaced, setIcePlaced] = useState(new Array(ICE_BOX_SPOTS.length).fill(false));
   // Which cube (if any) is being dragged right now, and its live position.
   const [iceDrag, setIceDrag] = useState(null); // { index, left, top } | null
   const iceDragStartRef = useRef({ pointerX: 0, pointerY: 0, left: 0, top: 0 });
 
   const handleIcePointerDown = (index) => (e) => {
-    if (icePlaced[index]) return;
-    const base = ICE_BOX_SPOTS[index];
+    // Base position is wherever the cube currently is -- its ice box spot
+    // if it hasn't been placed yet, or its cup slot if it has, so grabbing
+    // a placed cube picks it up from the cup instead of jumping back to
+    // the box.
+    const base = icePlaced[index] ? getIceCupSlotPos(index) : ICE_BOX_SPOTS[index];
     e.currentTarget.setPointerCapture(e.pointerId);
     iceDragStartRef.current = {
       pointerX: e.clientX,
@@ -149,26 +196,45 @@ const MilkSelection = ({ onBack, onAddToppings }) => {
   const handleIcePointerUp = (e) => {
     if (!iceDrag) return;
     e.currentTarget.releasePointerCapture?.(e.pointerId);
-    if (isOverCup(iceDrag.left, iceDrag.top, cupSpot)) {
+    if (isOverIceBox(iceDrag.left, iceDrag.top)) {
+      // Dropped back over the ice box -- unplace it, whether it was placed
+      // before or not.
+      setIcePlaced((prev) => {
+        const next = [...prev];
+        next[iceDrag.index] = false;
+        return next;
+      });
+    } else if (isOverCup(iceDrag.left, iceDrag.top, cupSpot)) {
       setIcePlaced((prev) => {
         const next = [...prev];
         next[iceDrag.index] = true;
         return next;
       });
     }
-    // Whether placed or not, clear the drag -- an unplaced cube's render
-    // falls straight back to its ICE_BOX_SPOTS position.
+    // Otherwise (dropped somewhere ambiguous) leave placement as it was --
+    // the cube just snaps back to wherever it already was once the drag
+    // position below is cleared.
     setIceDrag(null);
   };
 
   // D-pad / keyboard equivalent of dragging a cube: select it, press Enter
-  // to place it in the cup. Only works once the cup is actually on the
-  // table, same precondition as the drag-and-drop path.
+  // to toggle it between the ice box and the cup. Placing (box -> cup) only
+  // works once the cup is actually on the table, same precondition as the
+  // drag-and-drop path; taking it back out (cup -> box) has no
+  // precondition.
   const handleIceKeyDown = (index) => (e) => {
-    if (icePlaced[index]) return;
     const action = getActionFromKeyEvent(e);
     if (action !== 'Enter') return;
     if (shouldDebounceEnter(e)) return;
+    if (icePlaced[index]) {
+      e.preventDefault();
+      setIcePlaced((prev) => {
+        const next = [...prev];
+        next[index] = false;
+        return next;
+      });
+      return;
+    }
     if (cupSpot !== 'table') return;
     e.preventDefault();
     setIcePlaced((prev) => {
@@ -216,10 +282,10 @@ const MilkSelection = ({ onBack, onAddToppings }) => {
             <img
               key={index}
               src="./IceCube.png"
-              alt={placed ? 'Ice cube in the cup' : 'Ice cube. Drag it into the cup, or select it and press Enter.'}
+              alt={placed ? 'Ice cube in the cup. Drag it back to the ice box, or select it and press Enter.' : 'Ice cube. Drag it into the cup, or select it and press Enter.'}
               className={`ice-cube${dragging ? ' dragging' : ''}${placed ? ' placed' : ''}`}
-              data-focusable={placed ? undefined : true}
-              tabIndex={placed ? undefined : 0}
+              data-focusable
+              tabIndex={0}
               draggable={false}
               style={{
                 left: `${pos.left}%`,
@@ -227,10 +293,10 @@ const MilkSelection = ({ onBack, onAddToppings }) => {
                 width: `${size.width}%`,
                 height: `${size.height}%`,
               }}
-              onPointerDown={placed ? undefined : handleIcePointerDown(index)}
-              onPointerMove={placed ? undefined : handleIcePointerMove}
-              onPointerUp={placed ? undefined : handleIcePointerUp}
-              onKeyDown={placed ? undefined : handleIceKeyDown(index)}
+              onPointerDown={handleIcePointerDown(index)}
+              onPointerMove={handleIcePointerMove}
+              onPointerUp={handleIcePointerUp}
+              onKeyDown={handleIceKeyDown(index)}
             />
           );
         })}

@@ -29,7 +29,7 @@ const CustomerOrdering = ({ onOrderStart, onBack }) => {
   const [visibleChars, setVisibleChars] = useState(0);
   useEffect(() => {
     setVisibleChars(0);
-    const TYPE_INTERVAL_MS = 35;
+    const TYPE_INTERVAL_MS = 50;
     const intervalId = setInterval(() => {
       setVisibleChars((prev) => {
         if (prev >= order.length) {

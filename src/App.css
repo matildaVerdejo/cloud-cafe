@@ -37,7 +37,12 @@ body {
   padding: 32px 40px;
   text-align: center;
   color: #1e2e10;
-  font-size: 22px;
+  /* Scales with the viewport (this dialog is a fixed full-screen overlay,
+     not bound to the game card) instead of a fixed px size, so it doesn't
+     look oversized relative to everything else when the window is resized
+     or zoomed out. Caps at the original 22px once the viewport is wide
+     enough that it would no longer need to shrink. */
+  font-size: min(22px, 1.1458vw);
 }
 
 .gl-exit-confirm-buttons {
@@ -49,7 +54,7 @@ body {
 
 .gl-exit-confirm-buttons button {
   padding: 10px 24px;
-  font-size: 18px;
+  font-size: min(18px, 0.9375vw);
   border: 2px solid #295105;
   background: #ffffff;
   color: #1e2e10;
@@ -69,7 +74,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 28px;
+  font-size: min(28px, 1.4583vw);
   z-index: 9998;
 }
 

@@ -69,7 +69,10 @@
   width: 8.98%;
   height: 7.53%;
   font-family: 'Pixelify Sans', cursive;
-  font-size: 22px;
+  /* Scales with the game card (width: 1920px; max-width: 92vw on
+     .matcha-making-container) instead of a fixed px size, so button text
+     stays proportional to the button itself as the window is resized. */
+  font-size: min(22px, 1.0542vw);
   border-radius: 999px;
   cursor: pointer;
   transition: transform 0.15s ease;
@@ -97,7 +100,7 @@
   width: 19.40%;
   height: 7.41%;
   font-family: 'Pixelify Sans', cursive;
-  font-size: 22px;
+  font-size: min(22px, 1.0542vw);
   border-radius: 999px;
   cursor: pointer;
   transition: transform 0.15s ease;
