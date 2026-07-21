@@ -1,8 +1,9 @@
 import React, { useRef } from 'react';
 import './MatchaMaking.css';
 import { useFlatFocusNav } from '../gameloop/useFlatFocusNav';
+import ProgressBar from './ProgressBar';
 
-const MatchaMaking = ({ onBack, onComplete }) => {
+const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance }) => {
   const containerRef = useRef(null);
   useFlatFocusNav(containerRef);
 
@@ -16,23 +17,12 @@ const MatchaMaking = ({ onBack, onComplete }) => {
           alt="Matcha base station with kettle, bowl, whisk, and matcha tins"
           className="matcha-making-art"
         />
-        <button
-          type="button"
-          className="matcha-back-button"
-          data-focusable
-          onClick={onBack}
-        >
-          Back
-        </button>
-        <button
-          type="button"
-          className="mix-drink-button"
-          data-focusable
-          autoFocus
-          onClick={onComplete}
-        >
-          Mix Drink
-        </button>
+        <ProgressBar
+          activeStep={activeStep}
+          customerNumber={customerNumber}
+          onNavigate={onNavigate}
+          onAdvance={onAdvance}
+        />
       </div>
     </div>
   );

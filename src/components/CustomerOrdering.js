@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import './CustomerOrdering.css';
 import { useFlatFocusNav } from '../gameloop/useFlatFocusNav';
+import ProgressBar from './ProgressBar';
 
 // Possible customer orders -- one is picked at random each time this screen
 // mounts (i.e. each time a new customer shows up: game start, or looping
@@ -16,7 +17,7 @@ function pickRandomOrder() {
   return ORDERS[Math.floor(Math.random() * ORDERS.length)];
 }
 
-const CustomerOrdering = ({ onOrderStart, onBack }) => {
+const CustomerOrdering = ({ activeStep, customerNumber, onNavigate, onAdvance }) => {
   const containerRef = useRef(null);
   useFlatFocusNav(containerRef);
   // Lazy initializer -- picked once when the screen mounts, not re-rolled
@@ -55,23 +56,12 @@ const CustomerOrdering = ({ onOrderStart, onBack }) => {
         {/* Positioned over the blank speech bubble in the art. The menu
             board on the right is still left blank on purpose. */}
         <p className="order-text">{order.slice(0, visibleChars)}</p>
-        <button
-          type="button"
-          className="ordering-back-button"
-          data-focusable
-          onClick={onBack}
-        >
-          Back
-        </button>
-        <button
-          type="button"
-          className="start-order-button"
-          data-focusable
-          autoFocus
-          onClick={onOrderStart}
-        >
-          Start Order
-        </button>
+        <ProgressBar
+          activeStep={activeStep}
+          customerNumber={customerNumber}
+          onNavigate={onNavigate}
+          onAdvance={onAdvance}
+        />
       </div>
     </div>
   );

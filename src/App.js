@@ -6,6 +6,7 @@ import MatchaMaking from './components/MatchaMaking';
 import MilkSelection from './components/MilkSelection';
 import ToppingsStation from './components/ToppingsStation';
 import FinalCombination from './components/FinalCombination';
+import { PROGRESS_STEPS } from './components/ProgressBar';
 // Debug overlay is currently unused (see the commented-out JSX below) --
 // import left commented out too so CRA's CI lint pass (unused-import) doesn't
 // fail the Vercel build. Uncomment both together to bring it back.
@@ -20,12 +21,15 @@ import {
   hasSentAppReady,
 } from './gameloop/bridge';
 
+// Same order as the ProgressBar's PROGRESS_STEPS, imported from the same
+// place so the bar and this state machine can't drift apart.
+const STEP_KEYS = PROGRESS_STEPS.map((step) => step.key);
+const ORDERS_PER_SESSION = 3;
+
 function App() {
   const [currentPage, setCurrentPage] = useState('main');
-  // Only the setter is used now (FinalCombination no longer displays a milk
-  // summary) -- skip naming the read value so CRA's CI lint pass doesn't
-  // flag it as unused.
-  const [, setSelectedMilk] = useState(null);
+  // Which customer (1-3) the player is currently serving this session.
+  const [customerNumber, setCustomerNumber] = useState(1);
   const [showExitConfirm, setShowExitConfirm] = useState(false);
   const [adPlaying, setAdPlaying] = useState(false);
   // currentPage is read inside a window-level keydown listener that is
@@ -70,9 +74,11 @@ function App() {
 
   // ---- Back key policy (single PAL-driven path) ---------------------------
   // Top-level menu (main, or the exit-confirm dialog on top of it) routes to
-  // exit UX then close. Every other screen's Back retraces the existing
-  // "Back to ..." button behavior (equivalent to a pause/menu step-back for
-  // this step-based game).
+  // exit UX then close. Every other screen's Back walks one step back
+  // through STEP_KEYS (stepping out of 'ordering' returns to main). The
+  // on-screen Back buttons are gone now (replaced by the ProgressBar, which
+  // supports jumping to any step, forward or back) -- this is just the
+  // remote/keyboard Back key's fallback path.
   useEffect(() => {
     const handleKeyDown = (e) => {
       const action = getActionFromKeyEvent(e);
@@ -87,27 +93,17 @@ function App() {
         setShowExitConfirm(false); // Back cancels the confirm dialog
         return;
       }
-      switch (currentPageRef.current) {
-        case 'main':
-          setShowExitConfirm(true);
-          break;
-        case 'ordering':
-          handleBackToMain();
-          break;
-        case 'matcha-making':
-          handleBackToOrdering();
-          break;
-        case 'milk-selection':
-          handleBackToMatcha();
-          break;
-        case 'toppings':
-          handleBackToMilk();
-          break;
-        case 'final-combination':
-          handleBackToToppings();
-          break;
-        default:
-          break;
+      if (currentPageRef.current === 'main') {
+        setShowExitConfirm(true);
+        return;
+      }
+      const idx = STEP_KEYS.indexOf(currentPageRef.current);
+      if (idx <= 0) {
+        setCurrentPage('main');
+        setCustomerNumber(1);
+        sendAdOpportunity('MENU_RETURN');
+      } else {
+        setCurrentPage(STEP_KEYS[idx - 1]);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
@@ -116,53 +112,38 @@ function App() {
   }, [showExitConfirm]);
 
   const handlePlayClick = () => {
+    setCustomerNumber(1);
     setCurrentPage('ordering');
   };
 
-  const handleOrderStart = () => {
-    setCurrentPage('matcha-making');
+  // Progress bar: clicking any step other than the current one jumps
+  // straight there, forward or back.
+  const navigateTo = (pageKey) => {
+    setCurrentPage(pageKey);
   };
 
-  const handleMatchaComplete = () => {
-    setCurrentPage('milk-selection');
+  // Progress bar: clicking the CURRENT step means "I'm done here" -- advance
+  // to the next step, or, from the last step (Serve), complete this
+  // customer's order and either start the next one or head back to the
+  // main menu once all 3 are done.
+  const handleAdvance = () => {
+    const idx = STEP_KEYS.indexOf(currentPage);
+    if (idx === -1) return;
+    if (idx < STEP_KEYS.length - 1) {
+      setCurrentPage(STEP_KEYS[idx + 1]);
+      return;
+    }
+    if (customerNumber < ORDERS_PER_SESSION) {
+      setCustomerNumber((n) => n + 1);
+      setCurrentPage('ordering');
+    } else {
+      setCustomerNumber(1);
+      setCurrentPage('main');
+      sendAdOpportunity('MENU_RETURN');
+    }
   };
 
-  const handleMilkSelected = (milkType) => {
-    setSelectedMilk(milkType);
-    setCurrentPage('final-combination');
-  };
-
-  const handleAddToppings = () => {
-    setCurrentPage('toppings');
-  };
-
-  const handleToppingsComplete = () => {
-    setCurrentPage('final-combination');
-  };
-
-  const handleBackToMain = () => {
-    setCurrentPage('main');
-    setSelectedMilk(null);
-    sendAdOpportunity('MENU_RETURN');
-  };
-
-  const handleBackToOrdering = () => {
-    setCurrentPage('ordering');
-  };
-
-  const handleBackToMatcha = () => {
-    setCurrentPage('matcha-making');
-  };
-
-  const handleBackToMilk = () => {
-    setCurrentPage('milk-selection');
-  };
-
-  const handleBackToToppings = () => {
-    setCurrentPage('toppings');
-  };
-
-  // Natural ad break point: matcha latte finished.
+  // Natural ad break point: each customer's drink finished.
   useEffect(() => {
     if (currentPage === 'final-combination') {
       sendAdOpportunity('DRINK_COMPLETE');
@@ -178,6 +159,14 @@ function App() {
     setShowExitConfirm(false);
   };
 
+  // Every screen except Main gets the same progress bar wired the same
+  // way -- built once here and spread onto whichever screen is showing.
+  const progressProps = {
+    customerNumber,
+    onNavigate: navigateTo,
+    onAdvance: handleAdvance,
+  };
+
   return (
     <div className={`App${adPlaying ? ' gl-ad-playing' : ''}`}>
       <div className={`page-container ${currentPage}`}>
@@ -188,34 +177,27 @@ function App() {
         )}
         {currentPage === 'ordering' && (
           <div className="page-slide">
-            <CustomerOrdering onOrderStart={handleOrderStart} onBack={handleBackToMain} />
+            <CustomerOrdering activeStep="ordering" {...progressProps} />
           </div>
         )}
         {currentPage === 'matcha-making' && (
           <div className="page-slide">
-            <MatchaMaking onComplete={handleMatchaComplete} onBack={handleBackToOrdering} />
+            <MatchaMaking activeStep="matcha-making" {...progressProps} />
           </div>
         )}
         {currentPage === 'milk-selection' && (
           <div className="page-slide">
-            <MilkSelection
-              onMilkSelected={handleMilkSelected}
-              onAddToppings={handleAddToppings}
-              onBack={handleBackToMatcha}
-            />
+            <MilkSelection activeStep="milk-selection" {...progressProps} />
           </div>
         )}
         {currentPage === 'toppings' && (
           <div className="page-slide">
-            <ToppingsStation onComplete={handleToppingsComplete} onBack={handleBackToMilk} />
+            <ToppingsStation activeStep="toppings" {...progressProps} />
           </div>
         )}
         {currentPage === 'final-combination' && (
           <div className="page-slide">
-            <FinalCombination
-              onBack={handleBackToToppings}
-              onComplete={handleBackToMain}
-            />
+            <FinalCombination activeStep="final-combination" {...progressProps} />
           </div>
         )}
       </div>

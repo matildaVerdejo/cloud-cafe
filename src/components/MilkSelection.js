@@ -2,6 +2,7 @@ import React, { useRef, useState } from 'react';
 import './MilkSelection.css';
 import { useFlatFocusNav } from '../gameloop/useFlatFocusNav';
 import { getActionFromKeyEvent, shouldDebounceEnter } from '../gameloop/pal';
+import ProgressBar from './ProgressBar';
 
 // Container-relative percentage boxes for the two places the glass cup can
 // sit (see the pixel math in MilkSelection.css above .glass-cup). The cup
@@ -21,10 +22,10 @@ const TABLE_SIZE = { width: 19.40, height: 37.16 }; // same aspect ratio, 3x
 // Seven ice cubes start piled inside the ice box in two vertical columns
 // (4 left, 3 right), each cube overlapping the one above it so the stack
 // stays within the box's shallow depth without spilling past its bottom
-// edge into the Back button below (see the pixel math in MilkSelection.css
-// above .ice-cube). Each cube has its own fixed "in cup" slot (near the
-// rim) so placement order doesn't matter -- cube 0 always ends up in
-// slot 0, etc.
+// edge into the progress bar below (see the pixel math in
+// MilkSelection.css above .ice-cube). Each cube has its own fixed "in cup"
+// slot (near the rim) so placement order doesn't matter -- cube 0 always
+// ends up in slot 0, etc.
 const ICE_BOX_SPOTS = [
   { left: 7.18, top: 73.30 },
   { left: 7.18, top: 75.21 },
@@ -99,7 +100,7 @@ function isOverIceBox(leftPct, topPct) {
   );
 }
 
-const MilkSelection = ({ onBack, onAddToppings }) => {
+const MilkSelection = ({ activeStep, customerNumber, onNavigate, onAdvance }) => {
   const containerRef = useRef(null);
   useFlatFocusNav(containerRef);
 
@@ -301,23 +302,12 @@ const MilkSelection = ({ onBack, onAddToppings }) => {
           );
         })}
 
-        <button
-          type="button"
-          className="milk-back-button"
-          data-focusable
-          autoFocus
-          onClick={onBack}
-        >
-          Back
-        </button>
-        <button
-          type="button"
-          className="add-toppings-button"
-          data-focusable
-          onClick={onAddToppings}
-        >
-          Add Toppings
-        </button>
+        <ProgressBar
+          activeStep={activeStep}
+          customerNumber={customerNumber}
+          onNavigate={onNavigate}
+          onAdvance={onAdvance}
+        />
       </div>
     </div>
   );

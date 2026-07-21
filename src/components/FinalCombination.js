@@ -1,8 +1,9 @@
 import React, { useRef } from 'react';
 import './FinalCombination.css';
 import { useFlatFocusNav } from '../gameloop/useFlatFocusNav';
+import ProgressBar from './ProgressBar';
 
-const FinalCombination = ({ onBack, onComplete }) => {
+const FinalCombination = ({ activeStep, customerNumber, onNavigate, onAdvance }) => {
   const containerRef = useRef(null);
   useFlatFocusNav(containerRef);
 
@@ -16,12 +17,12 @@ const FinalCombination = ({ onBack, onComplete }) => {
           alt="Serving counter with an empty plate, ready to serve the finished drink"
           className="serving-art"
         />
-        <button type="button" className="serving-back-button" data-focusable autoFocus onClick={onBack}>
-          Back
-        </button>
-        <button type="button" className="serve-drink-button" data-focusable onClick={onComplete}>
-          Serve Drink
-        </button>
+        <ProgressBar
+          activeStep={activeStep}
+          customerNumber={customerNumber}
+          onNavigate={onNavigate}
+          onAdvance={onAdvance}
+        />
       </div>
     </div>
   );

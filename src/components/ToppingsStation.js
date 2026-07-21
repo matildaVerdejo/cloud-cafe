@@ -1,8 +1,9 @@
 import React, { useRef } from 'react';
 import './ToppingsStation.css';
 import { useFlatFocusNav } from '../gameloop/useFlatFocusNav';
+import ProgressBar from './ProgressBar';
 
-const ToppingsStation = ({ onBack, onComplete }) => {
+const ToppingsStation = ({ activeStep, customerNumber, onNavigate, onAdvance }) => {
   const containerRef = useRef(null);
   useFlatFocusNav(containerRef);
 
@@ -16,23 +17,12 @@ const ToppingsStation = ({ onBack, onComplete }) => {
           alt="Toppings station with syrup bottles, shaker jars, and a bowl of mint leaves"
           className="toppings-art"
         />
-        <button
-          type="button"
-          className="toppings-back-button"
-          data-focusable
-          onClick={onBack}
-        >
-          Back
-        </button>
-        <button
-          type="button"
-          className="finish-drink-button"
-          data-focusable
-          autoFocus
-          onClick={onComplete}
-        >
-          Finish Drink
-        </button>
+        <ProgressBar
+          activeStep={activeStep}
+          customerNumber={customerNumber}
+          onNavigate={onNavigate}
+          onAdvance={onAdvance}
+        />
       </div>
     </div>
   );
