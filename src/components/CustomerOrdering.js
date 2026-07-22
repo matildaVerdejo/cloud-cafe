@@ -5,13 +5,11 @@ import ProgressBar from './ProgressBar';
 
 // Possible customer orders -- one is picked at random each time this screen
 // mounts (i.e. each time a new customer shows up: game start, or looping
-// back after finishing a drink). Add more lines here later; nothing else
-// needs to change.
-const ORDERS = [
-  'Hello, may I have an iced mint matcha latte?',
-  'Hi there, may I have an iced guava matcha latte?',
-  'Hey! Could I get a coconut matcha cloud?',
-];
+// back after finishing a drink). Only the mint matcha line is live for now
+// while the character/order-variation system (Annie first, 5-7 characters
+// eventually) is being built out -- the guava and coconut lines were
+// placeholders and are removed rather than left dead in the array.
+const ORDERS = ['Hello, may I have an iced mint matcha latte?'];
 
 function pickRandomOrder() {
   return ORDERS[Math.floor(Math.random() * ORDERS.length)];
@@ -53,9 +51,17 @@ const CustomerOrdering = ({ activeStep, customerNumber, onNavigate, onAdvance })
           alt="A customer waiting at the Cloud Cafe counter"
           className="ordering-art"
         />
-        {/* Positioned over the blank speech bubble in the art. The menu
-            board on the right is still left blank on purpose. */}
+        {/* Positioned over the blank speech bubble in the art. */}
         <p className="order-text">{order.slice(0, visibleChars)}</p>
+        {/* Positioned over the blank hanging receipt paper in the art.
+            Annie's first order variation -- once more characters/variations
+            exist, this becomes a lookup keyed by whichever character/order
+            is active instead of a single hardcoded image. */}
+        <img
+          src="./AnnieOrder1.png"
+          alt="Order receipt: 2 tsp matcha, glass cup, 3 ice cubes, oat milk, mint syrup, 1 mint leaf"
+          className="order-receipt"
+        />
         <ProgressBar
           activeStep={activeStep}
           customerNumber={customerNumber}

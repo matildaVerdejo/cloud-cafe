@@ -84,3 +84,19 @@
   color: #2f4a28;
   pointer-events: none;
 }
+
+/* Sits on the blank hanging receipt paper in the art (paper spans image x
+   1710-2170, y 225-940 of 2752x1536, measured by scanning for the paper's
+   white pixels -- its edges are jagged/torn so these bounds are a safe
+   inset rather than the exact paper edge). The order image itself (836x1089)
+   is a different aspect ratio than this box, so object-fit: contain scales
+   it to fit and centers it rather than stretching or overflowing the paper. */
+.order-receipt {
+  position: absolute;
+  left: 62.14%;
+  top: 14.65%;
+  width: 16.72%;
+  height: 46.55%;
+  object-fit: contain;
+  pointer-events: none;
+}
