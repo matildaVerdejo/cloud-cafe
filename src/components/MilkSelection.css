@@ -76,13 +76,38 @@
   touch-action: none;
   -webkit-user-select: none;
   user-select: none;
-  filter: drop-shadow(0 6px 8px rgba(0, 0, 0, 0.25));
-  transition: left 0.25s ease, top 0.25s ease, width 0.25s ease, height 0.25s ease;
+  /* Two extra zero-strength drop-shadows kept in the base filter (rather
+     than only adding them in :focus-visible) so the count/order of filter
+     functions matches between the two states -- that's what lets the
+     transition below animate the glow in/out smoothly instead of popping. */
+  filter: drop-shadow(0 6px 8px rgba(0, 0, 0, 0.25)) drop-shadow(0 0 0 rgba(255, 255, 255, 0))
+    drop-shadow(0 0 0 rgba(255, 255, 255, 0));
+  transition: left 0.25s ease, top 0.25s ease, width 0.25s ease, height 0.25s ease,
+    filter 0.15s ease, transform 0.15s ease;
 }
 
 .glass-cup.dragging {
   cursor: grabbing;
   transition: none;
+}
+
+/* Focus glow that hugs the cup's actual silhouette instead of a rectangle.
+   The generic global button/[tabindex]:focus-visible rule (App.css) uses
+   box-shadow, which always follows the element's bounding BOX regardless
+   of the image's transparent background -- on an irregularly-shaped,
+   non-circular PNG like this cup, that reads as an obvious rectangle
+   around empty space. filter: drop-shadow(), unlike box-shadow, is
+   computed from the rendered alpha channel, so stacking colored
+   drop-shadows on top of the cup's existing one traces its real outline.
+   (border-radius was ruled out too -- it clips <img> content in modern
+   browsers, and wouldn't fit this shape anyway.) */
+.glass-cup:focus-visible {
+  outline: none;
+  box-shadow: none;
+  transform: scale(1.08);
+  filter: drop-shadow(0 6px 8px rgba(0, 0, 0, 0.25))
+    drop-shadow(0 0 6px rgba(255, 255, 255, 0.95))
+    drop-shadow(0 0 12px rgba(255, 255, 255, 0.75));
 }
 
 /* Seven ice cubes, piled inside the ice box in two vertical columns (image
@@ -98,8 +123,13 @@
   touch-action: none;
   -webkit-user-select: none;
   user-select: none;
-  filter: drop-shadow(0 3px 4px rgba(0, 0, 0, 0.2));
-  transition: left 0.2s ease, top 0.2s ease, width 0.2s ease, height 0.2s ease;
+  /* See the matching comment on .glass-cup -- the two zero-strength
+     drop-shadows here exist purely so the filter transitions smoothly into
+     the :focus-visible glow instead of popping. */
+  filter: drop-shadow(0 3px 4px rgba(0, 0, 0, 0.2)) drop-shadow(0 0 0 rgba(255, 255, 255, 0))
+    drop-shadow(0 0 0 rgba(255, 255, 255, 0));
+  transition: left 0.2s ease, top 0.2s ease, width 0.2s ease, height 0.2s ease,
+    filter 0.15s ease, transform 0.15s ease;
 }
 
 .ice-cube.dragging {
@@ -109,4 +139,15 @@
 
 .ice-cube.placed {
   cursor: grab;
+}
+
+/* Same shape-hugging focus glow as .glass-cup, tuned a little tighter/
+   smaller since the cube itself is much smaller on screen. */
+.ice-cube:focus-visible {
+  outline: none;
+  box-shadow: none;
+  transform: scale(1.15);
+  filter: drop-shadow(0 3px 4px rgba(0, 0, 0, 0.2))
+    drop-shadow(0 0 4px rgba(255, 255, 255, 0.95))
+    drop-shadow(0 0 8px rgba(255, 255, 255, 0.75));
 }

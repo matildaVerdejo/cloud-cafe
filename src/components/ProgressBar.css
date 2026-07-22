@@ -126,7 +126,7 @@
 }
 
 .progress-step:focus-visible .progress-step-dot {
-  box-shadow: 0 0 0 5px rgba(255, 209, 102, 0.9), 0 0 20px 6px rgba(255, 209, 102, 0.6);
+  box-shadow: 0 0 0 5px rgba(90, 138, 79, 0.9), 0 0 20px 6px rgba(90, 138, 79, 0.6);
   transform: scale(1.15);
 }
 
@@ -160,6 +160,18 @@
   border-color: #5a8a4f;
   color: #2f4a28;
   box-shadow: 0 0 0 5px rgba(90, 138, 79, 0.25);
+}
+
+/* .progress-step.current and .progress-step:focus-visible are the same
+   specificity (two classes/pseudo-classes deep), so whichever rule came
+   later in the file was winning the box-shadow property outright -- when
+   the current step was also the focused one (autoFocus lands here on
+   mount), .current's own faint resting ring (0.25 alpha, no blur) was
+   overriding the vivid focus glow above, instead of the two combining or
+   the glow taking priority. This selector is one class more specific than
+   both, so it always wins regardless of source order. */
+.progress-step.current:focus-visible .progress-step-dot {
+  box-shadow: 0 0 0 5px rgba(90, 138, 79, 0.9), 0 0 20px 6px rgba(90, 138, 79, 0.6);
 }
 
 .progress-step.current .progress-step-label {

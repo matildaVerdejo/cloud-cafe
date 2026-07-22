@@ -65,7 +65,7 @@ body {
 
 .gl-exit-confirm-buttons button:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 4px rgba(255, 209, 102, 0.9), 0 0 16px 5px rgba(255, 209, 102, 0.55);
+  box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.95), 0 0 16px 5px rgba(255, 255, 255, 0.6);
   transform: scale(1.06);
 }
 
@@ -96,7 +96,7 @@ body.gl-suspended * {
 button:focus-visible,
 [tabindex]:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 4px rgba(255, 209, 102, 0.9), 0 0 16px 5px rgba(255, 209, 102, 0.55);
+  box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.95), 0 0 16px 5px rgba(255, 255, 255, 0.6);
   transform: scale(1.05);
   transition: box-shadow 0.15s ease, transform 0.15s ease;
 }
