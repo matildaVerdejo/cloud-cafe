@@ -70,13 +70,26 @@ export function sendAppReady() {
   post({ type: 'appReady', publisherUserId });
 }
 
+// close MUST be the bare string 'close' -- it is the only form the deployed
+// production launcher relays (object-form close is dropped). Do not wrap
+// this in an object, even though appReady/adOpportunity are objects.
 export function sendClose() {
-  post({ type: 'close', publisherUserId });
+  post('close');
 }
 
-// reason examples used in this game: 'MENU_RETURN', 'DRINK_COMPLETE'
+// adOpportunity MUST carry both source: 'APPSHELL' (the launcher relay's
+// gate/round-trip routing key) and ad_platform: 'playerwon' (GameLoop Main
+// drops object-branch requests missing this) -- this is the only shape that
+// fires in both hosting topologies (direct and launcher-wrapped). reason
+// examples used in this game: 'MENU_RETURN', 'DRINK_COMPLETE'.
 export function sendAdOpportunity(reason) {
-  post({ type: 'adOpportunity', publisherUserId, reason });
+  post({
+    type: 'adOpportunity',
+    publisherUserId,
+    reason,
+    source: 'APPSHELL',
+    ad_platform: 'playerwon',
+  });
 }
 
 // Dev-harness extension (not part of production V1). Starter mock hosts

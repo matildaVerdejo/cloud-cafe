@@ -21,9 +21,9 @@
   border-radius: 16px;
   overflow: hidden;
   box-shadow: 0 15px 30px rgba(0, 0, 0, 0.2);
-  /* Matches the art's own counter tone. This image is 1392x768 (~1.813),
+  /* Matches the art's own counter tone. This image is 1394x768 (~1.815),
      slightly wider than 16:9 (1.778), so object-fit: contain below leaves a
-     ~1.93% letterbox -- pushed entirely to the bottom (see object-position
+     ~2.06% letterbox -- pushed entirely to the bottom (see object-position
      on .matcha-making-art) so the seam sits against the counter color
      instead of splitting a thin sliver across the top too. */
   background-color: #ab9d94;
@@ -39,9 +39,8 @@
   width: 100%;
   height: 100%;
   object-fit: contain;
-  /* Anchors the image to the top of the container so all ~0.96% of leftover
-     vertical space falls at the bottom instead of being split top/bottom --
-     button top% values below are offset by -0.96 to match. */
+  /* Anchors the image to the top of the container so all ~2.06% of leftover
+     vertical space falls at the bottom instead of being split top/bottom. */
   object-position: top;
   display: block;
   animation: matchaArtFadeIn 1s ease-out both;
@@ -56,5 +55,17 @@
     opacity: 1;
     transform: scale(1);
   }
+}
+
+/* Countertop items (heater, kettle, bowl, whisk, three matcha grade tins),
+   positioned per-item via inline left/top/width/height in MatchaMaking.js
+   (see STATION_ITEMS there for the box math) -- this class only holds the
+   properties every item shares. Purely decorative for now, so no cursor/
+   focus treatment yet; that gets added once these become interactive. */
+.station-item {
+  position: absolute;
+  object-fit: contain;
+  pointer-events: none;
+  filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.18));
 }
 
