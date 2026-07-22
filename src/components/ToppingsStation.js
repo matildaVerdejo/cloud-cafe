@@ -2,6 +2,7 @@ import React, { useRef } from 'react';
 import './ToppingsStation.css';
 import { useFlatFocusNav } from '../gameloop/useFlatFocusNav';
 import ProgressBar from './ProgressBar';
+import OrderReceiptButton from './OrderReceiptButton';
 
 const ToppingsStation = ({ activeStep, customerNumber, onNavigate, onAdvance }) => {
   const containerRef = useRef(null);
@@ -17,6 +18,7 @@ const ToppingsStation = ({ activeStep, customerNumber, onNavigate, onAdvance }) 
           alt="Toppings station with syrup bottles, shaker jars, and a bowl of mint leaves"
           className="toppings-art"
         />
+        <OrderReceiptButton />
         <ProgressBar
           activeStep={activeStep}
           customerNumber={customerNumber}

@@ -2,6 +2,7 @@ import React, { useRef } from 'react';
 import './MatchaMaking.css';
 import { useFlatFocusNav } from '../gameloop/useFlatFocusNav';
 import ProgressBar from './ProgressBar';
+import OrderReceiptButton from './OrderReceiptButton';
 
 const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance }) => {
   const containerRef = useRef(null);
@@ -17,6 +18,7 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance }) => 
           alt="Matcha base station with kettle, bowl, whisk, and matcha tins"
           className="matcha-making-art"
         />
+        <OrderReceiptButton />
         <ProgressBar
           activeStep={activeStep}
           customerNumber={customerNumber}

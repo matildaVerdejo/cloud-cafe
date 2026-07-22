@@ -22,39 +22,80 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: min(30px, 1.4375vw);
-  min-width: min(820px, 39.29vw);
+  gap: min(42px, 2.0125vw);
+  min-width: min(1140px, 54.625vw);
   background: rgba(255, 255, 255, 0.9);
-  border: 3px solid #8a7a6a;
+  border: 4px solid #8a7a6a;
   border-radius: 999px;
-  padding: min(16px, 0.7667vw) min(34px, 1.6292vw);
-  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.15);
+  padding: min(22px, 1.0542vw) min(48px, 2.3vw);
+  box-shadow: 0 5px 14px rgba(0, 0, 0, 0.18);
   white-space: nowrap;
   box-sizing: border-box;
 }
 
 .progress-order-count {
   font-family: 'Pixelify Sans', cursive;
-  font-size: min(24px, 1.15vw);
+  font-size: min(34px, 1.6292vw);
   font-weight: 600;
   color: #5c4a3a;
-  padding-right: min(26px, 1.2458vw);
-  border-right: 3px solid #8a7a6a;
+  padding-right: min(36px, 1.725vw);
+  border-right: 4px solid #8a7a6a;
 }
 
 .progress-steps {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
   flex: 1;
-  gap: min(30px, 1.4375vw);
+  gap: min(42px, 2.0125vw);
 }
 
+/* Sits behind the row (z-index below .progress-step) at the dots' vertical
+   center. Inset left/right by half of .progress-step's fixed column width
+   (see below) so the track starts/ends exactly at the first/last dot's
+   center instead of poking out past them. This only lines up exactly
+   because .progress-step is now a fixed width equal to this same value --
+   when the column instead shrank to fit each label ("Toppings" is wider
+   than "Milk"), the dot's true center drifted off by half that width
+   difference for the outer two steps, which is what caused the poke-out.
+   --progress-fill is set inline per-render (see ProgressBar.js) to how far
+   through the steps the customer currently is. */
+.progress-track {
+  position: absolute;
+  left: calc(min(140px, 6.7083vw) / 2);
+  right: calc(min(140px, 6.7083vw) / 2);
+  top: calc(min(68px, 3.2583vw) / 2);
+  transform: translateY(-50%);
+  height: min(6px, 0.2875vw);
+  background: #ddd3c8;
+  border-radius: 999px;
+  z-index: 0;
+}
+
+.progress-track::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  width: var(--progress-fill, 0%);
+  background: #5a8a4f;
+  border-radius: 999px;
+  transition: width 0.3s ease;
+}
+
+/* Fixed width (roomy enough for the longest label, "Toppings", at this
+   font size) instead of shrink-to-fit -- every column is the same width so
+   the dot (centered within it via align-items: center, same as the label)
+   sits at a predictable, evenly-spaced position that .progress-track's
+   inset above can line up with exactly. */
 .progress-step {
+  position: relative;
+  z-index: 1;
+  flex: 0 0 min(140px, 6.7083vw);
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: min(6px, 0.2875vw);
+  gap: min(9px, 0.43125vw);
   background: none;
   border: none;
   padding: 0;
@@ -85,29 +126,32 @@
 }
 
 .progress-step:focus-visible .progress-step-dot {
-  box-shadow: 0 0 0 4px rgba(255, 209, 102, 0.9), 0 0 14px 4px rgba(255, 209, 102, 0.6);
+  box-shadow: 0 0 0 5px rgba(255, 209, 102, 0.9), 0 0 20px 6px rgba(255, 209, 102, 0.6);
   transform: scale(1.15);
 }
 
 /* aspect-ratio: 1 keeps this a true circle at any size -- only the width
-   needs to scale, the height follows automatically. */
+   needs to scale, the height follows automatically. Sized up from the
+   original 48px/2.3vw per feedback that the bar was hard to read/see from
+   a TV/couch viewing distance -- everything in this file scaled up ~1.4x
+   together to keep proportions consistent. */
 .progress-step-dot {
-  width: min(48px, 2.3vw);
+  width: min(68px, 3.2583vw);
   aspect-ratio: 1;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
   background: #ffffff;
-  border: 3px solid #8a7a6a;
+  border: 4px solid #8a7a6a;
   color: #5c4a3a;
-  font-size: min(20px, 0.9583vw);
+  font-size: min(29px, 1.3896vw);
   font-weight: 700;
   transition: box-shadow 0.15s ease, transform 0.15s ease;
 }
 
 .progress-step-label {
-  font-size: min(15px, 0.71875vw);
+  font-size: min(27px, 1.29375vw);
   color: #5c4a3a;
 }
 
@@ -115,7 +159,7 @@
   background: #e8f8e0;
   border-color: #5a8a4f;
   color: #2f4a28;
-  box-shadow: 0 0 0 4px rgba(90, 138, 79, 0.25);
+  box-shadow: 0 0 0 5px rgba(90, 138, 79, 0.25);
 }
 
 .progress-step.current .progress-step-label {

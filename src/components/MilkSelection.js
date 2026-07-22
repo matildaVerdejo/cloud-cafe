@@ -3,6 +3,7 @@ import './MilkSelection.css';
 import { useFlatFocusNav } from '../gameloop/useFlatFocusNav';
 import { getActionFromKeyEvent, shouldDebounceEnter } from '../gameloop/pal';
 import ProgressBar from './ProgressBar';
+import OrderReceiptButton from './OrderReceiptButton';
 
 // Container-relative percentage boxes for the two places the glass cup can
 // sit (see the pixel math in MilkSelection.css above .glass-cup). The cup
@@ -302,6 +303,7 @@ const MilkSelection = ({ activeStep, customerNumber, onNavigate, onAdvance }) =>
           );
         })}
 
+        <OrderReceiptButton />
         <ProgressBar
           activeStep={activeStep}
           customerNumber={customerNumber}

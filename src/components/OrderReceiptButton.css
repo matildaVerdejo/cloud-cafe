@@ -1,0 +1,77 @@
+@import url('https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@400&display=swap');
+
+/* Sits top-right on the station screens (Matcha Making, Milk Selection,
+   Toppings) -- all three share the same fixed 16:9 card convention as
+   every other screen, so this single block of positioning works
+   identically on all of them without per-screen tuning. Placed high
+   (top: 3%) and clear of each screen's art in that corner (checked against
+   all three station backgrounds -- nothing sits above ~23% down in any of
+   them) so the closed button never overlaps countertop items. Sizing uses
+   the same min(Fpx, Xvw) convention as the rest of the app: X = F * 0.92/19.2,
+   tied to the card's own width:1920px; max-width:92vw. */
+.order-receipt-widget {
+  position: absolute;
+  top: 3%;
+  right: 3%;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  z-index: 5;
+}
+
+.order-receipt-button {
+  font-family: 'Pixelify Sans', cursive;
+  font-size: min(24px, 1.15vw);
+  font-weight: 600;
+  color: #5c4a3a;
+  background: rgba(255, 255, 255, 0.92);
+  border: 3px solid #8a7a6a;
+  border-radius: 999px;
+  padding: min(10px, 0.4792vw) min(28px, 1.3417vw);
+  cursor: pointer;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.15);
+  transition: transform 0.15s ease;
+}
+
+.order-receipt-button:hover {
+  transform: scale(1.05);
+}
+
+.order-receipt-button:active {
+  transform: scale(0.95);
+}
+
+/* Pulls down like a hanging receipt when opened, and retracts back up when
+   closed. max-height + overflow: hidden animates the reveal without
+   squishing the image the way a scaleY transform would; the opacity/
+   translateY pair softens the top edge of the reveal/retract. Deliberately
+   floats above the station art (it has its own shadow/rounded corners to
+   read as a card) rather than being fit into empty space -- there isn't
+   always room to fully clear the art underneath at every station, and this
+   is meant to work like a temporary peek, not a permanent fixture. */
+.order-receipt-drawer {
+  margin-top: min(10px, 0.4792vw);
+  width: min(300px, 14.375vw);
+  max-height: 0;
+  overflow: hidden;
+  opacity: 0;
+  transform: translateY(-14px);
+  transition: max-height 0.35s ease, opacity 0.25s ease, transform 0.3s ease;
+  border-radius: 12px;
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.2);
+  pointer-events: none;
+}
+
+.order-receipt-drawer.open {
+  max-height: min(560px, 26.8333vw);
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
+}
+
+.order-receipt-drawer-img {
+  display: block;
+  width: 100%;
+  height: auto;
+  background: #ffffff;
+}

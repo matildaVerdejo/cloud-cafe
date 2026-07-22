@@ -28,6 +28,17 @@ const ProgressBar = ({ activeStep, customerNumber, onNavigate, onAdvance }) => {
         Order {customerNumber} of 3
       </span>
       <div className="progress-steps">
+        {/* Connector track behind the dots: fills green from the first dot
+            up to wherever the customer currently is, so at a glance you can
+            see how much of the order is done without reading each dot.
+            Inset by the dot radius on each side in CSS so it starts/ends at
+            the outer dots' centers rather than the row's outer edge. */}
+        <div
+          className="progress-track"
+          style={{
+            '--progress-fill': `${(activeIndex / (PROGRESS_STEPS.length - 1)) * 100}%`,
+          }}
+        />
         {PROGRESS_STEPS.map((step, index) => {
           const isCurrent = index === activeIndex;
           const isDone = index < activeIndex;
