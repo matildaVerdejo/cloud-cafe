@@ -59,13 +59,251 @@
 
 /* Countertop items (heater, kettle, bowl, whisk, three matcha grade tins),
    positioned per-item via inline left/top/width/height in MatchaMaking.js
-   (see STATION_ITEMS there for the box math) -- this class only holds the
-   properties every item shares. Purely decorative for now, so no cursor/
-   focus treatment yet; that gets added once these become interactive. */
+   (see STATIC_ITEMS/MOVABLE_ITEMS there for the box math) -- this class
+   only holds the properties every item shares. Static items (heater, the
+   three tins) stay non-interactive -- pointer-events: none, no focus. */
 .station-item {
   position: absolute;
   object-fit: contain;
   pointer-events: none;
   filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.18));
+}
+
+/* Movable items (kettle, bowl, whisk): draggable anywhere on the counter,
+   D-pad-selectable. Re-enables pointer-events (overriding the base
+   .station-item rule above) and adds the drag/focus treatment, following
+   the same pattern as .glass-cup / .ice-cube on Milk Selection -- two
+   zero-strength drop-shadows kept in the base filter so the count/order of
+   filter functions matches :focus-visible below, which is what lets the
+   glow transition in/out smoothly instead of popping. */
+.station-item.movable {
+  pointer-events: auto;
+  cursor: grab;
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+  filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.18)) drop-shadow(0 0 0 rgba(255, 255, 255, 0))
+    drop-shadow(0 0 0 rgba(255, 255, 255, 0));
+  transition: left 0.2s ease, top 0.2s ease, filter 0.15s ease, transform 0.15s ease;
+}
+
+.station-item.movable.dragging {
+  cursor: grabbing;
+  transition: none;
+}
+
+/* Same shape-hugging white focus glow as .glass-cup/.ice-cube on Milk
+   Selection -- filter: drop-shadow() traces the rendered alpha channel, so
+   it hugs each item's actual silhouette instead of drawing a rectangle
+   around its transparent padding. */
+.station-item.movable:focus-visible {
+  outline: none;
+  box-shadow: none;
+  transform: scale(1.06);
+  filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.18))
+    drop-shadow(0 0 6px rgba(255, 255, 255, 0.95))
+    drop-shadow(0 0 12px rgba(255, 255, 255, 0.75));
+}
+
+/* Heater power button -- a small, plain white circle centered on (and
+   covering) the molded oval drawn into the heater art, sitting inside the
+   plate's own outline (see HEATER_BUTTON_BOX in MatchaMaking.js). Toggles
+   heaterOn; a white glow on focus (same treatment as everywhere else), a
+   peachy fill/glow whenever it's switched on. All three states list the
+   same 3-layer box-shadow (depth, focus ring, on-glow) with zero-strength
+   placeholders for whichever aren't active, so switching between them
+   transitions smoothly instead of popping. */
+.heater-button {
+  position: absolute;
+  border-radius: 50%;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  background: radial-gradient(circle at 35% 30%, #ffffff 0%, #f2f2f0 60%, #ddd9d4 100%);
+  border: min(1.5px, 0.078vw) solid rgba(90, 80, 75, 0.5);
+  box-shadow: 0 2px 3px rgba(0, 0, 0, 0.3), 0 0 0 0 rgba(255, 255, 255, 0), 0 0 0 0 rgba(255, 170, 130, 0);
+  transition: box-shadow 0.2s ease, transform 0.15s ease, background 0.2s ease;
+}
+
+.heater-button:focus-visible {
+  outline: none;
+  transform: scale(1.12);
+  box-shadow: 0 2px 3px rgba(0, 0, 0, 0.3), 0 0 10px 4px rgba(255, 255, 255, 0.85),
+    0 0 0 0 rgba(255, 170, 130, 0);
+}
+
+.heater-button.on {
+  background: radial-gradient(circle at 35% 30%, #ffe8db 0%, #ffc9a8 55%, #f4966b 100%);
+  box-shadow: 0 2px 3px rgba(0, 0, 0, 0.3), 0 0 0 0 rgba(255, 255, 255, 0), 0 0 10px 4px rgba(255, 170, 130, 0.85);
+}
+
+.heater-button.on:focus-visible {
+  box-shadow: 0 2px 3px rgba(0, 0, 0, 0.3), 0 0 10px 4px rgba(255, 255, 255, 0.85),
+    0 0 10px 4px rgba(255, 170, 130, 0.85);
+}
+
+/* Temp-zone override -- while the button is on, the peachy "heating" look
+   above gets swapped for green from the moment the temp bar's fill reaches
+   the first tick's left edge until it passes the second tick's right edge,
+   then red after that (timing driven by GREEN_AT_MS/RED_AT_MS in
+   MatchaMaking.js, derived from TEMP_BAR_TICKS). Declared after .on so
+   these win the cascade despite equal class-selector specificity. */
+.heater-button.zone-green {
+  background: radial-gradient(circle at 35% 30%, #eafff0 0%, #8de6a5 55%, #3fbf67 100%);
+  box-shadow: 0 2px 3px rgba(0, 0, 0, 0.3), 0 0 0 0 rgba(255, 255, 255, 0), 0 0 10px 4px rgba(63, 191, 103, 0.85);
+}
+
+.heater-button.zone-green:focus-visible {
+  box-shadow: 0 2px 3px rgba(0, 0, 0, 0.3), 0 0 10px 4px rgba(255, 255, 255, 0.85),
+    0 0 10px 4px rgba(63, 191, 103, 0.85);
+}
+
+.heater-button.zone-red {
+  background: radial-gradient(circle at 35% 30%, #ffe8e6 0%, #ff8f87 55%, #e0453a 100%);
+  box-shadow: 0 2px 3px rgba(0, 0, 0, 0.3), 0 0 0 0 rgba(255, 255, 255, 0), 0 0 10px 4px rgba(224, 69, 58, 0.85);
+}
+
+.heater-button.zone-red:focus-visible {
+  box-shadow: 0 2px 3px rgba(0, 0, 0, 0.3), 0 0 10px 4px rgba(255, 255, 255, 0.85),
+    0 0 10px 4px rgba(224, 69, 58, 0.85);
+}
+
+/* Temperature gauge -- sits on the counter/table in front of the heater
+   (see TEMP_BAR_BOX in MatchaMaking.js). Idle/off state is plain grey;
+   overflow: hidden here is what clips .heater-temp-bar-fill's square right
+   edge to this element's own rounded-rectangle corners as it grows, so the
+   fill never needs its own border-radius. Rounded-rectangle corners
+   (rather than a fully pill-shaped end) so it reads as a little plate/
+   card, echoing the heater's own rounded-rectangle shape. Thicker grey
+   outline (vs. the hairline dark border used elsewhere) so the bar reads
+   as its own distinct little gauge/plate against the counter.
+   D-pad/click-focusable (see MatchaMaking.js) -- pressing the heater
+   button sends focus straight here so the player can stop the fill with
+   Enter/Space; the box-shadow below carries a zero-strength placeholder
+   outer layer alongside the two real inset ones so :focus-visible's white
+   glow transitions in smoothly instead of popping. */
+.heater-temp-bar {
+  position: absolute;
+  border-radius: min(8px, 0.417vw);
+  overflow: hidden;
+  cursor: pointer;
+  background: #b7b2ac;
+  border: min(5px, 0.26vw) solid rgba(110, 105, 100, 0.7);
+  box-shadow: inset 0 1px 2px rgba(255, 255, 255, 0.35), inset 0 -1px 2px rgba(0, 0, 0, 0.2),
+    0 0 0 0 rgba(255, 255, 255, 0);
+  transition: box-shadow 0.15s ease;
+}
+
+.heater-temp-bar:focus-visible {
+  outline: none;
+  box-shadow: inset 0 1px 2px rgba(255, 255, 255, 0.35), inset 0 -1px 2px rgba(0, 0, 0, 0.2),
+    0 0 12px 4px rgba(255, 255, 255, 0.85);
+}
+
+/* Solid light-blue fill, hidden (scaleX 0, anchored to the left edge)
+   until the heater is switched on, then grows open left-to-right -- the
+   temperature progressively advancing across the bar -- and shrinks back
+   the same way when switched off. Sized to the bar's full box; the
+   parent's overflow: hidden clips it to the rounded shape. Duration comes
+   from an inline transitionDuration (see FILL_DURATION_MS in
+   MatchaMaking.js) so the button's green/red timing can be scheduled
+   against the exact same number -- linear timing (not ease) so that
+   elapsed-time fractions line up accurately with how far across the bar
+   the fill edge actually is. */
+.heater-temp-bar-fill {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  background: #a9e2f5;
+  transform: scaleX(0);
+  transform-origin: left center;
+  transition-property: transform;
+  transition-timing-function: linear;
+}
+
+.heater-temp-bar.on .heater-temp-bar-fill {
+  transform: scaleX(1);
+}
+
+/* Two marker ticks sitting in the gauge's white middle zone (positions set
+   via TEMP_BAR_TICKS in MatchaMaking.js -- left/width are a % of the bar's
+   own box, since .heater-temp-bar's own position: absolute makes it the
+   containing block for these). Green (matching the "correct" zone-green
+   glow on the heater button) so they stay clearly visible against both the
+   white background and the teal/watermelon ends. Plain rectangles sized to
+   the bar's own height (not rounded, not protruding) so they sit flush
+   inside it. */
+.heater-temp-bar-tick {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  pointer-events: none;
+  border-radius: 0;
+  background: #3fbf67;
+  box-shadow: 0 0 2px rgba(0, 0, 0, 0.35);
+}
+
+/* Steam above the kettle's spout, shown once the water's hot enough (see
+   showSteam in MatchaMaking.js). The container itself is a zero-size
+   anchor point (positioned at the spout via KETTLE_SPOUT_OFFSET), with
+   each wisp absolutely positioned off that same point so they all rise
+   from the same spot -- pointer-events: none throughout so the steam
+   never blocks dragging the kettle underneath it. */
+.kettle-steam {
+  position: absolute;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+  z-index: 5;
+}
+
+.kettle-steam-wisp {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: min(24px, 1.4vw);
+  height: min(24px, 1.4vw);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow: 0 0 min(10px, 0.6vw) min(4px, 0.25vw) rgba(255, 255, 255, 0.9);
+  filter: blur(min(1.5px, 0.08vw));
+  opacity: 0;
+}
+
+/* Three wisps drift up and fade at slightly different sizes/speeds/delays
+   so they read as a loose, organic curl of steam instead of one repeating
+   blob -- each also starts from a slightly different left offset around
+   the spout so they don't all stack on the exact same pixel. */
+.kettle-steam-wisp-1 {
+  animation: kettleSteamRise 2.2s ease-out infinite;
+}
+
+.kettle-steam-wisp-2 {
+  left: min(9px, 0.55vw);
+  animation: kettleSteamRise 2.6s ease-out infinite 0.8s;
+}
+
+.kettle-steam-wisp-3 {
+  left: calc(-1 * min(9px, 0.55vw));
+  animation: kettleSteamRise 1.9s ease-out infinite 1.4s;
+}
+
+@keyframes kettleSteamRise {
+  0% {
+    opacity: 0;
+    transform: translate(0, 0) scale(0.55);
+  }
+  20% {
+    opacity: 1;
+  }
+  65% {
+    opacity: 0.6;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(min(10px, 0.6vw), min(-70px, -4.4vw)) scale(1.8);
+  }
 }
 

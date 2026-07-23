@@ -12,6 +12,7 @@ import { PROGRESS_STEPS } from './components/ProgressBar';
 // fail the Vercel build. Uncomment both together to bring it back.
 // import GameLoopAPIDebugOverlay from './gameloop/GameLoopAPIDebugOverlay';
 import { getActionFromKeyEvent } from './gameloop/pal';
+import { useFlatFocusNav } from './gameloop/useFlatFocusNav';
 import {
   initGameLoopBridge,
   sendAppReady,
@@ -37,6 +38,15 @@ function App() {
   // without re-attaching the listener on every navigation.
   const currentPageRef = useRef(currentPage);
   currentPageRef.current = currentPage;
+  // Exit-confirm dialog is rendered outside/on top of the per-screen
+  // components, so it needs its own spatial-nav scope -- the screens'
+  // useFlatFocusNav hooks only act while focus is inside their own
+  // container, and unmount/remount with currentPage, so nothing here would
+  // otherwise let the D-pad move between Exit and Cancel. Safe to call
+  // unconditionally: when the dialog isn't rendered, dialogRef.current is
+  // null and the hook's handler just returns early.
+  const exitDialogRef = useRef(null);
+  useFlatFocusNav(exitDialogRef);
 
   // ---- GameLoop V1 bridge setup -------------------------------------------
   useEffect(() => {
@@ -204,7 +214,7 @@ function App() {
 
       {showExitConfirm && (
         <div className="gl-exit-confirm-backdrop">
-          <div className="gl-exit-confirm-dialog">
+          <div className="gl-exit-confirm-dialog" ref={exitDialogRef}>
             <p>Exit Cloud Cafe?</p>
             <div className="gl-exit-confirm-buttons">
               <button type="button" autoFocus data-focusable onClick={confirmExit}>

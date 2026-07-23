@@ -8,11 +8,17 @@
 //
 // Origin policy: inbound messages are only acted on if event.origin is in
 // HOST_ORIGINS. Same-origin covers the dev mock host (served as a sibling
-// static page during local testing); add the production GameLoop launcher
-// origin before shipping.
+// static page during local testing). Production/staging launcher origins
+// are added below, per the GameLoop messaging guide -- note the parent is
+// GameLoop Main rather than the Launcher in the direct-hosting topology, so
+// confirm the full current domain list with GameLoop developer support
+// before relying on this allowlist in production.
 const HOST_ORIGINS = [window.location.origin];
-// TODO before shipping: add the production GameLoop launcher origin, e.g.
-// HOST_ORIGINS.push('https://launcher.gameloop.tv');
+HOST_ORIGINS.push(
+  'https://gameloop-launcher.gameloop.tv',
+  'https://gameloop-launcher.dev.gameloop.tv',
+  'https://gameloop-launcher.stage.gameloop.tv',
+);
 
 function isTrustedOrigin(origin) {
   return HOST_ORIGINS.includes(origin);
