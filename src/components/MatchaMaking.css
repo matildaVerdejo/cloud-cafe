@@ -60,13 +60,38 @@
 /* Countertop items (heater, kettle, bowl, whisk, three matcha grade tins),
    positioned per-item via inline left/top/width/height in MatchaMaking.js
    (see STATIC_ITEMS/MOVABLE_ITEMS there for the box math) -- this class
-   only holds the properties every item shares. Static items (heater, the
-   three tins) stay non-interactive -- pointer-events: none, no focus. */
+   only holds the properties every item shares. The heater plate stays
+   non-interactive (pointer-events: none, no focus) -- the three tins are
+   selectable (see .station-item.selectable below) but not draggable, and
+   kettle/bowl/whisk are selectable and draggable (.station-item.movable). */
 .station-item {
   position: absolute;
   object-fit: contain;
   pointer-events: none;
   filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.18));
+}
+
+/* The three matcha grade tins: D-pad/click-selectable so they get the same
+   white shape-hugging glow as everything else, but not draggable -- there's
+   nowhere for them to be picked up and put, unlike kettle/bowl/whisk, so
+   this skips the cursor/touch-action/drag transition properties .movable
+   below adds and only re-enables pointer-events + the focus glow. Same
+   zero-strength-drop-shadow-placeholder trick as .movable so the glow
+   transitions in smoothly instead of popping. */
+.station-item.selectable {
+  pointer-events: auto;
+  filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.18)) drop-shadow(0 0 0 rgba(255, 255, 255, 0))
+    drop-shadow(0 0 0 rgba(255, 255, 255, 0));
+  transition: filter 0.15s ease, transform 0.15s ease;
+}
+
+.station-item.selectable:focus-visible {
+  outline: none;
+  box-shadow: none;
+  transform: scale(1.06);
+  filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.18))
+    drop-shadow(0 0 6px rgba(255, 255, 255, 0.95))
+    drop-shadow(0 0 12px rgba(255, 255, 255, 0.75));
 }
 
 /* Movable items (kettle, bowl, whisk): draggable anywhere on the counter,

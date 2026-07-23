@@ -14,14 +14,14 @@ import OrderReceiptButton from './OrderReceiptButton';
 // leftover transparent padding), so width/height here can use the image's
 // own aspect ratio without distortion.
 const STATIC_ITEMS = [
-  { key: 'cafe-grade', src: './CafeGrade.png', alt: 'Cafe grade matcha tin', left: 68, top: 55.18, width: 6, height: 16.82 },
-  { key: 'classic-grade', src: './ClassicGrade.png', alt: 'Classic grade matcha tin', left: 75, top: 55.02, width: 6, height: 16.98 },
-  { key: 'ceremonial-grade', src: './CeremonialGrade.png', alt: 'Ceremonial grade matcha tin', left: 82, top: 55.04, width: 6, height: 16.96 },
+  { key: 'cafe-grade', src: './CafeGrade.png', alt: 'Cafe grade matcha tin', left: 63.65, top: 25.66, width: 6.9, height: 19.34 },
+  { key: 'classic-grade', src: './ClassicGrade.png', alt: 'Classic grade matcha tin', left: 71.55, top: 25.47, width: 6.9, height: 19.53 },
+  { key: 'ceremonial-grade', src: './CeremonialGrade.png', alt: 'Ceremonial grade matcha tin', left: 79.45, top: 25.50, width: 6.9, height: 19.50 },
 ];
 
 // Heater plate: rendered separately from the other static items because it
 // carries two hotspots positioned relative to its own art (see below).
-const HEATER_BOX = { left: 3, top: 55.5, width: 25, height: 17.5 };
+const HEATER_BOX = { left: 3, top: 51.5, width: 25, height: 17.5 };
 
 // The heater's power button sits on the top surface, upper-left of the
 // plate, centered on the molded oval drawn into the art (image x 27-91,
@@ -52,7 +52,7 @@ const HEATER_BUTTON_BOX = heaterRelativeBox(33, 68.5, 85, 86.5, 337, 130);
 // width by default and animates open left-to-right when heaterOn flips
 // true (and closes the same way when it flips back off), so the color
 // progressively advances across the bar instead of appearing instantly.
-const TEMP_BAR_BOX = { left: 3, top: 76, width: 21, height: 3.4 };
+const TEMP_BAR_BOX = { left: 3, top: 72, width: 21, height: 3.4 };
 
 // Two tick marks in the gauge's white middle zone, positioned as a % of the
 // bar's own box (TEMP_BAR_BOX) since they're rendered as children of the
@@ -96,9 +96,9 @@ const RED_AT_MS =
 // down anywhere on the counter". Width/height stay fixed at their starting
 // size; only left/top change while dragging.
 const MOVABLE_ITEMS = [
-  { key: 'kettle', src: './kettle.png', alt: 'Pour-over kettle', left: 3.5, top: 30.1, width: 24, height: 31.4 },
-  { key: 'bowl', src: './Bowl.png', alt: 'Matcha mixing bowl', left: 38, top: 32.3, width: 24, height: 45.7 },
-  { key: 'whisk', src: './whisk.png', alt: 'Bamboo whisk', left: 91, top: 60.6, width: 6, height: 21.4 },
+  { key: 'kettle', src: './kettle.png', alt: 'Pour-over kettle', left: 3.5, top: 26.1, width: 24, height: 31.4 },
+  { key: 'bowl', src: './Bowl.png', alt: 'Matcha mixing bowl', left: 38, top: 33.8, width: 24, height: 45.7 },
+  { key: 'whisk', src: './whisk.png', alt: 'Bamboo whisk', left: 66, top: 47, width: 6, height: 21.4 },
 ];
 
 const MOVABLE_START = MOVABLE_ITEMS.reduce((acc, item) => {
@@ -343,7 +343,9 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance }) => 
             key={item.key}
             src={item.src}
             alt={item.alt}
-            className="station-item"
+            className="station-item selectable"
+            data-focusable
+            tabIndex={0}
             style={{
               left: `${item.left}%`,
               top: `${item.top}%`,
