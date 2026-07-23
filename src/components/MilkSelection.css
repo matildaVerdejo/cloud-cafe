@@ -21,11 +21,15 @@
   border-radius: 16px;
   overflow: hidden;
   box-shadow: 0 15px 30px rgba(0, 0, 0, 0.2);
-  /* Matches the art's own counter tone. This image is 1392x768 (~1.813),
-     slightly wider than 16:9 (1.778), so object-fit: contain below leaves a
-     ~1.93% letterbox -- pushed entirely to the bottom (see object-position
-     on .milk-selection-art) so the seam sits against the counter color
-     instead of splitting a thin sliver across the top too. */
+  /* Matches the art's own counter tone. This image is 1394x768 (~1.815,
+     matching MatchaBaseStation.png's dimensions), slightly wider than 16:9
+     (1.778), so object-fit: contain below leaves a ~2.06% letterbox --
+     pushed entirely to the bottom (see object-position on
+     .milk-selection-art) so the seam sits against the counter color
+     instead of splitting a thin sliver across the top too. (Swapped in
+     from a 1392x768 version of the same art with the milk bottles baked
+     into it -- close enough in size that the -0.96 top-offset below is
+     still accurate to well under a pixel, so it wasn't worth re-deriving.) */
   background-color: #ab9d94;
 }
 
@@ -150,4 +154,38 @@
   filter: drop-shadow(0 3px 4px rgba(0, 0, 0, 0.2))
     drop-shadow(0 0 4px rgba(255, 255, 255, 0.95))
     drop-shadow(0 0 8px rgba(255, 255, 255, 0.75));
+}
+
+/* The four milk/water bottles standing on the counter (see BOTTLE_ITEMS/
+   BOTTLE_HOME in MilkSelection.js) -- pick-up-and-move countertop items,
+   same drag + D-pad-select + snap-home pattern as .glass-cup/.ice-cube.
+   Two extra zero-strength drop-shadows kept in the base filter (matching
+   the same trick used on .glass-cup/.ice-cube) so the filter list's length
+   matches :focus-visible below, which is what lets the glow transition in/
+   out smoothly instead of popping. */
+.milk-bottle {
+  position: absolute;
+  object-fit: contain;
+  cursor: grab;
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+  filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.18)) drop-shadow(0 0 0 rgba(255, 255, 255, 0))
+    drop-shadow(0 0 0 rgba(255, 255, 255, 0));
+  transition: left 0.2s ease, top 0.2s ease, filter 0.15s ease, transform 0.15s ease;
+}
+
+.milk-bottle.dragging {
+  cursor: grabbing;
+  transition: none;
+}
+
+/* Same shape-hugging focus glow as .glass-cup/.ice-cube. */
+.milk-bottle:focus-visible {
+  outline: none;
+  box-shadow: none;
+  transform: scale(1.1);
+  filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.18))
+    drop-shadow(0 0 5px rgba(255, 255, 255, 0.95))
+    drop-shadow(0 0 10px rgba(255, 255, 255, 0.75));
 }

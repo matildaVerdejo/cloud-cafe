@@ -20,6 +20,91 @@ const CUP_SPOTS = {
 const SHELF_SIZE = { width: 6.47, height: 12.39 };
 const TABLE_SIZE = { width: 19.40, height: 37.16 }; // same aspect ratio, 3x
 
+// The four milk/water bottles, standing in a tight row on the counter to
+// the right of the sink, roughly where they used to be baked directly into
+// MilkMixingStation.png before that art was swapped for a bottle-free
+// version. All four source PNGs share (near enough) the same 169x325
+// canvas aspect ratio, so rather than track four slightly different boxes
+// they're uniform: one BOTTLE_WIDTH/BOTTLE_HEIGHT pair (converted from that
+// canvas aspect into container-relative % -- see the width formula below,
+// which accounts for the container itself being 1920x1080 rather than
+// square) and one shared BOTTLE_BOTTOM so every bottle's base sits on the
+// same counter line regardless of height. These positions are each
+// bottle's "home" spot -- see BOTTLE_HOME below, and the drag/snap-back
+// handlers in the component, for the pick-up-and-put-back interaction.
+// top/BOTTLE_BOTTOM carry the same -0.96 letterbox offset as CUP_SPOTS/
+// ICE_BOX_SPOTS above.
+const BOTTLE_CANVAS_ASPECT = 169 / 325; // width/height, shared by all four PNGs
+const BOTTLE_HEIGHT = 38;
+const BOTTLE_WIDTH = BOTTLE_HEIGHT * BOTTLE_CANVAS_ASPECT * (9 / 16); // container is 1920x1080
+// A bit lower than the counter line the bottles used to stand on in the
+// baked-in art (78.47), but still well clear of the counter's front-edge
+// seam (~90.7% in container space, measured off MilkMixingStation.png) so
+// the bigger bottles below don't hang off the counter.
+const BOTTLE_BOTTOM = 83;
+const BOTTLE_VISUAL_GAP = 0.3; // sliver of space between each bottle's actual silhouette
+const BOTTLE_CLUSTER_CENTER = 83; // roughly centered under the cabinet in the art
+
+// Each PNG's canvas has a different amount of transparent padding around
+// its actual bottle/carton silhouette (measured from each file's own alpha
+// bounding box, as a fraction of its 169-or-170-wide canvas) -- packing by
+// box edges alone left wildly uneven, much-bigger-than-intended-looking
+// gaps since e.g. coconut's canvas has ~40% empty space on its left side
+// alone. leftPad/rightPad below are what let the loop underneath space
+// bottles by where their actual art starts/ends instead of by their boxes.
+const BOTTLE_KEYS = [
+  { key: 'oat', src: './OatMilk.png', alt: 'Oat milk', leftPad: 24 / 169, rightPad: (169 - 108) / 169 },
+  { key: 'dairy', src: './DairyMilk.png', alt: 'Dairy milk', leftPad: 34 / 170, rightPad: (170 - 136) / 170 },
+  { key: 'almond', src: './AlmondMilk.png', alt: 'Almond milk', leftPad: 34 / 169, rightPad: (169 - 119) / 169 },
+  { key: 'coconut', src: './CoconutWater.png', alt: 'Coconut water', leftPad: 67 / 169, rightPad: (169 - 144) / 169 },
+];
+
+// Walk left-to-right so each bottle's visible content (box left + leftPad,
+// through box left + (1 - rightPad) * BOTTLE_WIDTH) sits exactly
+// BOTTLE_VISUAL_GAP past the previous bottle's, then shift the whole row
+// so it's centered on BOTTLE_CLUSTER_CENTER.
+const bottleBoxLefts = [0];
+for (let i = 1; i < BOTTLE_KEYS.length; i += 1) {
+  const prev = BOTTLE_KEYS[i - 1];
+  const gapNeeded = (1 - prev.rightPad - BOTTLE_KEYS[i].leftPad) * BOTTLE_WIDTH + BOTTLE_VISUAL_GAP;
+  bottleBoxLefts.push(bottleBoxLefts[i - 1] + gapNeeded);
+}
+const clusterBoxWidth = bottleBoxLefts[bottleBoxLefts.length - 1] + BOTTLE_WIDTH - bottleBoxLefts[0];
+const clusterStartLeft = BOTTLE_CLUSTER_CENTER - clusterBoxWidth / 2;
+
+const BOTTLE_ITEMS = BOTTLE_KEYS.map((item, index) => ({
+  key: item.key,
+  src: item.src,
+  alt: item.alt,
+  left: clusterStartLeft + bottleBoxLefts[index],
+  top: BOTTLE_BOTTOM - BOTTLE_HEIGHT,
+  width: BOTTLE_WIDTH,
+  height: BOTTLE_HEIGHT,
+}));
+
+// Each bottle's counter spot, keyed for lookup -- both the starting
+// position on mount and the "home" a bottle snaps back to once it's been
+// picked up and set back down (see BOTTLE_SNAP_FRACTION/BOTTLE_CLICK_MAX_
+// MOVE_PCT below).
+const BOTTLE_HOME = BOTTLE_ITEMS.reduce((acc, item) => {
+  acc[item.key] = { left: item.left, top: item.top };
+  return acc;
+}, {});
+
+// Same idea as MatchaMaking's kettle/bowl/whisk: drop a bottle back close
+// to its home spot and it snaps the rest of the way in, scaled to the
+// bottle's own footprint. A drop anywhere else just leaves it there.
+const BOTTLE_SNAP_FRACTION = 0.5;
+// Below this much total pointer movement (in container %), a pointer-down
+// -> pointer-up is treated as a plain click/tap rather than a drag -- lets
+// players snap a displaced bottle straight home with a single click/Select
+// press instead of having to drag it all the way back themselves.
+const BOTTLE_CLICK_MAX_MOVE_PCT = 1;
+
+function clampPct(value, size) {
+  return Math.min(Math.max(value, 0), 100 - size);
+}
+
 // Seven ice cubes start piled inside the ice box in two vertical columns
 // (4 left, 3 right), each cube overlapping the one above it so the stack
 // stays within the box's shallow depth without spilling past its bottom
@@ -246,6 +331,71 @@ const MilkSelection = ({ activeStep, customerNumber, onNavigate, onAdvance }) =>
     });
   };
 
+  // ---- Milk/water bottles: pick up, move anywhere, snap back home -------
+  const [bottlePositions, setBottlePositions] = useState(BOTTLE_HOME);
+  // Which bottle (if any) is being dragged right now, and its live position.
+  const [bottleDrag, setBottleDrag] = useState(null); // { key, left, top } | null
+  const bottleDragStartRef = useRef({ pointerX: 0, pointerY: 0, left: 0, top: 0 });
+
+  const handleBottlePointerDown = (item) => (e) => {
+    const base = bottlePositions[item.key];
+    e.currentTarget.setPointerCapture(e.pointerId);
+    bottleDragStartRef.current = {
+      pointerX: e.clientX,
+      pointerY: e.clientY,
+      left: base.left,
+      top: base.top,
+    };
+    setBottleDrag({ key: item.key, left: base.left, top: base.top });
+  };
+
+  const handleBottlePointerMove = (item) => (e) => {
+    if (!bottleDrag || bottleDrag.key !== item.key) return;
+    const rect = containerRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const dxPct = ((e.clientX - bottleDragStartRef.current.pointerX) / rect.width) * 100;
+    const dyPct = ((e.clientY - bottleDragStartRef.current.pointerY) / rect.height) * 100;
+    setBottleDrag({
+      key: item.key,
+      left: clampPct(bottleDragStartRef.current.left + dxPct, item.width),
+      top: clampPct(bottleDragStartRef.current.top + dyPct, item.height),
+    });
+  };
+
+  const handleBottlePointerUp = (item) => (e) => {
+    if (!bottleDrag || bottleDrag.key !== item.key) return;
+    e.currentTarget.releasePointerCapture?.(e.pointerId);
+    const home = BOTTLE_HOME[item.key];
+    const totalMove = Math.max(
+      Math.abs(e.clientX - bottleDragStartRef.current.pointerX),
+      Math.abs(e.clientY - bottleDragStartRef.current.pointerY)
+    );
+    const rect = containerRef.current?.getBoundingClientRect();
+    const totalMovePct = rect ? (totalMove / Math.max(rect.width, rect.height)) * 100 : 0;
+    const snapBack =
+      totalMovePct < BOTTLE_CLICK_MAX_MOVE_PCT || // barely moved -- treat as a click, snap home
+      (Math.abs(bottleDrag.left - home.left) < item.width * BOTTLE_SNAP_FRACTION &&
+        Math.abs(bottleDrag.top - home.top) < item.height * BOTTLE_SNAP_FRACTION);
+    setBottlePositions((prev) => ({
+      ...prev,
+      [item.key]: snapBack ? { left: home.left, top: home.top } : { left: bottleDrag.left, top: bottleDrag.top },
+    }));
+    setBottleDrag(null);
+  };
+
+  // D-pad / keyboard equivalent of a click -- always snaps the selected
+  // bottle straight back to its home spot, matching the click behavior
+  // above (there's no keyboard equivalent of "drag it partway", so Enter
+  // only covers the "put it back" half of the interaction).
+  const handleBottleKeyDown = (item) => (e) => {
+    const action = getActionFromKeyEvent(e);
+    if (action !== 'Enter') return;
+    if (shouldDebounceEnter(e)) return;
+    e.preventDefault();
+    const home = BOTTLE_HOME[item.key];
+    setBottlePositions((prev) => ({ ...prev, [item.key]: { left: home.left, top: home.top } }));
+  };
+
   return (
     <div className="milk-selection-container" ref={containerRef}>
       <h1 className="sr-only">Milk Mixing Station</h1>
@@ -253,7 +403,7 @@ const MilkSelection = ({ activeStep, customerNumber, onNavigate, onAdvance }) =>
       <div className="milk-selection-content">
         <img
           src="./MilkMixingStation.png"
-          alt="Milk mixing station with sink, cabinet, and oat, dairy, almond, and coconut milk"
+          alt="Milk mixing station with sink and cabinet"
           className="milk-selection-art"
         />
         <img
@@ -299,6 +449,32 @@ const MilkSelection = ({ activeStep, customerNumber, onNavigate, onAdvance }) =>
               onPointerMove={handleIcePointerMove}
               onPointerUp={handleIcePointerUp}
               onKeyDown={handleIceKeyDown(index)}
+            />
+          );
+        })}
+
+        {BOTTLE_ITEMS.map((item) => {
+          const dragging = bottleDrag?.key === item.key;
+          const pos = dragging ? bottleDrag : bottlePositions[item.key];
+          return (
+            <img
+              key={item.key}
+              src={item.src}
+              alt={`${item.alt}. Drag to move, or select it and press Enter to send it back to its spot.`}
+              className={`milk-bottle${dragging ? ' dragging' : ''}`}
+              data-focusable
+              tabIndex={0}
+              draggable={false}
+              style={{
+                left: `${pos.left}%`,
+                top: `${pos.top}%`,
+                width: `${item.width}%`,
+                height: `${item.height}%`,
+              }}
+              onPointerDown={handleBottlePointerDown(item)}
+              onPointerMove={handleBottlePointerMove(item)}
+              onPointerUp={handleBottlePointerUp(item)}
+              onKeyDown={handleBottleKeyDown(item)}
             />
           );
         })}
