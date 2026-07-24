@@ -332,3 +332,107 @@
   }
 }
 
+/* Scoop gauge -- matcha-measuring counterpart to .heater-temp-bar above,
+   sitting next to the tins (see SCOOP_BAR_BOX in MatchaMaking.js). Same
+   gray body / thick gray outline / rounded-rectangle look as the temp bar
+   (background, border, box-shadow below are copied straight from
+   .heater-temp-bar) so the two gauges read as a matched pair, just turned
+   vertical here. Only mounted once a tin is confirmed (selectedTin in
+   MatchaMaking.js), which is also the moment it grabs focus itself (see
+   the effect there) -- same focus-glow treatment as .heater-temp-bar,
+   including the zero-strength placeholder box-shadow layer so it
+   transitions in smoothly instead of popping. */
+.scoop-bar {
+  position: absolute;
+  border-radius: min(8px, 0.417vw);
+  cursor: pointer;
+  background: #b7b2ac;
+  border: min(5px, 0.26vw) solid rgba(110, 105, 100, 0.7);
+  box-shadow: inset 0 1px 2px rgba(255, 255, 255, 0.35), inset 0 -1px 2px rgba(0, 0, 0, 0.2),
+    0 0 0 0 rgba(255, 255, 255, 0);
+  transition: box-shadow 0.15s ease;
+}
+
+.scoop-bar:focus-visible {
+  outline: none;
+  box-shadow: inset 0 1px 2px rgba(255, 255, 255, 0.35), inset 0 -1px 2px rgba(0, 0, 0, 0.2),
+    0 0 12px 4px rgba(255, 255, 255, 0.85);
+}
+
+/* Light gray measurement ticks running across the bar (see SCOOP_BAR_MARKERS
+   in MatchaMaking.js) -- thin horizontal lines, inset from both edges so
+   they read as marks on the gauge rather than touching its outline. Fully
+   opaque color (not a translucent one) is deliberate: .scoop-bar's own
+   box-shadow above bevels the bar's inner edge -- a light highlight near
+   its top, a dark shadow near its bottom -- and children paint on top of
+   that, so a translucent marker would blend with whichever side of the
+   bevel it happened to sit near instead of reading as a consistent weight.
+   Drawn as a zero-height element with a border-top (rather than a fixed
+   `height` + `background` box) so all three render at an identical,
+   crisp weight regardless of which fractional-pixel row their `top` %
+   happens to land on -- background-filled boxes of only a few px are
+   prone to browsers anti-aliasing/rounding their edges slightly
+   differently depending on that sub-pixel offset (which is how the top
+   one ended up reading thicker than the other two), while a border of an
+   explicit width doesn't get that same inconsistent treatment. */
+.scoop-bar-marker {
+  position: absolute;
+  left: 18%;
+  right: 18%;
+  height: 0;
+  border-top: min(3px, 0.16vw) solid #e6e4e0;
+}
+
+/* The scoop gauge's slider -- rides up and down the bar continuously (the
+   actual "measure your scoop" challenge is timing something against this,
+   same spirit as the heater's fill/tick zones). A small solid gray triangle
+   pointing right, built with the classic zero-size-box + border trick
+   (transparent top/bottom borders + a solid left border taper the shape to
+   a point on the right) rather than an image, so it stays crisp at any
+   card size. Anchored to the bar's left edge (left: 0) and pulled fully
+   outside it with translateX(-100%), tip just touching the bar, so it
+   reads as a pointer indicating the current line rather than a chunk of
+   the bar's own fill. top is animated directly (rather than folding a
+   translateY into the transform) since the bar's own height is a %, and
+   this way the slider's travel range is expressed in the same % units as
+   everything else here -- the transform above only ever handles the fixed
+   horizontal placement and vertical centering, never the animated part.
+   Travel range (7% to 91%) reaches from just past the topmost tick (10%)
+   to just past the bottommost tick (94%), matching the spoons lined up
+   next to those two ticks in MatchaMaking.js. */
+.scoop-bar-slider {
+  position: absolute;
+  left: 0;
+  width: 0;
+  height: 0;
+  border-top: min(9px, 0.47vw) solid transparent;
+  border-bottom: min(9px, 0.47vw) solid transparent;
+  border-left: min(13px, 0.68vw) solid rgba(120, 118, 112, 0.95);
+  transform: translate(-100%, -50%);
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.3));
+  animation: scoopSliderMove 2.2s ease-in-out infinite alternate;
+}
+
+@keyframes scoopSliderMove {
+  0% {
+    top: 7%;
+  }
+  100% {
+    top: 91%;
+  }
+}
+
+/* Scoop-count labels under each spoon (see SCOOP_SPOON_LABELS in
+   MatchaMaking.js) -- "x 1" under the bottom spoon up to "x 3" under the
+   top one. Same font/color as the rest of the game's UI text (see
+   .progress-order-count etc. in ProgressBar.css) so it reads as part of
+   the same visual language rather than a one-off label. */
+.scoop-spoon-label {
+  position: absolute;
+  text-align: center;
+  font-family: 'Pixelify Sans', cursive;
+  font-size: min(20px, 0.99vw);
+  font-weight: 600;
+  color: #5c4a3a;
+}
+

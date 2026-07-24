@@ -19,6 +19,87 @@ const STATIC_ITEMS = [
   { key: 'ceremonial-grade', src: './CeremonialGrade.png', alt: 'Ceremonial grade matcha tin', left: 79.45, top: 25.50, width: 6.9, height: 19.50 },
 ];
 
+// Scoop gauge -- the matcha-measuring counterpart to the heater's
+// .heater-temp-bar, sitting to the right of the tins with a clear gap
+// (ceremonial-grade, the rightmost tin, ends at 79.45 + 6.9 = 86.35) so it
+// doesn't read as part of the tin cluster itself. Vertical instead of
+// horizontal since it's meant to read as a measuring column rather than a
+// temperature strip, but reuses the same gray-body/thick-outline look (see
+// .scoop-bar in MatchaMaking.css, mirrored off .heater-temp-bar).
+// Only rendered once a tin's been confirmed with Enter/Space (see
+// selectedTin state below) -- merely having a tin focused/highlighted
+// isn't enough, since that also happens while just browsing between tins.
+// Pushed close to the right edge of the frame (right edge lands at
+// 93 + 4 = 97%, leaving a small margin). top is set to sit entirely below
+// the wall/counter seam in the background art -- that seam falls around
+// 33-34% of the frame (measured off MatchaBaseStation.png's own pixels,
+// which map straight to container % since the art is anchored to the
+// container's top edge with no top letterbox -- see .matcha-making-art) --
+// 42 nudges it a bit further down from that clearance line than before,
+// still keeping the whole bar (and the spoons/slider that key off its box
+// below) well within the counter.
+const SCOOP_BAR_BOX = { left: 93, top: 42, width: 4, height: 40 };
+
+// Just three light gray marks now -- top, middle, and bottom of the bar --
+// rather than a full evenly-spaced run. Top and bottom sit an equal 8% in
+// from their respective edges (previously 10 and 6 -- an uneven leftover
+// from when this was a full evenly-spaced run of 8, not deliberately
+// mismatched). Middle is the exact midpoint of the other two, (8 + 92) / 2
+// = 50 (previously 46, another evenly-spaced-run leftover that actually
+// sat closer to the top mark than the bottom one). Values match
+// SCOOP_SPOON_LINES' tickTop entries below exactly, so each mark still
+// lines up with its spoon.
+const SCOOP_BAR_MARKERS = [8, 50, 92];
+
+// Three small spoon icons sitting just to the left of the bar, in the gap
+// between the tins and the bar itself (tins end at 86.35, bar starts at 93
+// -- see SCOOP_BAR_BOX comment above), each lined up with one of the tick
+// lines above: the topmost tick (8), the true middle tick (50), and the
+// bottommost tick (92). spoon.png is a 500x500 square canvas with the
+// spoon's own art only filling the vertical middle (~y160-359) -- rather
+// than pre-cropping the file, the box below just keeps that 1:1 aspect
+// ratio (width % converted from height % by the container's 16:9 ratio,
+// same trick as KETTLE_SPOUT_OFFSET elsewhere) so the art doesn't distort,
+// and the top/bottom padding it carries just centers it on the tick line
+// automatically.
+const SCOOP_SPOON_SIZE_HEIGHT = 7.47;
+const SCOOP_SPOON_SIZE = { width: SCOOP_SPOON_SIZE_HEIGHT / (16 / 9), height: SCOOP_SPOON_SIZE_HEIGHT };
+const SCOOP_SPOON_LEFT = 87.58;
+const SCOOP_SPOON_LINES = [
+  { key: 'top', tickTop: 8 },
+  { key: 'middle', tickTop: 50 },
+  { key: 'bottom', tickTop: 92 },
+];
+const SCOOP_SPOON_ITEMS = SCOOP_SPOON_LINES.map((line) => ({
+  key: line.key,
+  left: SCOOP_SPOON_LEFT,
+  top: SCOOP_BAR_BOX.top + (line.tickTop / 100) * SCOOP_BAR_BOX.height - SCOOP_SPOON_SIZE.height / 2,
+  width: SCOOP_SPOON_SIZE.width,
+  height: SCOOP_SPOON_SIZE.height,
+}));
+
+// Scoop-count labels sitting right under each spoon -- "x 1" under the
+// bottom spoon (the lowest line, closest to an empty tin), counting up to
+// "x 3" under the top spoon, so the gauge reads as "the higher the line,
+// the more scoops it represents". top is anchored to the spoon's actual
+// VISIBLE bottom edge, not its full 500x500 box -- spoon.png's own art
+// only fills y160-359 of that square canvas (see the SCOOP_SPOON_SIZE
+// comment above), so using the raw box's bottom edge would leave a big
+// unwanted gap between the spoon and its label. Centered under the spoon
+// with a wider box than the spoon itself since the text is wider than the
+// spoon art.
+const SCOOP_SPOON_LABEL_TEXT = { top: 'x 3', middle: 'x 2', bottom: 'x 1' };
+const SCOOP_SPOON_VISIBLE_BOTTOM_FRAC = 359 / 500;
+const SCOOP_SPOON_LABEL_GAP = 1.2;
+const SCOOP_SPOON_LABEL_WIDTH = 6;
+const SCOOP_SPOON_LABELS = SCOOP_SPOON_ITEMS.map((item) => ({
+  key: item.key,
+  text: SCOOP_SPOON_LABEL_TEXT[item.key],
+  left: item.left + item.width / 2 - SCOOP_SPOON_LABEL_WIDTH / 2,
+  top: item.top + item.height * SCOOP_SPOON_VISIBLE_BOTTOM_FRAC + SCOOP_SPOON_LABEL_GAP,
+  width: SCOOP_SPOON_LABEL_WIDTH,
+}));
+
 // Heater plate: rendered separately from the other static items because it
 // carries two hotspots positioned relative to its own art (see below).
 const HEATER_BOX = { left: 3, top: 51.5, width: 25, height: 17.5 };
@@ -259,6 +340,71 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance }) => 
     setDrag(null);
   };
 
+  // ---- Matcha tin selection: reveals the scoop gauge -------------------
+  // Which tin (if any) has been confirmed -- null hides the scoop gauge
+  // entirely. Deliberately not tied to focus (a tin still gets its white
+  // halo just from being focused/clicked, via :focus-visible in the CSS,
+  // same as any other selectable item) -- the gauge itself only shows up
+  // once the player actually presses Enter/Space on a tin, same "confirm"
+  // gesture used everywhere else in the game (cup, ice cubes, temp bar).
+  // Enter on the already-confirmed tin toggles it back off; Enter on a
+  // different tin swaps straight to that one instead.
+  const [selectedTin, setSelectedTin] = useState(null);
+
+  const handleTinKeyDown = (item) => (e) => {
+    const action = getActionFromKeyEvent(e);
+    if (action !== 'Enter') return;
+    if (shouldDebounceEnter(e)) return;
+    e.preventDefault();
+    setSelectedTin((prev) => (prev === item.key ? null : item.key));
+  };
+
+  // ---- Scoop gauge: focuses itself the moment a tin is confirmed --------
+  // selectedTin flipping to a real key both reveals the bar (see the JSX
+  // below) and sends focus straight to it, so the very next Enter/Space the
+  // player presses -- no extra navigating needed -- stops the slider right
+  // where it is. If the slider was left frozen from a previous stop, clear
+  // that freeze first so switching to a fresh tin always leaves it running.
+  const [scoopRunning, setScoopRunning] = useState(false);
+  const scoopBarRef = useRef(null);
+  const scoopSliderRef = useRef(null);
+
+  useEffect(() => {
+    if (selectedTin) {
+      if (scoopSliderRef.current) {
+        scoopSliderRef.current.style.animation = '';
+        scoopSliderRef.current.style.top = '';
+      }
+      setScoopRunning(true);
+      scoopBarRef.current?.focus();
+    } else {
+      setScoopRunning(false);
+    }
+  }, [selectedTin]);
+
+  // Freezes the slider exactly where it currently is -- same
+  // getComputedStyle-mid-animation trick as the heater's stopBar/
+  // getCurrentScaleX above, just reading the live `top` instead of a
+  // transform, since that's the property the keyframes animate here.
+  const stopScoop = () => {
+    if (!scoopRunning) return;
+    const el = scoopSliderRef.current;
+    if (el) {
+      const frozenTop = window.getComputedStyle(el).top;
+      el.style.animation = 'none';
+      el.style.top = frozenTop;
+    }
+    setScoopRunning(false);
+  };
+
+  const handleScoopKeyDown = (e) => {
+    const action = getActionFromKeyEvent(e);
+    if (action !== 'Enter') return;
+    if (shouldDebounceEnter(e)) return;
+    e.preventDefault();
+    stopScoop();
+  };
+
   // ---- Kettle steam: appears once the water's hot enough (tempZone hits
   // 'target', i.e. the button just turned green) and keeps going for as
   // long as it stays hot, rather than cutting off the instant tempZone
@@ -342,7 +488,7 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance }) => 
           <img
             key={item.key}
             src={item.src}
-            alt={item.alt}
+            alt={`${item.alt}. Select it and press Enter to measure a scoop.`}
             className="station-item selectable"
             data-focusable
             tabIndex={0}
@@ -352,8 +498,63 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance }) => 
               width: `${item.width}%`,
               height: `${item.height}%`,
             }}
+            onKeyDown={handleTinKeyDown(item)}
           />
         ))}
+        {selectedTin && (
+          <>
+            <div
+              ref={scoopBarRef}
+              className="scoop-bar"
+              data-focusable
+              tabIndex={0}
+              role="button"
+              aria-label="Scoop gauge. Press Enter to stop the slider at the current line."
+              onKeyDown={handleScoopKeyDown}
+              onClick={stopScoop}
+              style={{
+                left: `${SCOOP_BAR_BOX.left}%`,
+                top: `${SCOOP_BAR_BOX.top}%`,
+                width: `${SCOOP_BAR_BOX.width}%`,
+                height: `${SCOOP_BAR_BOX.height}%`,
+              }}
+            >
+              {SCOOP_BAR_MARKERS.map((markerTop) => (
+                <span key={markerTop} className="scoop-bar-marker" style={{ top: `${markerTop}%` }} />
+              ))}
+              <div ref={scoopSliderRef} className="scoop-bar-slider" aria-hidden="true" />
+            </div>
+            {SCOOP_SPOON_ITEMS.map((item) => (
+              <img
+                key={item.key}
+                src="./Spoon.png"
+                alt=""
+                aria-hidden="true"
+                className="station-item"
+                style={{
+                  left: `${item.left}%`,
+                  top: `${item.top}%`,
+                  width: `${item.width}%`,
+                  height: `${item.height}%`,
+                }}
+              />
+            ))}
+            {SCOOP_SPOON_LABELS.map((label) => (
+              <span
+                key={label.key}
+                className="scoop-spoon-label"
+                aria-hidden="true"
+                style={{
+                  left: `${label.left}%`,
+                  top: `${label.top}%`,
+                  width: `${label.width}%`,
+                }}
+              >
+                {label.text}
+              </span>
+            ))}
+          </>
+        )}
         {MOVABLE_ITEMS.map((item) => {
           const dragging = drag?.key === item.key;
           const pos = dragging ? drag : itemPositions[item.key];
