@@ -130,6 +130,74 @@
     drop-shadow(0 0 12px rgba(255, 255, 255, 0.75));
 }
 
+/* Applies once either the kettle's water-pour sequence (kettleStage
+   'moving'/'pouring' in MatchaMaking.js -- see beginKettleDump there) or
+   the whisk's mixing sequence (whiskStage 'moving'/'mixing'/'done' -- see
+   beginWhiskMix) has started -- the item is gliding to/settled at its
+   in-use spot and shouldn't be picked up again until it's back on the
+   counter (kettle) or for the rest of this visit (whisk, which never goes
+   back) -- same reasoning as .big-spoon.settling. Deliberately only
+   pointer-events/cursor here, not tabIndex/data-focusable -- those stay on
+   the element itself in MatchaMaking.js the whole time, so it never drops
+   out of the keyboard/D-pad focus order, it just stops responding to
+   Enter/Space while not 'idle' (see handleKettleKeyDown/handleWhiskKeyDown
+   there). The kettle's tilt (.pouring's rotation) and the whisk's stir
+   (.mixing below) are both applied as their own separate classes rather
+   than folded in here, since only one of the two items ever needs either
+   at a time. */
+.station-item.movable.settling {
+  pointer-events: none;
+  cursor: default;
+}
+
+/* Whisk stirring in the bowl (whiskStage === 'mixing' -- see .mixing in
+   MatchaMaking.js) -- a small side-to-side rock (rotate only, no
+   translate -- combining the two gets confusing fast once a base 180deg
+   flip is already in the mix, since a later translateX in the same list
+   would shift along the *rotated* axes rather than the screen's own left/
+   right). The 180deg flip (baked into every step below rather than applied
+   as a separate inline transform) is what turns the whisk upside down once
+   it's picked up -- see the isWhisk/whiskFlipped comment in
+   MatchaMaking.js's MOVABLE_ITEMS JSX for why it has to live *inside* this
+   animation instead of alongside it: an inline style.transform and a CSS
+   animation that both target `transform` on the same element conflict, and
+   the animation wins outright while it's running, silently discarding
+   whatever the inline value was. transform-origin itself is *not* set
+   here -- it's applied inline in MatchaMaking.js instead, unconditionally
+   whenever the item is the whisk (not just while .mixing is applied), for
+   the same reason KETTLE_SPOUT_OFFSET's transform-origin is unconditional
+   on the kettle: if the origin only applied during 'mixing', it would snap
+   to a different point the instant 'moving' hands off to 'mixing' (or
+   'mixing' hands off to 'done'), and since transform-origin itself isn't
+   covered by .station-item.movable's transition, that snap would happen
+   discontinuously mid-rotation and visibly jump the whisk sideways for a
+   frame. Keeping it fixed everywhere means only the rotation angle itself
+   ever changes, never the pivot. Runs continuously for as long as .mixing
+   is applied -- MatchaMaking.js only adds that class during the 'mixing'
+   stage itself, not the glide-in, so this never plays during the
+   approach. */
+.station-item.movable.mixing {
+  animation: whiskStir 0.55s ease-in-out infinite;
+}
+
+@keyframes whiskStir {
+  0% {
+    transform: rotate(180deg);
+  }
+  25% {
+    transform: rotate(171deg);
+  }
+  50% {
+    transform: rotate(180deg);
+  }
+  75% {
+    transform: rotate(189deg);
+  }
+  100% {
+    transform: rotate(180deg);
+  }
+}
+
 /* Heater power button -- a small, plain white circle centered on (and
    covering) the molded oval drawn into the heater art, sitting inside the
    plate's own outline (see HEATER_BUTTON_BOX in MatchaMaking.js). Toggles
@@ -359,6 +427,42 @@
     0 0 12px 4px rgba(255, 255, 255, 0.85);
 }
 
+/* Clips the fill + marker ticks to the bar's own rounded shape (see the JSX
+   comment in MatchaMaking.js for why this can't just be overflow: hidden on
+   .scoop-bar itself -- the slider needs to overflow past its left edge).
+   border-radius: inherit picks up .scoop-bar's own radius so the corners
+   still line up; inset: 0 sizes it to exactly fill the bar's padding box,
+   same box the marker ticks' top-% and the fill's height-% already resolve
+   against, so nesting them in here doesn't shift any of that math. */
+.scoop-bar-clip {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  border-radius: inherit;
+}
+
+/* The "measured amount" reading -- transparent/zero-height until the player
+   locks in a reading (see stopScoop/scoopFillPercent in MatchaMaking.js),
+   then grows from the bottom up to that reading over
+   SCOOP_FILL_DURATION_MS. Anchored with bottom: 0 (rather than top: 0 +
+   scaleY, the technique .heater-temp-bar-fill uses) and transitioning the
+   `height` property directly instead -- scaleY would squash this fill's
+   flat top edge but leave its rounded-elsewhere shape undistorted only if
+   it had no radius of its own, and animating height here is cheap enough
+   for a one-shot reveal that isn't a continuously-running gauge. Color is
+   set inline per-tin (see SCOOP_FILL_COLORS in MatchaMaking.js) rather than
+   fixed here, so no background is declared in this base rule. */
+.scoop-bar-fill {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 100%;
+  height: 0%;
+  pointer-events: none;
+  transition-property: height, background-color;
+  transition-timing-function: ease-out;
+}
+
 /* Light gray measurement ticks running across the bar (see SCOOP_BAR_MARKERS
    in MatchaMaking.js) -- thin horizontal lines, inset from both edges so
    they read as marks on the gauge rather than touching its outline. Fully
@@ -434,5 +538,468 @@
   font-size: min(20px, 0.99vw);
   font-weight: 600;
   color: #5c4a3a;
+}
+
+/* Big carryable scoop spoon (see BIG_SPOON_SIZE/BIG_SPOON_START,
+   SCOOP_SPOON_IMAGES, and scoopConfirmed in MatchaMaking.js) -- a plain
+   <img> (one of three pre-made "spoon with matcha mound" PNGs, swapped by
+   tin) rather than a spoon + separately-layered powder overlay, so this is
+   just the .station-item.movable drag/focus treatment copied over rather
+   than shared, since it needs its own class for BIG_SPOON_SIZE's larger
+   sizing. */
+.big-spoon {
+  position: absolute;
+  object-fit: contain;
+  pointer-events: auto;
+  cursor: grab;
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+  filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.18)) drop-shadow(0 0 0 rgba(255, 255, 255, 0))
+    drop-shadow(0 0 0 rgba(255, 255, 255, 0));
+  transition: left 0.2s ease, top 0.2s ease, filter 0.15s ease, transform 0.15s ease;
+}
+
+.big-spoon.dragging {
+  cursor: grabbing;
+  transition: none;
+}
+
+.big-spoon:focus-visible {
+  outline: none;
+  box-shadow: none;
+  transform: scale(1.06);
+  filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.18))
+    drop-shadow(0 0 6px rgba(255, 255, 255, 0.95))
+    drop-shadow(0 0 12px rgba(255, 255, 255, 0.75));
+}
+
+/* Once the dump sequence has started (bigSpoonStage 'moving' or 'pouring'
+   in MatchaMaking.js -- see beginDump there), the spoon is gliding to/
+   holding at its fixed hover-over-the-bowl spot and shouldn't be picked up
+   or grabbed again until the sequence finishes. */
+.big-spoon.settling {
+  pointer-events: none;
+  cursor: default;
+}
+
+/* Falling-powder pour effect (see pourLeft/pourTop/pourHeight and
+   bigSpoonStage === 'pouring' in MatchaMaking.js) -- a zero-width anchor
+   positioned at the spoon's mound, sized to span all the way down to the
+   bowl's growing matcha mound, with each grain's own keyframe traveling
+   that full height. Same "zero-size anchor + absolutely-positioned
+   children" shape as .kettle-steam, just falling instead of rising.
+   z-index is comfortably above the bowl -- the bowl image has its own
+   `filter: drop-shadow(...)`, which creates its own stacking context, so a
+   low/default z-index here could still end up painted underneath it. */
+.spoon-pour {
+  position: absolute;
+  width: 0;
+  pointer-events: none;
+  z-index: 20;
+}
+
+.spoon-pour-grain {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  width: min(12px, 0.65vw);
+  height: min(12px, 0.65vw);
+  border-radius: 50%;
+  transform: translateX(-50%);
+  opacity: 0;
+}
+
+/* Four grains on staggered delays/horizontal offsets (wider spread than the
+   grain size itself so they read as a stream with some body to it, rather
+   than a single thick line) so the pour reads as a fuller, more visible
+   stream. Each falls on its own 0.9s loop, repeating for as long as
+   bigSpoonStage stays 'pouring' (BIG_SPOON_POUR_MS in MatchaMaking.js). */
+.spoon-pour-grain-1 {
+  animation: spoonPourFall 0.9s linear infinite;
+}
+
+.spoon-pour-grain-2 {
+  left: 38%;
+  animation: spoonPourFall 0.9s linear infinite 0.22s;
+}
+
+.spoon-pour-grain-3 {
+  left: 62%;
+  animation: spoonPourFall 0.9s linear infinite 0.44s;
+}
+
+.spoon-pour-grain-4 {
+  left: 50%;
+  animation: spoonPourFall 0.9s linear infinite 0.66s;
+}
+
+@keyframes spoonPourFall {
+  0% {
+    top: 0;
+    opacity: 0;
+  }
+  15% {
+    opacity: 1;
+  }
+  85% {
+    opacity: 0.85;
+  }
+  100% {
+    top: 100%;
+    opacity: 0;
+  }
+}
+
+/* Matcha powder tipped into the bowl (see bowlPowder/pourCount in
+   MatchaMaking.js) -- tracks the bowl's own live position/size so it stays
+   put even if the bowl gets dragged elsewhere afterward, the same way
+   .kettle-steam tracks the kettle. left/top are the mound's *center* point;
+   width/height are always its fixed full-grown size (see bowlPowderWidth in
+   MatchaMaking.js) -- the "grows from nothing" effect below is done purely
+   with a transform: scale() animation instead of animating width/height
+   directly, so it works via a plain CSS @keyframes animation (which always
+   plays from its first keyframe on a fresh mount) rather than a transition
+   (which needs a separately-painted starting frame to animate from, and
+   silently no-ops if replayed on an element that's already sitting at its
+   end state -- which a second scoop hit under the old approach). React's
+   `key={pourCount}` on the element in MatchaMaking.js is what guarantees
+   "fresh mount" here: it forces a new DOM node each pour instead of
+   restyling the same one from last time. animation-duration is set inline
+   (see MatchaMaking.js) to BIG_SPOON_POUR_MS. */
+.bowl-powder {
+  position: absolute;
+  border-radius: 50%;
+  pointer-events: none;
+  box-shadow: inset 0 2px 3px rgba(0, 0, 0, 0.25);
+  animation-name: growFromCenter;
+  animation-timing-function: ease-out;
+  animation-fill-mode: forwards;
+}
+
+/* Water poured in from the kettle (see bowlWater/waterPourCount in
+   MatchaMaking.js) -- same grow-from-nothing @keyframes growFromCenter as
+   .bowl-powder above (hence the generic keyframe name -- it's not specific
+   to either), same key={waterPourCount}-forces-a-fresh-mount reasoning,
+   just its own class since color/opacity (BOWL_WATER_FILL_COLOR, set
+   inline) and size (BOWL_WATER_SIZE_FRAC) differ from the matcha mound's.
+   Rendered *after* .bowl-powder in the JSX so it paints on top of the
+   mound -- BOWL_WATER_FILL_COLOR is deliberately much more transparent
+   than WATER_COLOR (the falling-stream color) specifically so the mound
+   still shows through underneath, reading as water sitting over the
+   powder rather than a solid pool hiding it. animation-duration is set
+   inline to KETTLE_POUR_MS. */
+.bowl-water {
+  position: absolute;
+  border-radius: 50%;
+  pointer-events: none;
+  box-shadow: inset 0 2px 3px rgba(0, 0, 0, 0.2);
+  animation-name: growFromCenter;
+  animation-timing-function: ease-out;
+  animation-fill-mode: forwards;
+}
+
+@keyframes growFromCenter {
+  from {
+    transform: translate(-50%, -50%) scale(0);
+  }
+  to {
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+
+/* The finished whisked-matcha image (see WHISKED_LIQUID_IMAGES/
+   .bowl-whisked-liquid in MatchaMaking.js) -- swapped in once whiskStage
+   reaches 'done', painted on top of the plain-color bowl-powder/bowl-water
+   circles rather than replacing them. left/top are bowl-water's own
+   left/top, which are themselves the pool's *center* point (see the
+   growFromCenter comment above) -- translate(-50%, -50%) here matches that
+   same centering convention so this lines up exactly over the pool instead
+   of repeating the "shifted right/down" bug the stirring swirl had
+   originally. z-index: 1 lifts it above bowl-powder/bowl-water (both
+   z-index: auto) but keeps it below the whisk (z-index: 2, see
+   MatchaMaking.js) so the whisk still visibly rests in the mixture rather
+   than being covered by it. Reuses growFromCenter (same keyframes as
+   bowl-powder/bowl-water) for a quick fade/grow-in instead of a harsh pop
+   the instant mixing ends.
+
+   object-fit: cover (not contain) -- contain preserves the source PNG's own
+   aspect ratio and letterboxes inside the box, which made the visible shape
+   whatever ratio the raw image happened to be rather than matching
+   bowl-water/bowl-powder's own ellipse. cover instead stretches/crops the
+   image to fully fill this box, and border-radius: 50% then clips that into
+   the same ellipse shape as the water/powder circles underneath. (Tried
+   switching to contain briefly to fix some left/right cropping, but that
+   made the image read as too small overall -- reverted back to cover.) */
+.bowl-whisked-liquid {
+  position: absolute;
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 1;
+  object-fit: cover;
+  animation: growFromCenter 0.4s ease-out forwards;
+}
+
+/* Balance minigame bar (see MIX_BAR_BOX/whiskStage in MatchaMaking.js) --
+   only mounted while whiskStage === 'mixing'. Same gray-body/thick-outline
+   look as .heater-temp-bar/.scoop-bar (see those for the reasoning behind
+   the specific border/box-shadow values), just horizontal and with no
+   focus treatment of its own -- aria-hidden in the JSX, since the whisk
+   itself (not this bar) is what stays keyboard-focusable throughout. */
+.mix-bar {
+  position: absolute;
+  border-radius: min(8px, 0.417vw);
+  overflow: hidden;
+  background: #b7b2ac;
+  border: min(5px, 0.26vw) solid rgba(110, 105, 100, 0.7);
+  box-shadow: inset 0 1px 2px rgba(255, 255, 255, 0.35), inset 0 -1px 2px rgba(0, 0, 0, 0.2);
+}
+
+/* The green target zone the ball has to be kept inside of (see
+   MIX_ZONE_LEFT_FRAC/MIX_ZONE_WIDTH_FRAC in MatchaMaking.js) -- a fixed
+   strip, not animated, sitting centered in the bar the whole time the
+   minigame runs. */
+.mix-bar-zone {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: rgba(63, 191, 103, 0.55);
+}
+
+/* The ball itself -- left is written directly every animation frame (see
+   the whiskStage === 'mixing' physics effect in MatchaMaking.js), not
+   through a React prop, so no transition on left here: a transition would
+   fight the per-frame direct writes and make the motion read as laggy/
+   interpolated instead of exactly tracking the physics. top: 50% +
+   translateY(-50%) centers it vertically in the bar regardless of
+   MIX_BAR_BOX's own height (the physics effect never touches `transform`,
+   only `left`, so this translateY is safe from being clobbered by those
+   per-frame writes). Circular (aspect-ratio: 1, height derived from the
+   *resolved* width rather than a separate top/bottom-based height) --
+   MIX_BALL_WIDTH_FRAC is a fraction of the *bar's* own width, and the bar
+   itself is much wider than tall, so deriving height from anything else
+   would read as a tall oval instead of a ball. */
+.mix-ball {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #fff7e8 0%, #e8c97a 55%, #b8912f 100%);
+  box-shadow: 0 2px 3px rgba(0, 0, 0, 0.35);
+  transition: none;
+}
+
+/* Brighter glow while centered in the green zone -- purely cosmetic
+   feedback (toggled directly alongside the position write, same frame --
+   see the physics effect in MatchaMaking.js), not tied to any pass/fail
+   gate, since the minigame always finishes after WHISK_MIX_DURATION_MS
+   regardless of how well it was balanced. */
+.mix-ball.in-zone {
+  box-shadow: 0 2px 3px rgba(0, 0, 0, 0.35), 0 0 10px 3px rgba(63, 191, 103, 0.85);
+}
+
+/* Stirring effect over the bowl-water pool while whiskStage === 'mixing'
+   (see .bowl-mix-swirl in MatchaMaking.js -- it's positioned to exactly
+   overlay bowl-water and only mounted during that stage). A rotating
+   conic-gradient reads as a swirl/current moving across the surface;
+   mix-blend-mode: overlay lets it darken/lighten the mixture color underneath
+   instead of just sitting as a flat translucent disc on top of it, which is
+   what sells the "liquid actually moving" look rather than a static texture.
+   border-radius/overflow match bowl-water's own ellipse so the swirl never
+   pokes out past the pool's edge.
+
+   left/top here are bowlWater's own left/top -- but bowl-water (and
+   bowl-powder) treat their left/top as the ellipse's *center*, not its
+   top-left corner (see growFromCenter below: translate(-50%, -50%) is baked
+   into their rest state). This rule was missing that same translate, so it
+   was rendering with left/top as its top-left corner instead -- shifted a
+   half-width right and a half-height down from the actual pool, which is
+   why it looked "way off to the right." Fixed by baking the same
+   translate(-50%, -50%) into every step of @keyframes bowlMixSwirl below
+   (can't just set it as a static `transform` here -- the running animation
+   targets `transform` too and would silently override a static value on the
+   same property, same class of bug as the whisk flip vs. its own animation).
+
+   z-index: 3 keeps this above the whisk (z-index: 2, see MatchaMaking.js)
+   once the whisk is dropped into the bowl, per request -- the whisk sits
+   above bowl-water/bowl-powder, but this swirl stays above the whisk. */
+.bowl-mix-swirl {
+  position: absolute;
+  border-radius: 50%;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 3;
+  background: conic-gradient(
+    from 0deg,
+    rgba(34, 66, 30, 0) 0deg,
+    rgba(34, 66, 30, 0.75) 35deg,
+    rgba(34, 66, 30, 0) 80deg,
+    rgba(20, 75, 40, 0.7) 170deg,
+    rgba(34, 66, 30, 0) 220deg,
+    rgba(34, 66, 30, 0.7) 290deg,
+    rgba(34, 66, 30, 0) 340deg
+  );
+  animation: bowlMixSwirl 1.1s linear infinite;
+  mix-blend-mode: overlay;
+}
+
+@keyframes bowlMixSwirl {
+  from {
+    transform: translate(-50%, -50%) rotate(0deg);
+  }
+  to {
+    transform: translate(-50%, -50%) rotate(360deg);
+  }
+}
+
+/* Spill-droplet burst (see spillBurstCount/BOWL_SPILL_OFFSET in
+   MatchaMaking.js) -- fires whenever the ball drifts out of the green zone
+   during mixing, simulating stray matcha flicking out of the bowl from
+   sloppy whisking. .bowl-spill itself is a zero-size anchor (same pattern
+   as .kettle-steam above) positioned just outside the bowl's edge, with
+   each droplet absolutely positioned off that same point so they all
+   originate from one spot. z-index: 4 keeps it above bowl-water/bowl-powder
+   and the whisk (2) but below the stirring swirl (3... actually above it is
+   fine too since they're on opposite sides of the bowl and won't overlap;
+   kept at 4 simply so it's never accidentally hidden behind anything else
+   painted on the bowl). */
+.bowl-spill {
+  position: absolute;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+  z-index: 4;
+}
+
+/* Sized and shaped to read as an actual puddle rather than a droplet --
+   much bigger than the original (min(15px) -> min(56px)), an irregular
+   organic silhouette (mismatched border-radius corners, different per drop
+   below) instead of a plain circle/teardrop, and a flatter gradient more
+   like a shallow pool of liquid than a glossy ball. */
+.bowl-spill-drop {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: min(56px, 3.4vw);
+  height: min(40px, 2.4vw);
+  background: radial-gradient(ellipse at 40% 35%, #a9d69a 0%, #5a8a4f 45%, #2f4a28 85%, #24391f 100%);
+  box-shadow: 0 3px 4px rgba(0, 0, 0, 0.3), inset 0 1px 2px rgba(255, 255, 255, 0.25);
+  opacity: 0;
+}
+
+/* Three puddles land at slightly different sizes/spots/delays so the burst
+   reads as an actual messy splatter rather than one repeating shape -- same
+   "stagger three copies of the same animation" trick as
+   .kettle-steam-wisp-1/2/3 above. Each gets its own mismatched
+   border-radius corners (baked into its keyframes below, not here, since
+   the animation's own end-state transform needs to carry it) so no two
+   puddles look like the same stamp repeated. */
+.bowl-spill-drop-1 {
+  animation: bowlSpillPuddle1 1.3s ease-out forwards;
+}
+
+.bowl-spill-drop-2 {
+  top: min(10px, 0.6vw);
+  width: min(38px, 2.3vw);
+  height: min(28px, 1.7vw);
+  animation: bowlSpillPuddle2 1.15s ease-out forwards 0.08s;
+}
+
+.bowl-spill-drop-3 {
+  top: min(-6px, -0.35vw);
+  width: min(46px, 2.8vw);
+  height: min(32px, 2vw);
+  animation: bowlSpillPuddle3 1.4s ease-out forwards 0.16s;
+}
+
+/* Each puddle: pops out from the bowl (small, round, flying), lands and
+   "splats" flat and wide (the scaleX-up/scaleY-down at ~50%), lingers as a
+   puddle for a beat, then fades away in place -- rather than just flying off
+   and fading mid-air like the old droplet version. Landing spot/spread and
+   the irregular puddle silhouette (mismatched border-radius corners) differ
+   per drop so the three don't look like the same stamp repeated. */
+@keyframes bowlSpillPuddle1 {
+  0% {
+    opacity: 0;
+    border-radius: 50%;
+    transform: translate(0, 0) scale(0.4);
+  }
+  12% {
+    opacity: 1;
+  }
+  45% {
+    border-radius: 50%;
+    transform: translate(min(30px, 1.8vw), min(24px, 1.5vw)) scale(0.7);
+  }
+  60% {
+    opacity: 1;
+    border-radius: 45% 55% 60% 40% / 55% 45% 60% 40%;
+    transform: translate(min(38px, 2.3vw), min(30px, 1.9vw)) scale(1.15) rotate(6deg);
+  }
+  85% {
+    opacity: 0.95;
+  }
+  100% {
+    opacity: 0;
+    border-radius: 45% 55% 60% 40% / 55% 45% 60% 40%;
+    transform: translate(min(38px, 2.3vw), min(30px, 1.9vw)) scale(1.15) rotate(6deg);
+  }
+}
+
+@keyframes bowlSpillPuddle2 {
+  0% {
+    opacity: 0;
+    border-radius: 50%;
+    transform: translate(0, 0) scale(0.4);
+  }
+  12% {
+    opacity: 1;
+  }
+  45% {
+    border-radius: 50%;
+    transform: translate(min(20px, 1.2vw), min(-14px, -0.9vw)) scale(0.7);
+  }
+  60% {
+    opacity: 1;
+    border-radius: 60% 40% 45% 55% / 40% 60% 50% 50%;
+    transform: translate(min(26px, 1.6vw), min(-18px, -1.1vw)) scale(1.1) rotate(-8deg);
+  }
+  85% {
+    opacity: 0.95;
+  }
+  100% {
+    opacity: 0;
+    border-radius: 60% 40% 45% 55% / 40% 60% 50% 50%;
+    transform: translate(min(26px, 1.6vw), min(-18px, -1.1vw)) scale(1.1) rotate(-8deg);
+  }
+}
+
+@keyframes bowlSpillPuddle3 {
+  0% {
+    opacity: 0;
+    border-radius: 50%;
+    transform: translate(0, 0) scale(0.4);
+  }
+  12% {
+    opacity: 1;
+  }
+  45% {
+    border-radius: 50%;
+    transform: translate(min(42px, 2.6vw), min(10px, 0.6vw)) scale(0.7);
+  }
+  60% {
+    opacity: 1;
+    border-radius: 40% 60% 50% 50% / 60% 40% 55% 45%;
+    transform: translate(min(52px, 3.2vw), min(14px, 0.9vw)) scale(1.2) rotate(10deg);
+  }
+  85% {
+    opacity: 0.95;
+  }
+  100% {
+    opacity: 0;
+    border-radius: 40% 60% 50% 50% / 60% 40% 55% 45%;
+    transform: translate(min(52px, 3.2vw), min(14px, 0.9vw)) scale(1.2) rotate(10deg);
+  }
 }
 
