@@ -186,7 +186,7 @@ function isOverIceBox(leftPct, topPct) {
   );
 }
 
-const MilkSelection = ({ activeStep, customerNumber, onNavigate, onAdvance }) => {
+const MilkSelection = ({ activeStep, customerNumber, onNavigate, onAdvance, order }) => {
   const containerRef = useRef(null);
   useFlatFocusNav(containerRef);
 
@@ -479,7 +479,7 @@ const MilkSelection = ({ activeStep, customerNumber, onNavigate, onAdvance }) =>
           );
         })}
 
-        <OrderReceiptButton />
+        <OrderReceiptButton order={order} />
         <ProgressBar
           activeStep={activeStep}
           customerNumber={customerNumber}

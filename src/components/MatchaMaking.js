@@ -619,7 +619,7 @@ function getCurrentScaleX(el) {
   return new DOMMatrixReadOnly(transform).a;
 }
 
-const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance }) => {
+const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order }) => {
   const containerRef = useRef(null);
   useFlatFocusNav(containerRef);
 
@@ -2068,7 +2068,7 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance }) => 
             <span className="bowl-spill-drop bowl-spill-drop-3" />
           </div>
         )}
-        <OrderReceiptButton />
+        <OrderReceiptButton order={order} />
         <ProgressBar
           activeStep={activeStep}
           customerNumber={customerNumber}

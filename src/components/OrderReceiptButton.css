@@ -8,7 +8,9 @@
    all three station backgrounds -- nothing sits above ~23% down in any of
    them) so the closed button never overlaps countertop items. Sizing uses
    the same min(Fpx, Xvw) convention as the rest of the app: X = F * 0.92/19.2,
-   tied to the card's own width:1920px; max-width:92vw. */
+   tied to the card's own width:1920px; max-width:92vw. Bumped up ~40%
+   across the board (button, drawer, receipt text) per feedback that the
+   whole widget read too small. */
 .order-receipt-widget {
   position: absolute;
   top: 3%;
@@ -21,13 +23,13 @@
 
 .order-receipt-button {
   font-family: 'Pixelify Sans', cursive;
-  font-size: min(24px, 1.15vw);
+  font-size: min(34px, 1.63vw);
   font-weight: 600;
   color: #5c4a3a;
   background: rgba(255, 255, 255, 0.92);
-  border: 3px solid #8a7a6a;
+  border: 4px solid #8a7a6a;
   border-radius: 999px;
-  padding: min(10px, 0.4792vw) min(28px, 1.3417vw);
+  padding: min(14px, 0.67vw) min(39px, 1.87vw);
   cursor: pointer;
   box-shadow: 0 4px 10px rgba(0, 0, 0, 0.15);
   transition: transform 0.15s ease;
@@ -43,35 +45,73 @@
 
 /* Pulls down like a hanging receipt when opened, and retracts back up when
    closed. max-height + overflow: hidden animates the reveal without
-   squishing the image the way a scaleY transform would; the opacity/
+   squishing the content the way a scaleY transform would; the opacity/
    translateY pair softens the top edge of the reveal/retract. Deliberately
    floats above the station art (it has its own shadow/rounded corners to
    read as a card) rather than being fit into empty space -- there isn't
    always room to fully clear the art underneath at every station, and this
-   is meant to work like a temporary peek, not a permanent fixture. */
+   is meant to work like a temporary peek, not a permanent fixture. Was a
+   fixed AnnieOrder1.png receipt image; now holds the .order-receipt-card
+   text built from the order prop (see OrderReceiptButton.js), styled in
+   the same pastel palette as the order-builder modal in
+   CustomerOrdering.css so the receipt reads as the same "product" as the
+   form it came from. */
 .order-receipt-drawer {
-  margin-top: min(10px, 0.4792vw);
-  width: min(300px, 14.375vw);
+  margin-top: min(14px, 0.67vw);
+  width: min(420px, 20.13vw);
   max-height: 0;
   overflow: hidden;
   opacity: 0;
   transform: translateY(-14px);
   transition: max-height 0.35s ease, opacity 0.25s ease, transform 0.3s ease;
-  border-radius: 12px;
+  border-radius: 16px;
   box-shadow: 0 8px 18px rgba(0, 0, 0, 0.2);
   pointer-events: none;
 }
 
 .order-receipt-drawer.open {
-  max-height: min(560px, 26.8333vw);
+  max-height: min(780px, 37.4vw);
   opacity: 1;
   transform: translateY(0);
   pointer-events: auto;
 }
 
-.order-receipt-drawer-img {
-  display: block;
+.order-receipt-card {
+  box-sizing: border-box;
   width: 100%;
-  height: auto;
-  background: #ffffff;
+  padding: min(22px, 1.05vw);
+  background: linear-gradient(160deg, #eafaf1 0%, #fdeef6 100%);
+  border: min(2px, 0.1vw) solid rgba(232, 170, 202, 0.5);
+  display: flex;
+  flex-direction: column;
+  gap: min(11px, 0.53vw);
+}
+
+.order-receipt-line {
+  margin: 0;
+  font-family: 'Pixelify Sans', cursive;
+  font-size: min(25px, 1.2vw);
+  color: #6b7d70;
+  display: flex;
+  flex-direction: column;
+  gap: min(3px, 0.14vw);
+}
+
+.order-receipt-label {
+  font-size: min(18px, 0.86vw);
+  font-weight: 600;
+  color: #6fa583;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.order-receipt-empty {
+  margin: 0;
+  padding: min(22px, 1.05vw);
+  background: linear-gradient(160deg, #eafaf1 0%, #fdeef6 100%);
+  border: min(2px, 0.1vw) solid rgba(232, 170, 202, 0.5);
+  font-family: 'Pixelify Sans', cursive;
+  font-size: min(22px, 1.05vw);
+  color: #8a97a0;
+  text-align: center;
 }

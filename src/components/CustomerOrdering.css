@@ -21,10 +21,12 @@
   border-radius: 16px;
   overflow: hidden;
   box-shadow: 0 15px 30px rgba(0, 0, 0, 0.2);
-  /* Matches the art's own backdrop (a very light mint), so the sliver of
-     letterboxing from object-fit: contain below is invisible -- this art
-     is 2752x1536 (~1.792), already almost exactly 16:9 (1.778), so the
-     bars are under half a percent either way. */
+  /* Background swapped to TakeOrderFrame.png (1377x768, ~1.793) -- almost
+     exactly the same aspect ratio as the old CustomerOrdering.png (2752x1536,
+     ~1.792) was, so the sliver of object-fit: contain letterboxing below is
+     essentially unchanged. Fallback color kept from before as an
+     unverified placeholder -- hasn't been checked against the new art's
+     actual backdrop tone yet. */
   background-color: #effae9;
 }
 
@@ -53,50 +55,373 @@
   }
 }
 
-/* Largest rectangle that fits inside the speech-bubble oval in the art
-   (bubble spans image x 658-1184, y 484-800 of 2752x1536; inscribed-in-
-   ellipse rectangle at 45 degrees = center +/- semi-axis/sqrt(2)), nudged
-   down slightly per feedback so the text sits centered in the bubble rather
-   than hugging its top. This art is ~16:9 already so the container-relative
-   correction from MainPage.css's formula is negligible and folded straight
-   into these numbers. Purely decorative text -- not focusable, not a
-   button. */
-.order-text {
+/* The bunny customer, composited on top of the background art (see
+   BunnyOrder.png in CustomerOrdering.js) rather than baked into it. Asset
+   swapped from BunnyOrdering.png (669x373, wide) to BunnyOrder.png (178x214,
+   portrait-ish, ~0.832) -- moved back to roughly centered/counter-height
+   per request, rather than the earlier oversized/shifted-left placement
+   which was specific to the old wide asset. width/height derived from the
+   same canvas-aspect correction used throughout this project (see
+   BOTTLE_WIDTH's comment in MilkSelection.js for the general "(9/16)
+   correction" reasoning) -- much narrower relative to its height than the
+   old asset was, since this one is portrait rather than wide. Eyeballed
+   guess, likely needs tuning once actually seen against the live render. */
+.ordering-bunny {
   position: absolute;
-  left: 26.71%;
-  top: 37%;
-  width: 13.52%;
-  height: 14%;
-  margin: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  text-align: center;
-  font-family: 'Pixelify Sans', cursive;
-  /* Same card-relative scaling as the buttons above -- keeps the dialogue
-     proportional to the speech bubble as the window is resized/zoomed.
-     Bumped up from 17px -> 22px -> 25px -> 29px -> 33px per feedback; the
-     bubble box still has headroom (up to ~3 lines at this size before it
-     would overflow). top also nudged from 38% -> 35% -> 37% per
-     feedback. */
-  font-size: min(33px, 1.5813vw);
-  line-height: 1.25;
-  color: #2f4a28;
+  left: 40%;
+  top: 29%;
+  width: 19.7%;
+  height: 42%;
+  object-fit: contain;
   pointer-events: none;
 }
 
-/* Sits on the blank hanging receipt paper in the art (paper spans image x
-   1710-2170, y 225-940 of 2752x1536, measured by scanning for the paper's
-   white pixels -- its edges are jagged/torn so these bounds are a safe
-   inset rather than the exact paper edge). The order image itself (836x1089)
-   is a different aspect ratio than this box, so object-fit: contain scales
-   it to fit and centers it rather than stretching or overflowing the paper. */
-.order-receipt {
+/* Play button on the ordering computer's screen -- opens the order-builder
+   modal (see .order-modal below). Styled to match .progress-step-dot in
+   ProgressBar.css exactly (same white circle / #8a7a6a border / #5c4a3a
+   text look as the progress bar's numbered steps, and the same green
+   focus-glow treatment as .progress-step.current:focus-visible
+   .progress-step-dot there), rather than the plain white/gray look it had
+   before. Nudged up and right twice now per feedback (was left: 63%/top:
+   78%, then left: 66%/top: 68%) -- since this whole card scales to fit the
+   viewport, physical distances like "an inch" aren't a fixed percentage,
+   so these are approximations. Eyeballed position -- no reference yet for
+   exactly where the computer screen sits in the new art. Plain geometric
+   triangle glyph (&#9654;) as the play symbol, same "just use a real
+   <button>, no custom key handling" reasoning as the dropdown toggles
+   below -- Enter/Space on a focused button already fires onClick
+   natively. */
+.ordering-play-button {
   position: absolute;
-  left: 62.14%;
-  top: 14.65%;
-  width: 16.72%;
-  height: 46.55%;
-  object-fit: contain;
-  pointer-events: none;
+  left: 69%;
+  top: 62%;
+  width: min(68px, 3.2583vw);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #ffffff;
+  border: 4px solid #8a7a6a;
+  color: #5c4a3a;
+  font-size: min(29px, 1.3896vw);
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  /* Nudges the triangle glyph right relative to the circle -- bumped up
+     further per feedback (was min(3px, 0.16vw)). */
+  padding-left: min(6px, 0.32vw);
+  transition: box-shadow 0.15s ease, transform 0.15s ease;
+}
+
+.ordering-play-button:focus-visible {
+  outline: none;
+  transform: scale(1.15);
+  box-shadow: 0 0 0 5px rgba(90, 138, 79, 0.9), 0 0 20px 6px rgba(90, 138, 79, 0.6);
+}
+
+/* Dimmed backdrop behind the order-form modal -- click closes it (see
+   closeOrderForm in CustomerOrdering.js), same as clicking outside any
+   standard dialog. Sits above everything else on this screen (z-index) but
+   below the modal panel itself. */
+.order-modal-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(20, 30, 15, 0.45);
+  z-index: 30;
+}
+
+/* The modal rectangle itself -- centered on screen, holding the four
+   order-builder sections (previously pinned directly to the receipt paper;
+   now shown on demand instead, see orderFormOpen in CustomerOrdering.js).
+   Bigger again per feedback (was min(680px, 52%)) -- overflow-y: auto is
+   the safety valve if the content (e.g. a long list of topping chips) ever
+   needs more height than this allows. Recolored to a cute pastel palette
+   (mint-to-pink gradient, was a solid dark matcha green) -- see
+   .order-section-title, .order-dropdown-toggle, etc. below, all updated
+   to match, with darker soft text instead of the old white-on-dark scheme
+   since a light background needs light-on-dark, not the other way round. */
+.order-modal {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 31;
+  width: min(880px, 68%);
+  aspect-ratio: 1.5;
+  max-height: 85%;
+  overflow-y: auto;
+  box-sizing: border-box;
+  padding: min(34px, 1.8vw);
+  border-radius: min(16px, 0.85vw);
+  border: min(2px, 0.11vw) solid rgba(232, 170, 202, 0.65);
+  background: linear-gradient(160deg, #eafaf1 0%, #fdeef6 100%);
+  box-shadow: 0 15px 30px rgba(0, 0, 0, 0.2);
+  animation: orderModalOpen 0.15s ease-out both;
+}
+
+@keyframes orderModalOpen {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.94);
+  }
+  100% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+
+.order-modal-close {
+  position: absolute;
+  right: min(16px, 0.85vw);
+  top: min(14px, 0.75vw);
+  width: min(42px, 2.2vw);
+  height: min(42px, 2.2vw);
+  border-radius: 50%;
+  border: min(2px, 0.1vw) solid rgba(216, 150, 180, 0.6);
+  background: rgba(255, 255, 255, 0.7);
+  color: #b25a7a;
+  font-size: min(26px, 1.35vw);
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: filter 0.15s ease, transform 0.15s ease, background 0.15s ease;
+}
+
+.order-modal-close:focus-visible {
+  outline: none;
+  transform: scale(1.1);
+  background: rgba(255, 255, 255, 0.95);
+  filter: drop-shadow(0 0 6px rgba(255, 182, 210, 0.95));
+}
+
+/* Order-builder form -- now laid out in normal flow inside .order-modal
+   (see CustomerOrdering.js) rather than absolutely positioned over the
+   receipt paper the way it was before the play-button/modal was added.
+   The modal itself handles the centering/sizing/scrolling; this is just
+   the four-section column layout within it. */
+.order-form {
+  display: flex;
+  flex-direction: column;
+  gap: min(18px, 1vw);
+  font-family: 'Pixelify Sans', cursive;
+}
+
+/* One of the four sections (Matcha / Cup & Ice / Base / Toppings) --
+   just a heading plus whatever controls that section owns. */
+.order-section {
+  display: flex;
+  flex-direction: column;
+  gap: min(6px, 0.3vw);
+}
+
+.order-section-title {
+  margin: 0;
+  font-size: min(27px, 1.35vw);
+  font-weight: 600;
+  color: #6fa583;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* Matcha / Cup & Ice sections: their two dropdowns side by side. */
+.order-section-row {
+  display: flex;
+  gap: min(6px, 0.3vw);
+}
+
+.order-section-row .order-dropdown {
+  flex: 1 1 0;
+}
+
+/* Wraps a toggle button and (while open) its option row -- position:
+   relative so the option row (position: absolute, see .order-dropdown-list
+   below) anchors directly under this specific control rather than the
+   whole .order-form. */
+.order-dropdown {
+  position: relative;
+}
+
+/* The always-visible button showing the current selection (or a
+   placeholder like "Grade"/"Tsp") -- small receipt-style pill, cream
+   background so it reads as part of the paper rather than a floating UI
+   chrome element. Same zero-strength-drop-shadow-placeholder trick used
+   elsewhere in this project (e.g. .station-item.selectable in
+   MatchaMaking.css) so the focus glow transitions in smoothly instead of
+   popping. */
+.order-dropdown-toggle,
+.order-add-button {
+  width: 100%;
+  box-sizing: border-box;
+  padding: min(9px, 0.48vw) min(13px, 0.68vw);
+  border-radius: min(10px, 0.52vw);
+  border: min(2px, 0.1vw) solid rgba(197, 225, 208, 0.9);
+  background: #ffffff;
+  color: #6b7d70;
+  font-family: 'Pixelify Sans', cursive;
+  font-size: min(25px, 1.25vw);
+  cursor: pointer;
+  text-align: left;
+  filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.08)) drop-shadow(0 0 0 rgba(255, 182, 210, 0));
+  transition: filter 0.15s ease, transform 0.15s ease, background 0.15s ease;
+}
+
+.order-dropdown-toggle.filled {
+  color: #3f7a54;
+  font-weight: 700;
+}
+
+.order-dropdown-toggle.open,
+.order-add-button.open {
+  background: #eafaf1;
+}
+
+.order-dropdown-toggle:focus-visible,
+.order-add-button:focus-visible {
+  outline: none;
+  transform: scale(1.04);
+  filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.08)) drop-shadow(0 0 6px rgba(255, 182, 210, 0.95));
+}
+
+/* The row of options that appears directly below a toggle button once
+   opened -- wraps onto as many rows as needed (rather than one option per
+   line) so longer lists like the 7 ice-cube counts or 7 toppings don't
+   push the form too tall. z-index keeps it above whatever's below it in
+   the form (later sections, ProgressBar, etc). */
+.order-dropdown-list {
+  position: absolute;
+  top: calc(100% + min(4px, 0.22vw));
+  left: 0;
+  z-index: 20;
+  display: flex;
+  flex-wrap: wrap;
+  gap: min(4px, 0.22vw);
+  width: max-content;
+  max-width: min(310px, 16vw);
+  padding: min(7px, 0.4vw);
+  border-radius: min(10px, 0.52vw);
+  border: min(2px, 0.1vw) solid rgba(197, 225, 208, 0.9);
+  background: #fffbfd;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+  animation: orderDropdownOpen 0.12s ease-out both;
+}
+
+@keyframes orderDropdownOpen {
+  0% {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.order-dropdown-option {
+  padding: min(7px, 0.36vw) min(11px, 0.56vw);
+  border-radius: min(8px, 0.42vw);
+  border: min(1.5px, 0.08vw) solid rgba(197, 225, 208, 0.7);
+  background: #f5fbf7;
+  color: #6b7d70;
+  font-family: 'Pixelify Sans', cursive;
+  font-size: min(22px, 1.1vw);
+  cursor: pointer;
+  white-space: nowrap;
+  filter: drop-shadow(0 0 0 rgba(255, 182, 210, 0));
+  transition: filter 0.15s ease, transform 0.15s ease, background 0.15s ease;
+}
+
+.order-dropdown-option.selected {
+  background: #ffd3e2;
+  border-color: #ffd3e2;
+  color: #7a3b54;
+  font-weight: 700;
+}
+
+.order-dropdown-option:focus-visible {
+  outline: none;
+  transform: scale(1.06);
+  filter: drop-shadow(0 0 5px rgba(255, 182, 210, 0.95));
+}
+
+/* Added toppings -- small removable chips under the adder button. Clicking/
+   selecting a chip removes that specific one (see removeTopping in
+   CustomerOrdering.js). */
+.order-topping-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: min(6px, 0.3vw);
+  margin-top: min(6px, 0.3vw);
+}
+
+.order-topping-chip {
+  padding: min(7px, 0.36vw) min(11px, 0.56vw);
+  border-radius: 999px;
+  border: min(1.5px, 0.08vw) solid rgba(240, 200, 120, 0.7);
+  background: #fff2cf;
+  color: #8a6d2f;
+  font-family: 'Pixelify Sans', cursive;
+  font-size: min(20px, 1vw);
+  cursor: pointer;
+  white-space: nowrap;
+  filter: drop-shadow(0 0 0 rgba(255, 210, 120, 0));
+  transition: filter 0.15s ease, transform 0.15s ease, background 0.15s ease;
+}
+
+.order-topping-chip:hover {
+  background: #ffe9ab;
+}
+
+.order-topping-chip:focus-visible {
+  outline: none;
+  transform: scale(1.08);
+  filter: drop-shadow(0 0 5px rgba(255, 200, 110, 0.9));
+}
+
+/* "Place Order" -- only rendered once every required section (grade,
+   teaspoons, cup, ice, base) has a selection, see CustomerOrdering.js.
+   Sits at the bottom of the form as the order-builder's natural final
+   action, so it's styled as a clear standout from the pastel dropdowns/
+   chips above it: solid coral pill, bigger and centered rather than
+   left-aligned/full-width like the other controls. */
+.order-place-button {
+  align-self: center;
+  margin-top: min(6px, 0.3vw);
+  padding: min(12px, 0.65vw) min(34px, 1.8vw);
+  border-radius: 999px;
+  border: min(2px, 0.1vw) solid rgba(255, 255, 255, 0.8);
+  background: #ff9eb2;
+  color: #ffffff;
+  font-family: 'Pixelify Sans', cursive;
+  font-size: min(24px, 1.2vw);
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  cursor: pointer;
+  box-shadow: 0 6px 14px rgba(255, 158, 178, 0.45);
+  transition: filter 0.15s ease, transform 0.15s ease, background 0.15s ease;
+  animation: orderPlaceButtonIn 0.2s ease-out both;
+}
+
+@keyframes orderPlaceButtonIn {
+  0% {
+    opacity: 0;
+    transform: translateY(6px) scale(0.96);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.order-place-button:hover {
+  background: #ff8aa3;
+  transform: scale(1.03);
+}
+
+.order-place-button:focus-visible {
+  outline: none;
+  transform: scale(1.06);
+  filter: drop-shadow(0 0 6px rgba(255, 158, 178, 0.95));
 }

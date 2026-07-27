@@ -130,7 +130,7 @@ const TOPPING_ITEMS = [
   }),
 ];
 
-const ToppingsStation = ({ activeStep, customerNumber, onNavigate, onAdvance }) => {
+const ToppingsStation = ({ activeStep, customerNumber, onNavigate, onAdvance, order }) => {
   const containerRef = useRef(null);
   useFlatFocusNav(containerRef);
 
@@ -163,7 +163,7 @@ const ToppingsStation = ({ activeStep, customerNumber, onNavigate, onAdvance }) 
             }}
           />
         ))}
-        <OrderReceiptButton />
+        <OrderReceiptButton order={order} />
         <ProgressBar
           activeStep={activeStep}
           customerNumber={customerNumber}

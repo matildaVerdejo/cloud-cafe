@@ -31,6 +31,13 @@ function App() {
   const [currentPage, setCurrentPage] = useState('main');
   // Which customer (1-3) the player is currently serving this session.
   const [customerNumber, setCustomerNumber] = useState(1);
+  // The order built in CustomerOrdering's "Place Order" step -- null until
+  // placed, then shown by OrderReceiptButton on the Matcha/Milk/Toppings
+  // screens (replacing the old hardcoded AnnieOrder1.png receipt). Reset to
+  // null when a new customer's ordering step starts so the next order can't
+  // ever show the previous customer's receipt (see handlePlayClick/
+  // handleAdvance below).
+  const [currentOrder, setCurrentOrder] = useState(null);
   const [showExitConfirm, setShowExitConfirm] = useState(false);
   const [adPlaying, setAdPlaying] = useState(false);
   // currentPage is read inside a window-level keydown listener that is
@@ -123,6 +130,7 @@ function App() {
 
   const handlePlayClick = () => {
     setCustomerNumber(1);
+    setCurrentOrder(null);
     setCurrentPage('ordering');
   };
 
@@ -145,9 +153,11 @@ function App() {
     }
     if (customerNumber < ORDERS_PER_SESSION) {
       setCustomerNumber((n) => n + 1);
+      setCurrentOrder(null);
       setCurrentPage('ordering');
     } else {
       setCustomerNumber(1);
+      setCurrentOrder(null);
       setCurrentPage('main');
       sendAdOpportunity('MENU_RETURN');
     }
@@ -187,22 +197,22 @@ function App() {
         )}
         {currentPage === 'ordering' && (
           <div className="page-slide">
-            <CustomerOrdering activeStep="ordering" {...progressProps} />
+            <CustomerOrdering activeStep="ordering" onPlaceOrder={setCurrentOrder} {...progressProps} />
           </div>
         )}
         {currentPage === 'matcha-making' && (
           <div className="page-slide">
-            <MatchaMaking activeStep="matcha-making" {...progressProps} />
+            <MatchaMaking activeStep="matcha-making" order={currentOrder} {...progressProps} />
           </div>
         )}
         {currentPage === 'milk-selection' && (
           <div className="page-slide">
-            <MilkSelection activeStep="milk-selection" {...progressProps} />
+            <MilkSelection activeStep="milk-selection" order={currentOrder} {...progressProps} />
           </div>
         )}
         {currentPage === 'toppings' && (
           <div className="page-slide">
-            <ToppingsStation activeStep="toppings" {...progressProps} />
+            <ToppingsStation activeStep="toppings" order={currentOrder} {...progressProps} />
           </div>
         )}
         {currentPage === 'final-combination' && (
