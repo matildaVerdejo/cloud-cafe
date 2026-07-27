@@ -69,10 +69,17 @@
   }
 }
 
-/* This sign was drawn in by us (composited onto the source art with PIL,
-   white fill + dark brown outline per request) since the source image had
-   no "play" affordance, at pixel box x 640-770, y 467-533 on the 1024x924
-   art (62.5%/50.54%/12.7%/7.14% of the IMAGE itself).
+/* Was positioned over a "PLAY" sign drawn in at pixel box x 640-770,
+   y 467-533 on the 1024x924 art (62.5%/50.54%/12.7%/7.14% of the IMAGE
+   itself, next to the door). Moved per feedback to sit centered
+   horizontally and right under the "cloud cafe" cloud sign instead --
+   overlapping the striped awning just below it. New image-relative box:
+   left 43.65%, top 35.17%, width 12.7% (unchanged), height 7.14%
+   (unchanged) -- the cloud's bottom scallop sits around y=295px and the
+   awning's own bottom (scalloped) edge around y=421px on the 924px-tall
+   art, so top=35.17%/height=7.14% (325-391px) centers the button in that
+   band; left=43.65% centers the same-width button on the image's own
+   horizontal midline (1024/2 = 512px).
 
    Since .main-container is now a fixed 16:9 and the 1024x924 art is
    letterboxed (pillarboxed, in this case) inside it via object-fit:
@@ -88,11 +95,13 @@
        a future image is WIDER than 16:9 and gets letterboxed top/bottom
        instead.
    For this art: scale = (1024/924)/(16/9) = 0.6233 ->
-     left = 57.79%, width = 7.92%, top/height unchanged. */
+     left = 46.04%, width = 7.92% (unchanged), top/height unchanged
+     (35.17%/7.14%). left+width/2 = 50.00%, confirming it's centered on
+     the container. */
 .play-button {
   position: absolute;
-  left: 57.79%;
-  top: 50.54%;
+  left: 46.04%;
+  top: 35.17%;
   width: 7.92%;
   height: 7.14%;
   padding: 0;
