@@ -21,12 +21,11 @@
   border-radius: 16px;
   overflow: hidden;
   box-shadow: 0 15px 30px rgba(0, 0, 0, 0.2);
-  /* Matches the art's own counter tone. This image is 1394x768 (~1.815),
-     slightly wider than 16:9 (1.778), so object-fit: contain below leaves a
-     ~2.06% letterbox -- pushed entirely to the bottom (see object-position
-     on .toppings-art) so the seam sits against the counter color instead
-     of splitting a thin sliver across the top too. */
-  background-color: #ab9a92;
+  /* Matches the art's own counter tone. Originally measured against
+     ToppingsStation.png (1394x768, ~1.815, slightly wider than 16:9) before
+     the background was swapped to MatchaBaseStation.png (the same art
+     MatchaMaking.js uses) -- kept as a safe fallback color either way. */
+  background-color: #ab9d94;
 }
 
 .toppings-content {
@@ -39,9 +38,13 @@
   width: 100%;
   height: 100%;
   object-fit: contain;
-  /* Anchors the image to the top of the container so all ~1.03% of
-     leftover vertical space falls at the bottom instead of being split
-     top/bottom -- button top% values below are offset by -1.03 to match. */
+  /* Anchors the image to the top of the container so the ~2.06% of
+     leftover vertical space (MatchaBaseStation.png is 1394x768, slightly
+     wider than 16:9 -- same math as .matcha-making-art in
+     MatchaMaking.css) falls at the bottom instead of being split top/
+     bottom. TOPPING_ITEMS' top/height values in ToppingsStation.js are
+     plain percentages of this same container, so they already account for
+     this without any extra offset. */
   object-position: top;
   display: block;
   animation: toppingsArtFadeIn 1s ease-out both;
@@ -56,5 +59,34 @@
     opacity: 1;
     transform: scale(1);
   }
+}
+
+/* The six topping items (see TOPPING_ITEMS in ToppingsStation.js) --
+   D-pad/click-selectable so they get the same white shape-hugging glow as
+   everything else selectable in this game, but not draggable (nowhere to
+   drag them to yet). Identical rules to .station-item/.station-item.
+   selectable in MatchaMaking.css (the matcha tins there use the exact same
+   pattern) -- kept as its own copy here rather than a shared import since
+   each screen's CSS is self-contained. */
+.station-item {
+  position: absolute;
+  object-fit: contain;
+  pointer-events: none;
+  filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.18));
+}
+
+.station-item.selectable {
+  pointer-events: auto;
+  filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.18)) drop-shadow(0 0 0 rgba(255, 255, 255, 0))
+    drop-shadow(0 0 0 rgba(255, 255, 255, 0));
+  transition: filter 0.15s ease, transform 0.15s ease;
+}
+
+.station-item.selectable:focus-visible {
+  outline: none;
+  box-shadow: none;
+  transform: scale(1.06);
+  filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.18)) drop-shadow(0 0 6px rgba(255, 255, 255, 0.95))
+    drop-shadow(0 0 12px rgba(255, 255, 255, 0.75));
 }
 
