@@ -5,7 +5,7 @@ import './ProgressBar.css';
 // list (as STEP_KEYS) for its own navigation logic, so the bar and the
 // state machine can never drift out of sync.
 export const PROGRESS_STEPS = [
-  { key: 'ordering', label: 'Order' },
+  { key: 'ordering', label: 'Take Order' },
   { key: 'matcha-making', label: 'Matcha' },
   { key: 'milk-selection', label: 'Milk' },
   { key: 'toppings', label: 'Toppings' },
