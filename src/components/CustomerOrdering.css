@@ -76,6 +76,156 @@
   pointer-events: none;
 }
 
+/* Speech bubble, recreated above the bunny's head -- see the JSX comment in
+   CustomerOrdering.js for context. Restyled to match the ProgressBar's own
+   look (same white fill / #8a7a6a border / drop-shadow palette as
+   .progress-bar in ProgressBar.css) per request, with a modest rounded-rect
+   radius instead of the fully-pill/cloud shape it started as -- "rectangular
+   but with rounded edges", not a stadium shape. Widened again to 58% (was
+   50%, before that 44%) and dropped down to top: 15% (was 12%) so it sits
+   closer to the bunny's head -- bottom edge now lands right at the bunny's
+   top (29%) with only a hairline gap. left shifted to 22.5% to keep pace
+   with the wider size while staying clear of the window art (verified via
+   PIL box-overlay against TakeOrderFrame.png: window's right edge is
+   ~22.5%, door's left edge is ~82%, bubble now spans 22.5%-80.5%). Fully
+   opaque white now (was rgba(255,255,255,0.9)) per request -- no
+   transparency. Re-centered to left: 21% (was 22.5%) so the bubble sits in
+   the middle of the frame (21% + 58% width puts its center at ~50%, still
+   clear of the window on the left and the door on the right per the same
+   PIL box-overlay check). Height increased to 16% (was 13%, top pulled up
+   to 12%, then 8% per further feedback -- still clear of the ceiling line
+   in the art -- to compensate so the bottom edge -- and the bunny-ward gap
+   below it -- stays about where it was).
+   Now carries real dialogue (the customer's randomized spoken order, see
+   generateSpokenOrder/speechFromOrder in CustomerOrdering.js) instead of
+   sitting empty, so 16% is now a min-height rather than a fixed height --
+   the sentence's length varies a lot round to round (anywhere from 0 to 7
+   toppings), and a fixed height would clip a long one. Flex-centers
+   .ordering-speech-bubble-text (below) inside whatever height it ends up
+   growing to. pointer-events stays none -- it's still just flavor text, not
+   interactive -- but aria-hidden was removed now that there's real content
+   here for a screen reader to read (only the tail SVG below stays
+   aria-hidden, since that part really is decorative).
+   top pulled up to 3% (was 8%) to buy back vertical headroom for the much
+   bigger text below -- the ceiling/wall are the same flat color in this
+   art with no seam beyond a thin line, so sitting the bubble higher, even
+   above that line, doesn't read as a collision the way overlapping the
+   window or door would. Nudged back down to top: 6% per further feedback
+   ("shift the bubble down") -- still leaves enough headroom that even the
+   rare worst case (max-length, all-7-toppings sentence, at the
+   further-bumped font size below) stays clear of, or only barely grazes,
+   the very top of the bunny's ears; per the earlier "okay if you need to
+   enlarge the bubble to make it fit" allowance, and since the line-wrap
+   estimate used to check this (PIL text measurement, bold DejaVu Sans as a
+   stand-in for the real pixel font) is a conservative/wider-than-real
+   upper bound, that's an acceptable tradeoff for a case that only comes up
+   on high-topping-count rounds. */
+.ordering-speech-bubble {
+  position: absolute;
+  left: 21%;
+  top: 5%;
+  width: 58%;
+  min-height: 16%;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: min(16px, 0.9vw) min(26px, 1.4vw);
+  background: #ffffff;
+  border: 4px solid #8a7a6a;
+  border-radius: min(28px, 1.4vw);
+  box-shadow: 0 5px 14px rgba(0, 0, 0, 0.18);
+  pointer-events: none;
+  animation: orderingSpeechBubbleIn 0.4s ease-out both;
+}
+
+.ordering-speech-bubble-text {
+  margin: 0;
+  font-family: 'Pixelify Sans', cursive;
+  /* Bumped up a lot in an earlier pass (was min(21px, 1vw) -> min(30px,
+     1.45vw)), then a bit further per feedback here. Verified via a
+     word-wrap simulation (PIL text measurement at this bubble's usable
+     content width) that even the longest possible random order (max
+     teaspoons/ice digits + all 7 toppings) still wraps to a height that
+     stays close to clearing the bunny's head -- see the .ordering-speech-
+     bubble comment above for the "acceptable tradeoff" note on that rare
+     worst case. */
+  font-size: min(32px, 1.55vw);
+  line-height: 1.4;
+  color: #5c4a3a;
+  text-align: center;
+}
+
+/* Calls out every randomized part of the customer's line (teaspoon count,
+   grade, cup, ice count, milk/base, and each topping) -- everything except
+   the greeting and the surrounding scripted phrasing, per request. Was the
+   same pastel-pink "selected" look used for chosen dropdown options/
+   topping chips elsewhere on this screen; switched to green per feedback,
+   using the same light mint (#e8f8e0) already used for
+   .progress-step.current's background in ProgressBar.css, with a medium
+   (not-too-dark) green text color -- #3f7a54, the same shade already used
+   for .order-dropdown-toggle.filled -- rather than a darker forest green. */
+.ordering-speech-highlight {
+  background: #e8f8e0;
+  color: #3f7a54;
+  font-weight: 700;
+  padding: 0 min(3px, 0.16vw);
+  border-radius: min(6px, 0.3vw);
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+
+@keyframes orderingSpeechBubbleIn {
+  0% {
+    opacity: 0;
+    transform: scale(0.9) translateY(6px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+/* Small triangular pointer connecting the bubble down toward the bunny's
+   head. Used to be a classic CSS-border-triangle (plus a second, stacked
+   ::before triangle to fake an outline) -- switched to a real inline SVG
+   polygon instead, because the border-triangle version's "outline" was
+   actually just a smaller white triangle bridging the gap above it, so the
+   tail's own diagonal edges were a single solid brown wedge with no
+   stroke -- that read as noticeably thicker/heavier than the bubble's flat
+   4px border ("a different edge weight"). An SVG polygon can use a real
+   `stroke` (see .ordering-speech-bubble-tail polygon below), set to the
+   same 4px as .ordering-speech-bubble's border, so the tail's outline
+   actually matches instead of just looking closer.
+   Positioned near the bubble's right end (left: 85%, same spot as before)
+   -- roughly where the bunny sits relative to the wide, left-extending
+   bubble. bottom is offset so the flat top edge of the polygon tucks
+   slightly up under the bubble's own bottom border, hiding the seam
+   between the two shapes instead of leaving a visible gap -- nudged down a
+   couple more px per feedback (was + 2px) so a bit more of the point
+   pokes out past the bubble. */
+.ordering-speech-bubble-tail {
+  position: absolute;
+  left: 85%;
+  transform: translateX(-50%);
+  bottom: calc(-1 * min(22px, 1.05vw) - 2px);
+  width: min(30px, 1.45vw);
+  height: min(22px, 1.05vw);
+  overflow: visible;
+  display: block;
+}
+
+.ordering-speech-bubble-tail polygon {
+  fill: #ffffff;
+  stroke: #8a7a6a;
+  stroke-width: 4;
+  stroke-linejoin: round;
+  /* Keeps the stroke a flat 4px regardless of how much the SVG box itself
+     scales via the min(px, vw) width/height above -- same "border doesn't
+     scale with the card" behavior as the bubble's own border: 4px solid. */
+  vector-effect: non-scaling-stroke;
+}
+
 /* Play button on the ordering computer's screen -- opens the order-builder
    modal (see .order-modal below). Styled to match .progress-step-dot in
    ProgressBar.css exactly (same white circle / #8a7a6a border / #5c4a3a

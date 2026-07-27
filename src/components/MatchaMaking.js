@@ -177,7 +177,11 @@ const SCOOP_SPOON_IMAGES = {
 // once whiskStage reaches 'done' (see .bowl-whisked-liquid in the JSX/CSS
 // below), replacing the plain-color bowl-powder/bowl-water circles with an
 // actual "whisked matcha" image matching whichever grade was scooped.
-const WHISKED_LIQUID_IMAGES = {
+// Exported (along with a few other constants/helpers below) so
+// MilkSelection.js can re-render this same bowl+whisk+whisked-liquid
+// composition once it's sent over via the "Make Drink" drop-zone -- see
+// incomingBowl in MilkSelection.js.
+export const WHISKED_LIQUID_IMAGES = {
   'cafe-grade': './WhiskedCafeGrade.png',
   'classic-grade': './WhiskedClassicGrade.png',
   'ceremonial-grade': './WhiskedCeremonialGrade.png',
@@ -329,15 +333,25 @@ const TEMP_BAR_LINGER_MS = 1500;
 // mechanic designed yet for these three, so movement here is intentionally
 // free-form (no snapping, no Enter-to-toggle) -- just "pick it up, put it
 // down anywhere on the counter". Width/height stay fixed at their starting
-// size; only left/top change while dragging.
-const MOVABLE_ITEMS = [
+// size; only left/top change while dragging. Exported so MilkSelection.js
+// can look up the bowl/whisk boxes' own width/height when re-rendering the
+// carried-over bowl+whisk (see incomingBowl there) -- it needs the same
+// box dimensions this screen uses so the reused position math (WHISK_BOWL_
+// OFFSET, getWhiskMixPos, etc. below) comes out the same.
+export const MOVABLE_ITEMS = [
   { key: 'kettle', src: './kettle.png', alt: 'Pour-over kettle', left: 3.5, top: 26.1, width: 24, height: 31.4 },
   { key: 'bowl', src: './Bowl.png', alt: 'Matcha mixing bowl', left: 38, top: 33.8, width: 24, height: 45.7 },
   // Scaled down 0.85x from the doubled 15.6x55.64 box (a touch smaller than
   // "doubled" read), keeping left/top centered on (69, 57.7) through all
   // three resizes -- then nudged 2 lower (top only) from that centered
-  // position per request, so it now sits a little below dead-center.
-  { key: 'whisk', src: './whisk.png', alt: 'Bamboo whisk', left: 62.37, top: 36.05, width: 13.26, height: 47.29 },
+  // position per request, so it now sits a little below dead-center. Then
+  // raised back up 8 points (top 36.05 -> 28.05) per feedback that this
+  // same spot -- also where the whisk glides back to once whisking
+  // finishes, see MOVABLE_START.whisk -- put its tall 47.29%-height box low
+  // enough to overlap the ProgressBar (whose top edge sits at roughly 84%
+  // down the container). Bottom edge is now 28.05 + 47.29 = 75.34%, clear
+  // of the bar by ~9 points.
+  { key: 'whisk', src: './whisk.png', alt: 'Bamboo whisk', left: 62.37, top: 28.05, width: 13.26, height: 47.29 },
 ];
 
 const MOVABLE_START = MOVABLE_ITEMS.reduce((acc, item) => {
@@ -453,8 +467,9 @@ const WHISK_MIX_DURATION_MS = 10000; // 10s, per request (originally 6s)
 // BOWL_POWDER_OFFSET/BOWL_WATER_OFFSET), so it reads as dipped into the
 // bowl rather than hovering over it the way the spoon/kettle do. Eyeballed
 // starting guess, same caveat as those two -- likely needs tuning once
-// actually seen against the live render.
-const WHISK_BOWL_OFFSET = { leftFrac: 0.5, topFrac: 0.0 };
+// actually seen against the live render. Exported for MilkSelection.js's
+// carried-over bowl display -- see the comment on MOVABLE_ITEMS above.
+export const WHISK_BOWL_OFFSET = { leftFrac: 0.5, topFrac: 0.0 };
 
 // Pivot point for both the static 180deg "upside down once picked up" flip
 // and the @keyframes whiskStir wobble in MatchaMaking.css -- set here,
@@ -465,8 +480,8 @@ const WHISK_BOWL_OFFSET = { leftFrac: 0.5, topFrac: 0.0 };
 // whisk sideways for a frame at each stage transition. Biased down toward
 // the lower portion of the whisk's own box (rather than dead-center) so
 // the wobble/flip both pivot from roughly where a hand would be gripping
-// the handle.
-const WHISK_STIR_ORIGIN_FRAC = { leftFrac: 0.5, topFrac: 0.68 };
+// the handle. Exported for MilkSelection.js's carried-over bowl display.
+export const WHISK_STIR_ORIGIN_FRAC = { leftFrac: 0.5, topFrac: 0.68 };
 
 // The "upside down once picked up" flip angle -- single source of truth for
 // the inline static rotate below (applied during 'moving'/'done') AND for
@@ -475,14 +490,18 @@ const WHISK_STIR_ORIGIN_FRAC = { leftFrac: 0.5, topFrac: 0.68 };
 // `style.transform` on the same element -- see that keyframe's own comment).
 // CSS keyframes can't reference this constant directly, so if this value
 // ever changes, whiskStir's 0%/50%/100% steps need to be updated to match.
-const WHISK_FLIP_DEG = 180;
+// Exported for MilkSelection.js's carried-over bowl display -- the whisk
+// stays in this same "flipped, resting" pose once it lands there.
+export const WHISK_FLIP_DEG = 180;
 
 // Centers the whisk's own box horizontally on the bowl and vertically at
 // WHISK_BOWL_OFFSET.topFrac down into it -- takes bowlPos/bowlItem/
 // whiskItem as arguments since the bowl can be dragged anywhere before the
 // player ever confirms a mix, same pattern as getSpoonHoverPos/
-// getKettleHoverPos above.
-function getWhiskMixPos(bowlPos, bowlItem, whiskItem) {
+// getKettleHoverPos above. Exported so MilkSelection.js can reuse the exact
+// same math to position the carried-over whisk on top of the carried-over
+// bowl, given whatever position it chooses to rest that bowl at.
+export function getWhiskMixPos(bowlPos, bowlItem, whiskItem) {
   return {
     left: bowlPos.left + bowlItem.width / 2 - whiskItem.width / 2,
     top: bowlPos.top + WHISK_BOWL_OFFSET.topFrac * bowlItem.height - whiskItem.height / 2,
@@ -580,15 +599,38 @@ const BOWL_SPILL_OFFSET = { leftFrac: 1.05, topFrac: 0.45 };
 // a fixed center needs no left/top adjustment at all.
 const BOWL_MIX_SWIRL_SIZE_FRAC = 0.8;
 
-// How big the finished whisked-liquid image (.bowl-whisked-liquid) renders
-// relative to bowl-water's own size -- slightly bigger than a 1:1 overlay
-// per feedback, same "scale by a fraction around the same fixed center"
-// reasoning as BOWL_MIX_SWIRL_SIZE_FRAC above.
-const BOWL_WHISKED_LIQUID_SIZE_FRAC = 1.15;
-// Shifts the whisked-liquid image up from bowl-water's own center point, as
-// a fraction of the bowl's own box height -- per feedback that it needed to
-// sit a bit higher.
-const BOWL_WHISKED_LIQUID_TOP_SHIFT_FRAC = 0.06;
+// Where the bowl's actual inner rim opening sits, measured directly off
+// Bowl.png (327x343) rather than eyeballed like BOWL_WATER_OFFSET/
+// BOWL_POWDER_OFFSET above -- the rim renders as a true ellipse (a circular
+// rim viewed at an angle) spanning roughly x:[3,323]/y:[6,239] in the
+// source PNG's own pixel space (back-of-rim peak at the top, front-of-rim
+// dip at the bottom, widest point at the vertical midpoint of that span --
+// found by scanning the image's opaque-pixel bounding box row by row).
+// Converted to fractions of the source canvas (center x = 0.5, center y =
+// (6+239)/2/343 = 0.357, width = (323-3)/327 = 0.978, height =
+// (239-6)/343 = 0.679) and, since bowlItem's own width/height already
+// reproduce Bowl.png's real aspect ratio (the project's usual canvas-aspect-
+// correction convention), those same fractions apply directly to
+// bowlItem.width/height with no further conversion. Used to make the
+// finished whisked-matcha image (.bowl-whisked-liquid) fill exactly the
+// bowl's visible interior instead of the smaller, more-circular guess
+// bowl-water's own box was using (bowl-water/bowl-powder still use their
+// own approximate offsets -- this only affects the whisked-liquid image,
+// which is the one place a mismatch was visible/reported). Center-point
+// convention (not top-left) matches bowl-water/bowl-powder's own
+// translate(-50%, -50%) centering. Width/height nudged down from the exact
+// measured 0.978/0.679 across a few rounds of "teeny bit smaller" feedback
+// (0.978/0.679 -> 0.93/0.645 -> 0.9/0.625 -> current) -- scaled evenly
+// (same factor on both) around the same fixed center so the ellipse's
+// aspect ratio/shape match is preserved, just increasingly inset from the
+// rim's outline instead of touching it. topFrac nudged down slightly from
+// the exact measured rim center per feedback (0.357 -> 0.377 -> 0.383 ->
+// 0.388 -> 0.389). Exported for MilkSelection.js's carried-over bowl
+// display, so the whisked-liquid image lines up with the bowl's rim there
+// too.
+export const BOWL_INNER_RIM_CENTER = { leftFrac: 0.5, topFrac: 0.389 };
+export const BOWL_INNER_RIM_WIDTH_FRAC = 0.87;
+export const BOWL_INNER_RIM_HEIGHT_FRAC = 0.605;
 
 function clampPct(value, size) {
   return Math.min(Math.max(value, 0), 100 - size);
@@ -609,6 +651,29 @@ function isOverBowl(leftPct, topPct, bowlPos, bowlItem) {
   );
 }
 
+// The "Make Drink" drop-zone label -- only rendered once whiskStage is
+// 'done' (see the JSX below). Sits in the bottom-right corner, clear of
+// the ProgressBar (which is bottom-center, min-width min(1140px, 54.625vw)
+// -- at most ~54.6% of the container, so its right edge never passes
+// ~77.3% from center) and clear of the whisk's own resting spot (right
+// edge 62.37 + 13.26 = 75.63%, see MOVABLE_ITEMS above), so it can't ever
+// visually collide with either regardless of exact vertical overlap.
+const MAKE_DRINK_ZONE = { left: 78, top: 66, width: 19, height: 18 };
+
+// Generous hit-test box for "was the bowl dropped on the Make Drink
+// label", same margin-based approach as isOverBowl above -- takes the
+// drag's live left/top (percentage points) rather than reading state
+// directly, matching every other isOverX helper in this file.
+function isOverMakeDrinkZone(leftPct, topPct) {
+  const margin = 3;
+  return (
+    leftPct >= MAKE_DRINK_ZONE.left - margin &&
+    leftPct <= MAKE_DRINK_ZONE.left + MAKE_DRINK_ZONE.width + margin &&
+    topPct >= MAKE_DRINK_ZONE.top - margin &&
+    topPct <= MAKE_DRINK_ZONE.top + MAKE_DRINK_ZONE.height + margin
+  );
+}
+
 // Reads the fill's current live scaleX mid-transition (e.g. computed
 // style's transform matrix reports whatever the browser has interpolated
 // to at this exact frame) -- this is what lets stopping the gauge freeze
@@ -619,7 +684,7 @@ function getCurrentScaleX(el) {
   return new DOMMatrixReadOnly(transform).a;
 }
 
-const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order }) => {
+const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order, onSendToMilk }) => {
   const containerRef = useRef(null);
   useFlatFocusNav(containerRef);
 
@@ -946,6 +1011,17 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
       beginWhiskMix();
       return;
     }
+    // Same idea, for the *bowl* -- once whisking is done, dropping it on
+    // the "Make Drink" label (see MAKE_DRINK_ZONE/isOverMakeDrinkZone
+    // above) sends it (and the whisk resting in it) on to the Milk
+    // Selection station instead of the ordinary placement below. Before
+    // whiskStage is 'done', or dropped anywhere else, this falls through
+    // same as always.
+    if (item.key === 'bowl' && whiskStage === 'done' && isOverMakeDrinkZone(drag.left, drag.top)) {
+      setDrag(null);
+      sendBowlToMilk();
+      return;
+    }
     const start = MOVABLE_START[item.key];
     const snapBack =
       Math.abs(drag.left - start.left) < item.width * SNAP_FRACTION &&
@@ -982,6 +1058,36 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
     if (shouldDebounceEnter(e)) return;
     e.preventDefault();
     beginWhiskMix();
+  };
+
+  // ---- "Make Drink": once whisking is done, sends the bowl (and the
+  // whisk resting in it) on to the next station -- see onSendToMilk (a
+  // prop from App.js, which stores it in state and passes it down to
+  // MilkSelection as incomingBowl) and MAKE_DRINK_ZONE/isOverMakeDrinkZone
+  // above for the drop-zone hit-test. Snapshotting bowlPowder here (rather
+  // than letting MilkSelection read this screen's own state, which won't
+  // exist anymore once onAdvance below swaps the active page away) is what
+  // lets the next screen know which grade's whisked-liquid image to show.
+  // onAdvance immediately follows, same "current step's done, move on"
+  // action the ProgressBar's current-step dot already triggers -- this is
+  // just a second, thematically-appropriate way to trigger the exact same
+  // transition, not a replacement for it.
+  const sendBowlToMilk = () => {
+    if (!bowlPowder) return;
+    onSendToMilk?.({ ...bowlPowder });
+    onAdvance();
+  };
+
+  // D-pad/keyboard equivalent of dropping the bowl on the Make Drink label
+  // -- same "no keyboard equivalent of 'drag it partway'" reasoning as
+  // handleKettleKeyDown/handleWhiskKeyDown above.
+  const handleBowlKeyDown = (e) => {
+    const action = getActionFromKeyEvent(e);
+    if (action !== 'Enter') return;
+    if (whiskStage !== 'done') return;
+    if (shouldDebounceEnter(e)) return;
+    e.preventDefault();
+    sendBowlToMilk();
   };
 
   // ---- Matcha tin selection: reveals the scoop gauge -------------------
@@ -1334,6 +1440,16 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
   // taller water pool's bottom sitting further down than the mound's.
   const bowlWaterTop =
     bowlPos.top + BOWL_WATER_OFFSET.topFrac * bowlItem.height - (bowlWaterHeight - bowlPowderHeight) / 2;
+
+  // The bowl's actual inner-rim ellipse (see BOWL_INNER_RIM_CENTER/
+  // BOWL_INNER_RIM_WIDTH_FRAC/BOWL_INNER_RIM_HEIGHT_FRAC above) -- only used
+  // to size/position the finished whisked-matcha image so it fills the
+  // bowl's real visible interior rather than bowl-water's smaller,
+  // more-circular box.
+  const bowlInnerRimLeft = bowlPos.left + BOWL_INNER_RIM_CENTER.leftFrac * bowlItem.width;
+  const bowlInnerRimTop = bowlPos.top + BOWL_INNER_RIM_CENTER.topFrac * bowlItem.height;
+  const bowlInnerRimWidth = BOWL_INNER_RIM_WIDTH_FRAC * bowlItem.width;
+  const bowlInnerRimHeight = BOWL_INNER_RIM_HEIGHT_FRAC * bowlItem.height;
 
   // Anchored to the kettle's actual spout opening (KETTLE_POUR_SPOUT_TOP_
   // FRAC), not KETTLE_SPOUT_OFFSET's raised steam-anchor point -- see the
@@ -1759,6 +1875,7 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
           // special-casing).
           const isKettle = item.key === 'kettle';
           const isWhisk = item.key === 'whisk';
+          const isBowl = item.key === 'bowl';
           const settling = (isKettle && kettleStage !== 'idle') || (isWhisk && whiskStage !== 'idle');
           const pouring = isKettle && (kettleStage === 'moving' || kettleStage === 'pouring');
           // Stirring wobble (see .mixing/@keyframes whiskStir in
@@ -1787,6 +1904,8 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
               alt={
                 isWhisk
                   ? `${item.alt}. Drag onto the bowl to mix once the matcha and water are both in, or select it and press Enter.`
+                  : isBowl && whiskStage === 'done'
+                  ? `${item.alt}. Drag to the Make Drink label to send it to the next station, or select it and press Enter.`
                   : `${item.alt}. Drag to move.`
               }
               className={`station-item movable${dragging ? ' dragging' : ''}${settling ? ' settling' : ''}${
@@ -1851,7 +1970,9 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
               onPointerDown={handlePointerDown(item)}
               onPointerMove={handlePointerMove(item)}
               onPointerUp={handlePointerUp(item)}
-              onKeyDown={isKettle ? handleKettleKeyDown : isWhisk ? handleWhiskKeyDown : undefined}
+              onKeyDown={
+                isKettle ? handleKettleKeyDown : isWhisk ? handleWhiskKeyDown : isBowl ? handleBowlKeyDown : undefined
+              }
             />
           );
         })}
@@ -1914,7 +2035,13 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
             <span className="kettle-steam-wisp kettle-steam-wisp-3" />
           </div>
         )}
-        {bowlPowder && (
+        {/* whiskStage !== 'done' -- once whisking finishes, .bowl-whisked-
+            liquid (further down) replaces this plain-color mound entirely
+            rather than painting over it, so it doesn't peek out from
+            behind/around the whisked-liquid image (which, since being
+            sized down to BOWL_INNER_RIM_WIDTH_FRAC/HEIGHT_FRAC, is smaller
+            than this mound's own box and no longer fully covers it). */}
+        {bowlPowder && whiskStage !== 'done' && (
           <div
             key={pourCount}
             className="bowl-powder"
@@ -1937,7 +2064,10 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
             bowl-powder (key={waterPourCount} forces a fresh mount each pour
             so the animation always replays -- see the pourCount comment on
             bowlPowder's state in this file for why). */}
-        {bowlWater && (
+        {/* whiskStage !== 'done' -- same reasoning as bowl-powder above, so
+            this translucent pool doesn't linger visible around the edges
+            of the smaller whisked-liquid image once mixing's finished. */}
+        {bowlWater && whiskStage !== 'done' && (
           <div
             key={waterPourCount}
             className="bowl-water"
@@ -1981,10 +2111,14 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
             call above). Rendered on top of the plain-color bowl-powder/
             bowl-water circles (doesn't replace them -- just paints over,
             same "later in the JSX = higher paint order" convention as
-            everything else on the bowl) using bowl-water's own left/top as
-            its center point, same centering trick as .bowl-water/
-            .bowl-powder (translate(-50%, -50%) -- see .bowl-whisked-liquid
-            in MatchaMaking.css). Reuses growFromCenter for a quick fade/
+            everything else on the bowl). Sized/positioned to the bowl's
+            actual inner-rim ellipse (bowlInnerRimLeft/Top/Width/Height, see
+            BOWL_INNER_RIM_CENTER above) rather than bowl-water's own box, so
+            it fills the real visible interior instead of a smaller,
+            more-circular guess -- left/top are still the ellipse's *center*
+            point, same centering trick as .bowl-water/.bowl-powder
+            (translate(-50%, -50%) -- see .bowl-whisked-liquid in
+            MatchaMaking.css). Reuses growFromCenter for a quick fade/
             grow-in so it doesn't just harshly pop in the instant mixing
             ends. */}
         {whiskStage === 'done' && bowlPowder && (
@@ -1995,10 +2129,10 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
             src={WHISKED_LIQUID_IMAGES[bowlPowder.grade] ?? WHISKED_LIQUID_IMAGES['classic-grade']}
             alt=""
             style={{
-              left: `${bowlWaterLeft}%`,
-              top: `${bowlWaterTop - BOWL_WHISKED_LIQUID_TOP_SHIFT_FRAC * bowlItem.height}%`,
-              width: `${bowlWaterWidth * BOWL_WHISKED_LIQUID_SIZE_FRAC}%`,
-              height: `${bowlWaterHeight * BOWL_WHISKED_LIQUID_SIZE_FRAC}%`,
+              left: `${bowlInnerRimLeft}%`,
+              top: `${bowlInnerRimTop}%`,
+              width: `${bowlInnerRimWidth}%`,
+              height: `${bowlInnerRimHeight}%`,
             }}
           />
         )}
@@ -2066,6 +2200,30 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
             <span className="bowl-spill-drop bowl-spill-drop-1" />
             <span className="bowl-spill-drop bowl-spill-drop-2" />
             <span className="bowl-spill-drop bowl-spill-drop-3" />
+          </div>
+        )}
+        {/* "Make Drink" drop-zone -- only appears once whisking is done
+            (see whiskStage/MAKE_DRINK_ZONE/isOverMakeDrinkZone above). Not
+            itself focusable/clickable -- it's a drop target the *bowl*
+            gets dragged onto (handlePointerUp's bowl branch) or sent to via
+            the bowl's own Enter press (handleBowlKeyDown), same "the label
+            just marks a zone, the movable item is what's actually
+            selected" pattern the ice box/cup drop zones use on the Milk
+            Selection screen. aria-hidden since the bowl's own alt text
+            (see the isBowl branch above) already describes this action to
+            screen readers. */}
+        {whiskStage === 'done' && (
+          <div
+            className="make-drink-zone"
+            aria-hidden="true"
+            style={{
+              left: `${MAKE_DRINK_ZONE.left}%`,
+              top: `${MAKE_DRINK_ZONE.top}%`,
+              width: `${MAKE_DRINK_ZONE.width}%`,
+              height: `${MAKE_DRINK_ZONE.height}%`,
+            }}
+          >
+            Make Drink
           </div>
         )}
         <OrderReceiptButton order={order} />

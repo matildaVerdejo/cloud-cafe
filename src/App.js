@@ -38,6 +38,14 @@ function App() {
   // ever show the previous customer's receipt (see handlePlayClick/
   // handleAdvance below).
   const [currentOrder, setCurrentOrder] = useState(null);
+  // The whisked matcha bowl sent over from MatchaMaking's "Make Drink"
+  // drop-zone -- null until sent, then shown by MilkSelection as its own
+  // carried-over bowl+whisk display (see incomingBowl there). Shape is
+  // whatever MatchaMaking's bowlPowder state holds ({ color, grade }).
+  // Reset to null in the same places currentOrder is, for the same reason
+  // -- a new customer's Milk Selection screen should never show the
+  // previous customer's leftover bowl.
+  const [matchaBowl, setMatchaBowl] = useState(null);
   const [showExitConfirm, setShowExitConfirm] = useState(false);
   const [adPlaying, setAdPlaying] = useState(false);
   // currentPage is read inside a window-level keydown listener that is
@@ -131,6 +139,7 @@ function App() {
   const handlePlayClick = () => {
     setCustomerNumber(1);
     setCurrentOrder(null);
+    setMatchaBowl(null);
     setCurrentPage('ordering');
   };
 
@@ -154,10 +163,12 @@ function App() {
     if (customerNumber < ORDERS_PER_SESSION) {
       setCustomerNumber((n) => n + 1);
       setCurrentOrder(null);
+      setMatchaBowl(null);
       setCurrentPage('ordering');
     } else {
       setCustomerNumber(1);
       setCurrentOrder(null);
+      setMatchaBowl(null);
       setCurrentPage('main');
       sendAdOpportunity('MENU_RETURN');
     }
@@ -202,12 +213,22 @@ function App() {
         )}
         {currentPage === 'matcha-making' && (
           <div className="page-slide">
-            <MatchaMaking activeStep="matcha-making" order={currentOrder} {...progressProps} />
+            <MatchaMaking
+              activeStep="matcha-making"
+              order={currentOrder}
+              onSendToMilk={setMatchaBowl}
+              {...progressProps}
+            />
           </div>
         )}
         {currentPage === 'milk-selection' && (
           <div className="page-slide">
-            <MilkSelection activeStep="milk-selection" order={currentOrder} {...progressProps} />
+            <MilkSelection
+              activeStep="milk-selection"
+              order={currentOrder}
+              incomingBowl={matchaBowl}
+              {...progressProps}
+            />
           </div>
         )}
         {currentPage === 'toppings' && (

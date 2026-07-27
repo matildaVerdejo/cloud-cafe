@@ -4,6 +4,23 @@ import { useFlatFocusNav } from '../gameloop/useFlatFocusNav';
 import { getActionFromKeyEvent, shouldDebounceEnter } from '../gameloop/pal';
 import ProgressBar from './ProgressBar';
 import OrderReceiptButton from './OrderReceiptButton';
+import {
+  MOVABLE_ITEMS,
+  BOWL_INNER_RIM_CENTER,
+  BOWL_INNER_RIM_WIDTH_FRAC,
+  BOWL_INNER_RIM_HEIGHT_FRAC,
+  WHISKED_LIQUID_IMAGES,
+} from './MatchaMaking';
+
+// Where the bowl (whisked matcha, no whisk -- see incomingBowl below) sent
+// over from MatchaMaking's "Make Drink" drop-zone comes to rest on this
+// screen. Open patch of counter to the left of the cup's table spot
+// (CUP_SPOTS.table, left 40.30) and clear above the ice box (ICE_BOX_SPOTS,
+// top 73.30+) so it doesn't overlap either. Purely decorative here (not
+// draggable/focusable) -- there's no "pour the matcha into the cup"
+// mechanic yet, this is just carrying the previous station's result over
+// so it doesn't just vanish.
+const INCOMING_BOWL_SPOT = { left: 8, top: 22 };
 
 // Container-relative percentage boxes for the two places the glass cup can
 // sit (see the pixel math in MilkSelection.css above .glass-cup). The cup
@@ -186,9 +203,22 @@ function isOverIceBox(leftPct, topPct) {
   );
 }
 
-const MilkSelection = ({ activeStep, customerNumber, onNavigate, onAdvance, order }) => {
+const MilkSelection = ({ activeStep, customerNumber, onNavigate, onAdvance, order, incomingBowl }) => {
   const containerRef = useRef(null);
   useFlatFocusNav(containerRef);
+
+  // ---- Carried-over bowl from Matcha Making (see incomingBowl above) -----
+  // Just the bowl + whisked-matcha image, no whisk -- reuses the same
+  // BOWL_INNER_RIM_* fractions MatchaMaking.js uses for its own
+  // whisked-liquid image, just anchored to this screen's own
+  // INCOMING_BOWL_SPOT instead of wherever the bowl happened to be dragged
+  // on that screen, so the whisked matcha lines up with the bowl's rim
+  // here the same way it does there.
+  const incomingBowlItem = MOVABLE_ITEMS.find((item) => item.key === 'bowl');
+  const incomingRimLeft = INCOMING_BOWL_SPOT.left + BOWL_INNER_RIM_CENTER.leftFrac * incomingBowlItem.width;
+  const incomingRimTop = INCOMING_BOWL_SPOT.top + BOWL_INNER_RIM_CENTER.topFrac * incomingBowlItem.height;
+  const incomingRimWidth = BOWL_INNER_RIM_WIDTH_FRAC * incomingBowlItem.width;
+  const incomingRimHeight = BOWL_INNER_RIM_HEIGHT_FRAC * incomingBowlItem.height;
 
   // ---- Glass cup: shelf <-> table --------------------------------------
   const [cupSpot, setCupSpot] = useState('shelf');
@@ -406,6 +436,51 @@ const MilkSelection = ({ activeStep, customerNumber, onNavigate, onAdvance, orde
           alt="Milk mixing station with sink and cabinet"
           className="milk-selection-art"
         />
+        {/* Carried over from Matcha Making's "Make Drink" drop-zone (see
+            incomingBowl/INCOMING_BOWL_SPOT above) -- just the bowl and the
+            whisked matcha (no whisk, per feedback that carrying the whisk
+            over too didn't make sense once it's done its job), reusing
+            this screen's own imported copies of MatchaMaking's
+            BOWL_INNER_RIM_* positioning math so the whisked-liquid image
+            still lines up with the bowl's rim the same way it does there.
+            Purely decorative (aria-hidden, no data-focusable/tabIndex) --
+            nothing to drag/select here yet, this just shows the
+            drink-in-progress carried over rather than disappearing.
+            .station-item and .bowl-whisked-liquid are both defined in
+            MatchaMaking.css, which is already loaded globally since
+            MatchaMaking.js is always imported by App.js -- reused here
+            rather than duplicated so the look can't drift out of sync
+            between the two screens. */}
+        {incomingBowl && (
+          <>
+            <img
+              src={incomingBowlItem.src}
+              alt=""
+              aria-hidden="true"
+              draggable={false}
+              className="station-item"
+              style={{
+                left: `${INCOMING_BOWL_SPOT.left}%`,
+                top: `${INCOMING_BOWL_SPOT.top}%`,
+                width: `${incomingBowlItem.width}%`,
+                height: `${incomingBowlItem.height}%`,
+              }}
+            />
+            <img
+              src={WHISKED_LIQUID_IMAGES[incomingBowl.grade] ?? WHISKED_LIQUID_IMAGES['classic-grade']}
+              alt=""
+              aria-hidden="true"
+              draggable={false}
+              className="bowl-whisked-liquid"
+              style={{
+                left: `${incomingRimLeft}%`,
+                top: `${incomingRimTop}%`,
+                width: `${incomingRimWidth}%`,
+                height: `${incomingRimHeight}%`,
+              }}
+            />
+          </>
+        )}
         <img
           src="./GlassCup.png"
           alt="Glass cup. Drag from the shelf to the table, or select it and press Enter."
