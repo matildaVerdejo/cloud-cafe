@@ -387,20 +387,35 @@ const CustomerOrdering = ({ activeStep, customerNumber, onNavigate, onAdvance, o
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [tabletPromptActive]);
 
+  // "Place Order" only appears once every required section has a selection
+  // -- toppings is the one section left out of this check since it's an
+  // optional adder (a drink with no extra toppings is still a complete
+  // order), not a required dropdown like the other four. Computed up here
+  // (rather than down by placeOrder/the JSX, where this used to live)
+  // since the third highlight beat right below needs it too.
+  const isOrderComplete =
+    matchaGrade !== null && teaspoons !== null && cupType !== null && iceCubes !== null && baseMilk !== null;
+
   // Third highlight beat -- once the order form/receipt modal is actually
   // up (orderFormOpen), the modal itself flashes the same green halo, with
   // a "this is your customer's receipt..." label next to it (see
   // .order-modal.receipt-highlight / .ordering-receipt-hint in
-  // CustomerOrdering.css). Unlike the first two, Enter here is just an
-  // acknowledgment (like the very first one) -- it doesn't do anything to
-  // the form itself, filling it out and eventually pressing "Place Order"
-  // is unchanged and still the real submit action. Once acknowledged it
-  // stays that way even if the player closes and reopens the modal again
-  // this round -- this is a one-time "here's what this is" callout, not
-  // something that should re-flash every time the modal toggles.
+  // CustomerOrdering.css). Enter here is just an acknowledgment (like the
+  // very first one) -- it doesn't do anything to the form itself. Also
+  // auto-dismisses once isOrderComplete flips true -- at that point
+  // "Place Order" itself becomes the thing to look at (see its autoFocus
+  // below), so this callout's job is done whether or not Enter was ever
+  // pressed. receiptDismissed folds both ways of clearing it into one
+  // flag; the effect below stops listening once either one applies, so a
+  // later Enter (e.g. to activate the now-focused Place Order button)
+  // isn't swallowed by this instead. Once dismissed it stays that way even
+  // if the player closes and reopens the modal again this round -- this is
+  // a one-time "here's what this is" callout, not something that should
+  // re-flash every time the modal toggles.
   const [receiptAcknowledged, setReceiptAcknowledged] = useState(false);
+  const receiptDismissed = receiptAcknowledged || isOrderComplete;
   useEffect(() => {
-    if (!orderFormOpen || receiptAcknowledged) return undefined;
+    if (!orderFormOpen || receiptDismissed) return undefined;
     const handleKeyDown = (e) => {
       if (getActionFromKeyEvent(e) !== 'Enter') return;
       if (shouldDebounceEnter(e)) return;
@@ -409,14 +424,18 @@ const CustomerOrdering = ({ activeStep, customerNumber, onNavigate, onAdvance, o
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [orderFormOpen, receiptAcknowledged]);
+  }, [orderFormOpen, receiptDismissed]);
 
-  // "Place Order" only appears once every required section has a selection
-  // -- toppings is the one section left out of this check since it's an
-  // optional adder (a drink with no extra toppings is still a complete
-  // order), not a required dropdown like the other four.
-  const isOrderComplete =
-    matchaGrade !== null && teaspoons !== null && cupType !== null && iceCubes !== null && baseMilk !== null;
+  // Fourth highlight beat -- once the order's actually been placed (not
+  // just the modal closed via the X/backdrop), the progress bar's current
+  // step (still "Take Order" at this point) flashes and points the player
+  // at the Left/Right shortcut just added to it (see highlightCurrentStep/
+  // currentStepHint passed to <ProgressBar> below, and
+  // .progress-step.station-highlight/.progress-station-hint in
+  // ProgressBar.css). Deliberately tied to actually placing the order
+  // (this flag), not merely orderFormOpen going false, so closing the
+  // modal early via the X button doesn't trigger it.
+  const [showStationHint, setShowStationHint] = useState(false);
 
   const placeOrder = () => {
     const order = {
@@ -429,6 +448,7 @@ const CustomerOrdering = ({ activeStep, customerNumber, onNavigate, onAdvance, o
     };
     onPlaceOrder?.(order);
     closeOrderForm();
+    setShowStationHint(true);
   };
 
   return (
@@ -546,7 +566,7 @@ const CustomerOrdering = ({ activeStep, customerNumber, onNavigate, onAdvance, o
                 button instead. */}
             <div className="order-modal-backdrop" onClick={closeOrderForm} />
             <div
-              className={`order-modal${!receiptAcknowledged ? ' receipt-highlight' : ''}`}
+              className={`order-modal${!receiptDismissed ? ' receipt-highlight' : ''}`}
               role="dialog"
               aria-label="Order form"
             >
@@ -676,18 +696,29 @@ const CustomerOrdering = ({ activeStep, customerNumber, onNavigate, onAdvance, o
                     OrderReceiptButton can show it instead of the old
                     hardcoded receipt image) and closes the modal. */}
                 {isOrderComplete && (
-                  <button type="button" className="order-place-button" data-focusable onClick={placeOrder}>
+                  <button
+                    type="button"
+                    className="order-place-button"
+                    data-focusable
+                    // Becomes the "next thing selected" the instant it
+                    // appears -- autoFocus fires on mount, and this button
+                    // only mounts once isOrderComplete flips true, so focus
+                    // moves here automatically instead of staying wherever
+                    // it was on the last-filled dropdown.
+                    autoFocus
+                    onClick={placeOrder}
+                  >
                     Place Order
                   </button>
                 )}
               </div>
             </div>
 
-            {/* Third highlight beat's label -- see receiptAcknowledged
-                above. Sits in the open margin beside the modal (the modal
-                itself is centered and min(880px, 68%) wide, so ~16% of the
-                card is free on either side). */}
-            {!receiptAcknowledged && (
+            {/* Third highlight beat's label -- see receiptDismissed above.
+                Sits in the open margin beside the modal (the modal itself
+                is centered and min(880px, 68%) wide, so ~16% of the card
+                is free on either side). */}
+            {!receiptDismissed && (
               <p className="ordering-receipt-hint">
                 This is your customer&apos;s receipt -- fill it out according to their order, then click Enter.
               </p>
@@ -700,6 +731,8 @@ const CustomerOrdering = ({ activeStep, customerNumber, onNavigate, onAdvance, o
           customerNumber={customerNumber}
           onNavigate={onNavigate}
           onAdvance={onAdvance}
+          highlightCurrentStep={showStationHint}
+          currentStepHint="Use your right arrow key to head to the matcha station."
         />
       </div>
     </div>

@@ -19,6 +19,17 @@ const STATIC_ITEMS = [
   { key: 'ceremonial-grade', src: './CeremonialGrade.png', alt: 'Ceremonial grade matcha tin', left: 79.45, top: 25.50, width: 6.9, height: 19.50 },
 ];
 
+// Anchor for the tin-picking hint label (see showTinHint further down) --
+// 75 is the middle (classic-grade) tin's own horizontal center
+// (71.55 + 6.9 / 2), which also happens to land exactly on the midpoint
+// between the first and third tins' centers (67.1 and 82.9), so this one
+// number centers the label over the whole three-tin cluster. Sits above
+// the tins (which start at top: 25.5) rather than below, in the clear
+// counter/wall space there -- nothing else in STATIC_ITEMS/MOVABLE_ITEMS
+// occupies top < 25.5.
+const TIN_HINT_LEFT = 75;
+const TIN_HINT_TOP = 13;
+
 // Scoop gauge -- the matcha-measuring counterpart to the heater's
 // .heater-temp-bar, sitting to the right of the tins with a clear gap
 // (ceremonial-grade, the rightmost tin, ends at 79.45 + 6.9 = 86.35) so it
@@ -162,6 +173,15 @@ const BIG_SPOON_START = {
   top: SCOOP_BAR_BOX.top + SCOOP_BAR_BOX.height / 2 - BIG_SPOON_SIZE.height / 2,
 };
 
+// Anchor for the "press Enter to pour" hint (see showSpoonHint further
+// down) -- fixed at the spoon's own spawn spot rather than tracking its
+// live (possibly dragged) position, since the highlight is only up for the
+// brief idle beat right after the spoon appears and retires the instant
+// beginDump runs -- same "anchor at the spot the thing first appears"
+// simplicity as every other hint in this file.
+const SPOON_HINT_LEFT = BIG_SPOON_START.left + BIG_SPOON_SIZE.width / 2;
+const SPOON_HINT_TOP = BIG_SPOON_START.top - 8;
+
 // One pre-made "spoon with matcha mound" image per tin/grade -- keyed the
 // same way as SCOOP_FILL_COLORS above (and with the same classic-grade
 // fallback), swapped in wholesale as the big spoon's image source rather
@@ -269,6 +289,16 @@ function heaterRelativeBox(imgLeft, imgTop, imgRight, imgBottom, imgWidth, imgHe
 
 const HEATER_BUTTON_BOX = heaterRelativeBox(33, 68.5, 85, 86.5, 337, 130);
 
+// Anchor for the "heat up water" hint (see showHeaterHint further down) --
+// left-aligned (not centered like the other hints) since the button sits
+// right in the corner near the frame's own left edge; centering via
+// translateX(-50%) here would risk pushing the box into negative left.
+// Placed below the heater plate + temp bar (HEATER_BOX ends at top 69,
+// TEMP_BAR_BOX ends at 75.4 -- see both above), the one clear stretch of
+// counter in this left column that nothing else occupies.
+const HEATER_HINT_LEFT = 2;
+const HEATER_HINT_TOP = 78;
+
 // Temperature gauge -- sits on the counter/table directly in front of the
 // heater rather than on the plate itself, so it's positioned as its own
 // fixed box (not derived from HEATER_BOX) on the counter surface below.
@@ -358,6 +388,25 @@ const MOVABLE_START = MOVABLE_ITEMS.reduce((acc, item) => {
   acc[item.key] = { left: item.left, top: item.top };
   return acc;
 }, {});
+
+// Anchor for the "pour water in the bowl" hint (see showKettleHint further
+// down) -- fixed at the kettle's own spawn spot (MOVABLE_ITEMS' kettle
+// entry) rather than tracking its live (possibly dragged) position, same
+// "anchor at the spot the thing first appears" simplicity as the spoon's
+// own hint -- the kettle hasn't been touched yet by the time this beat
+// starts (it only picks up right after the temp bar sequence finishes).
+// Centered above it (kettle top: 26.1), same open counter/wall space the
+// tin hint above already uses.
+const KETTLE_HINT_LEFT = MOVABLE_ITEMS[0].left + MOVABLE_ITEMS[0].width / 2;
+const KETTLE_HINT_TOP = MOVABLE_ITEMS[0].top - 12;
+
+// Anchor for the "start whisking" hint (see showWhiskHint further down) --
+// same "fixed at the item's own spawn spot" simplicity as the kettle hint
+// above. The whisk sits decoratively on the counter (MOVABLE_ITEMS' whisk
+// entry) up until this beat fires, so its resting spot is a reliable
+// anchor. Centered above it, clear of the whisk's own top (28.05).
+const WHISK_HINT_LEFT = MOVABLE_ITEMS[2].left + MOVABLE_ITEMS[2].width / 2;
+const WHISK_HINT_TOP = MOVABLE_ITEMS[2].top - 12;
 
 // Where the kettle steam anchors, as a fraction (0-1) of the kettle's own
 // box (its MOVABLE_ITEMS width/height). Horizontally lined up with the
@@ -674,6 +723,20 @@ function isOverMakeDrinkZone(leftPct, topPct) {
   );
 }
 
+// Once whisking's done and the player sends the bowl off (see bowlStage/
+// beginBowlCarry in the component below), it glides into the Make Drink
+// zone above rather than the screen advancing immediately -- this is how
+// long that glide takes before the bowl starts fading/shrinking away
+// (BOWL_VANISH_MS), comfortably longer than .station-item.movable's own
+// 0.2s left/top transition so it always finishes the glide first, same
+// reasoning as KETTLE_MOVE_MS/WHISK_MOVE_MS. The whisk stays behind on the
+// counter rather than going along for this -- only the bowl itself moves.
+const BOWL_CARRY_MOVE_MS = 350;
+// How long the shrink/fade-out itself takes (see .bowl-vanishing in
+// MatchaMaking.css) once the bowl's arrived at the Make Drink zone, before
+// it actually unmounts.
+const BOWL_VANISH_MS = 350;
+
 // Reads the fill's current live scaleX mid-transition (e.g. computed
 // style's transform matrix reports whatever the browser has interpolated
 // to at this exact frame) -- this is what lets stopping the gauge freeze
@@ -688,6 +751,18 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
   const containerRef = useRef(null);
   useFlatFocusNav(containerRef);
 
+  // First-visit highlight on the Order receipt button (top-right, see
+  // OrderReceiptButton.js/.css) -- on the moment this station mounts, so
+  // it's the very first thing that blinks here. Keeps flashing (hint label
+  // swapping between "check back at any time" (closed) and "close it back
+  // up" (open), see hintText/hintTextOpen below) through as many opens as
+  // the player likes, and only retires once they've opened *and then
+  // closed* it -- see the onToggle passed to <OrderReceiptButton> below,
+  // which is what flips this to false. That retirement is also the cue for
+  // the next highlight beat, on the tins themselves (see showTinHint further
+  // down, by selectedTin).
+  const [showOrderHint, setShowOrderHint] = useState(true);
+
   // Sends focus to the first matcha tin the moment this station mounts --
   // otherwise, ProgressBar's own autoFocus={isCurrent} (see ProgressBar.js)
   // would land focus on the bottom nav's "Matcha" step button instead, which
@@ -697,9 +772,18 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
   // overrides that native autofocus rather than racing it -- .selectable is
   // unique to the tins in this component (see STATIC_ITEMS' JSX below), so
   // the query always grabs the first (cafe-grade) tin specifically.
+  //
+  // Skipped for as long as showOrderHint is up -- that highlight moves
+  // focus onto the Order button itself (see OrderReceiptButton.js), and
+  // this effect running right after (children's effects fire before the
+  // parent's own, so this one would otherwise run second and steal focus
+  // straight back) would undo that. Once showOrderHint retires (opened then
+  // closed once), this fires and hands focus to the first tin, right as the
+  // tin highlight (showTinHint below) turns on for it.
   useEffect(() => {
+    if (showOrderHint) return;
     containerRef.current?.querySelector('.selectable')?.focus();
-  }, []);
+  }, [showOrderHint]);
 
   // ---- Heater power button: on/off toggle, plus a green/red "temp zone"
   // light keyed to how far the temp bar fill has progressed (see
@@ -892,6 +976,7 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
   // MOVABLE_START.kettle and returns straight to 'idle', ready to be picked
   // up again -- unlike the spoon, the kettle isn't a used-up item.
   const [kettleStage, setKettleStage] = useState('idle');
+
   // The bowl's own persistent "has water been poured in" state -- same
   // "doesn't reset on tin/selection changes" persistence as bowlPowder,
   // and the same caveat that a second pour just restarts this rather than
@@ -899,6 +984,16 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
   // BOWL_WATER_FILL_COLOR -- so just a presence flag in object form for
   // consistency with bowlPowder's shape).
   const [bowlWater, setBowlWater] = useState(null);
+
+  // Tenth highlight beat: picks up the instant the temp bar sequence
+  // finishes (tempBarVisible flipping false is exactly what focuses the
+  // kettle -- see the effect above) and retires the instant the water's
+  // actually poured into the bowl (bowlWater flips truthy the moment
+  // kettleStage reaches 'pouring' -- see that stage's effect further down),
+  // not just the moment the player starts the pour -- the flash/label
+  // should stay up through the whole glide-to-the-bowl beat and only clear
+  // once the water's actually landed.
+  const showKettleHint = !tempBarVisible && !bowlWater;
   // Bumped once per pour and used as bowlWater's React `key` -- same
   // force-a-fresh-mount reasoning as pourCount for the matcha mound, so
   // .bowl-water's grow animation reliably replays every time.
@@ -1013,13 +1108,14 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
     }
     // Same idea, for the *bowl* -- once whisking is done, dropping it on
     // the "Make Drink" label (see MAKE_DRINK_ZONE/isOverMakeDrinkZone
-    // above) sends it (and the whisk resting in it) on to the Milk
-    // Selection station instead of the ordinary placement below. Before
-    // whiskStage is 'done', or dropped anywhere else, this falls through
-    // same as always.
-    if (item.key === 'bowl' && whiskStage === 'done' && isOverMakeDrinkZone(drag.left, drag.top)) {
+    // above) carries it into that zone and fades it away (the whisk stays
+    // put on the counter), same beginBowlCarry sequence the bowl's own
+    // Enter press triggers (see handleBowlKeyDown further down) -- rather
+    // than the ordinary placement below. Before whiskStage is 'done', or
+    // dropped anywhere else, this falls through same as always.
+    if (item.key === 'bowl' && whiskStage === 'done' && bowlStage === 'idle' && isOverMakeDrinkZone(drag.left, drag.top)) {
       setDrag(null);
-      sendBowlToMilk();
+      beginBowlCarry();
       return;
     }
     const start = MOVABLE_START[item.key];
@@ -1060,22 +1156,62 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
     beginWhiskMix();
   };
 
-  // ---- "Make Drink": once whisking is done, sends the bowl (and the
-  // whisk resting in it) on to the next station -- see onSendToMilk (a
-  // prop from App.js, which stores it in state and passes it down to
-  // MilkSelection as incomingBowl) and MAKE_DRINK_ZONE/isOverMakeDrinkZone
-  // above for the drop-zone hit-test. Snapshotting bowlPowder here (rather
-  // than letting MilkSelection read this screen's own state, which won't
-  // exist anymore once onAdvance below swaps the active page away) is what
-  // lets the next screen know which grade's whisked-liquid image to show.
-  // onAdvance immediately follows, same "current step's done, move on"
-  // action the ProgressBar's current-step dot already triggers -- this is
-  // just a second, thematically-appropriate way to trigger the exact same
-  // transition, not a replacement for it.
-  const sendBowlToMilk = () => {
-    if (!bowlPowder) return;
+  // ---- "Make Drink": once whisking is done, carries the bowl into the
+  // Make Drink zone and fades it away (the whisk stays behind on the
+  // counter -- it was only ever resting in the bowl visually, not actually
+  // tracking its position), rather than advancing to the next station
+  // immediately -- the player still moves on via the ordinary ProgressBar
+  // action (Right arrow / the current-step dot) whenever they're actually
+  // ready, same as leaving any other station -- see the final highlight
+  // beat further down that flashes the bar once this is done.
+  //   'idle'      -- normal, bowl still sits wherever it was left.
+  //   'carrying'  -- confirmed (dropped on the Make Drink label, or
+  //                  Enter/Space) -- gliding to the zone's own center. Still
+  //                  fully visible, no longer draggable.
+  //   'vanishing' -- arrived; shrinking/fading away (see .bowl-vanishing in
+  //                  MatchaMaking.css).
+  //   'sent'      -- fade's finished; the bowl stops rendering entirely
+  //                  (see the MOVABLE_ITEMS.map JSX below).
+  const [bowlStage, setBowlStage] = useState('idle');
+
+  // Twelfth highlight beat: picks up the instant whisking finishes
+  // (whiskStage settles on 'done') and retires the instant the player
+  // actually sends the bowl off (beginBowlCarry moves bowlStage off
+  // 'idle'), same "flash until acted on" shape as every earlier beat.
+  const showBowlHint = whiskStage === 'done' && bowlStage === 'idle';
+
+  useEffect(() => {
+    if (bowlStage === 'carrying') {
+      const t = setTimeout(() => setBowlStage('vanishing'), BOWL_CARRY_MOVE_MS);
+      return () => clearTimeout(t);
+    }
+    if (bowlStage === 'vanishing') {
+      const t = setTimeout(() => setBowlStage('sent'), BOWL_VANISH_MS);
+      return () => clearTimeout(t);
+    }
+    return undefined;
+  }, [bowlStage]);
+
+  // Snapshotting bowlPowder here (rather than letting MilkSelection read
+  // this screen's own state, which won't exist anymore once the player
+  // eventually does advance away) is what lets the next screen know which
+  // grade's whisked-liquid image to show -- see onSendToMilk (a prop from
+  // App.js, which stores it in state and passes it down to MilkSelection as
+  // incomingBowl). Fired right away, at the moment the bowl starts its
+  // carry, not deferred until the fade finishes -- the data hand-off itself
+  // doesn't need to wait on the animation, only the actual station
+  // transition (now decoupled from this entirely) would.
+  const beginBowlCarry = () => {
+    if (!bowlPowder || whiskStage !== 'done' || bowlStage !== 'idle') return;
     onSendToMilk?.({ ...bowlPowder });
-    onAdvance();
+    setItemPositions((prev) => ({
+      ...prev,
+      bowl: {
+        left: MAKE_DRINK_ZONE.left + MAKE_DRINK_ZONE.width / 2 - bowlItem.width / 2,
+        top: MAKE_DRINK_ZONE.top + MAKE_DRINK_ZONE.height / 2 - bowlItem.height / 2,
+      },
+    }));
+    setBowlStage('carrying');
   };
 
   // D-pad/keyboard equivalent of dropping the bowl on the Make Drink label
@@ -1084,10 +1220,10 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
   const handleBowlKeyDown = (e) => {
     const action = getActionFromKeyEvent(e);
     if (action !== 'Enter') return;
-    if (whiskStage !== 'done') return;
+    if (whiskStage !== 'done' || bowlStage !== 'idle') return;
     if (shouldDebounceEnter(e)) return;
     e.preventDefault();
-    sendBowlToMilk();
+    beginBowlCarry();
   };
 
   // ---- Matcha tin selection: reveals the scoop gauge -------------------
@@ -1100,6 +1236,14 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
   // Enter on the already-confirmed tin toggles it back off; Enter on a
   // different tin swaps straight to that one instead.
   const [selectedTin, setSelectedTin] = useState(null);
+
+  // Fifth highlight beat: picks up the instant showOrderHint retires (see
+  // its comment above) -- the three tins themselves flash and a hint
+  // points out arrow keys + Enter, same "the highlighted thing becomes the
+  // next thing selected" flow as every other beat, retiring in turn once
+  // selectedTin actually has a real grade in it (Enter confirms one --
+  // see handleTinKeyDown below).
+  const showTinHint = !showOrderHint && !selectedTin;
 
   const handleTinKeyDown = (item) => (e) => {
     const action = getActionFromKeyEvent(e);
@@ -1157,12 +1301,29 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
   //                (unmounted -- see the JSX below) for the rest of this
   //                tin selection.
   const [bigSpoonStage, setBigSpoonStage] = useState('idle');
+
+  // Seventh highlight beat: picks up the instant the spoon itself appears
+  // (scoopConfirmed flipping true is exactly what mounts it -- see the JSX
+  // below) and retires the instant the player actually starts the pour
+  // (beginDump moves bigSpoonStage off 'idle' -- see beginDump further
+  // down) -- there's no need to keep flashing once they've already acted.
+  const showSpoonHint = scoopConfirmed && bigSpoonStage === 'idle';
+
   // The bowl's own persistent "what's in it" state -- deliberately *not*
   // reset when selectedTin changes (unlike the state above), so closing the
   // tin selector or picking a different tin doesn't erase matcha that's
   // already been tipped into the bowl. { color } | null. Mounted the moment
   // 'pouring' starts (see the stage-transition effect below).
   const [bowlPowder, setBowlPowder] = useState(null);
+
+  // Eleventh highlight beat: picks up the instant both the matcha and the
+  // water are actually in the bowl and the kettle's back to idle (the same
+  // conditions beginWhiskMix/handleWhiskKeyDown themselves gate on -- see
+  // those further down), and retires the instant the player actually
+  // starts whisking (beginWhiskMix moves whiskStage off 'idle'), same
+  // "flash until acted on" shape as every earlier beat.
+  const showWhiskHint = Boolean(bowlPowder) && Boolean(bowlWater) && kettleStage === 'idle' && whiskStage === 'idle';
+
   // Bumped once per dump (see beginDump below) and used as the mound's
   // React `key` in the JSX -- forces a fresh mount of the mound element on
   // every pour, rather than reusing/restyling whatever div was already
@@ -1314,6 +1475,13 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
     }
     return undefined;
   }, [bigSpoonStage, scoopColor, selectedTin]);
+
+  // Eighth highlight beat: picks up the instant the pour finishes
+  // (bigSpoonStage settling on 'done' -- see the effect above) and retires
+  // the instant the player actually switches the heater on (its own native
+  // button onClick flips heaterOn -- see the JSX below) -- same "flash
+  // until acted on" shape as every earlier beat.
+  const showHeaterHint = bigSpoonStage === 'done' && !heaterOn;
 
   // Sends focus to the heater's power button once the matcha's fully
   // poured -- bigSpoonStage flipping to 'done' is exactly the moment the
@@ -1691,7 +1859,7 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
           type="button"
           className={`heater-button${heaterOn ? ' on' : ''}${
             tempZone === 'target' ? ' zone-green' : tempZone === 'over' ? ' zone-red' : ''
-          }`}
+          }${showHeaterHint ? ' heater-button-highlight' : ''}`}
           data-focusable
           aria-pressed={heaterOn}
           aria-label={heaterOn ? 'Turn heater off' : 'Turn heater on'}
@@ -1703,43 +1871,70 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
             height: `${HEATER_BUTTON_BOX.height}%`,
           }}
         />
-        {heaterOn && tempBarVisible && (
-          <div
-            ref={barRef}
-            className={`heater-temp-bar${fillActive ? ' on' : ''}`}
-            data-focusable
-            tabIndex={0}
-            role="button"
-            aria-label="Temperature gauge. Press Enter to lock in the current temperature."
-            onKeyDown={handleBarKeyDown}
-            onClick={stopBar}
-            style={{
-              left: `${TEMP_BAR_BOX.left}%`,
-              top: `${TEMP_BAR_BOX.top}%`,
-              width: `${TEMP_BAR_BOX.width}%`,
-              height: `${TEMP_BAR_BOX.height}%`,
-            }}
+        {showHeaterHint && (
+          <p
+            className="heater-button-hint"
+            style={{ left: `${HEATER_HINT_LEFT}%`, top: `${HEATER_HINT_TOP}%` }}
           >
+            Use Enter to heat up water.
+          </p>
+        )}
+        {heaterOn && tempBarVisible && (
+          <>
+            {/* Ninth highlight beat: picks up the instant the temp gauge
+                itself appears (barRunning flips true the same render the
+                heater's switched on -- see the reset effect above) and
+                retires the instant the player actually stops it (stopBar
+                sets barRunning false right away -- see stopBar above),
+                same "flash until acted on" shape as the scoop bar's own
+                beat. */}
             <div
-              ref={fillRef}
-              className="heater-temp-bar-fill"
-              style={{ transitionDuration: `${FILL_DURATION_MS}ms` }}
-            />
-            {TEMP_BAR_TICKS.map((tick) => (
-              <span
-                key={tick.key}
-                className="heater-temp-bar-tick"
-                style={{ left: `${tick.left}%`, width: `${tick.width}%` }}
+              ref={barRef}
+              className={`heater-temp-bar${fillActive ? ' on' : ''}${
+                barRunning ? ' heater-temp-bar-highlight' : ''
+              }`}
+              data-focusable
+              tabIndex={0}
+              role="button"
+              aria-label="Temperature gauge. Press Enter to lock in the current temperature."
+              onKeyDown={handleBarKeyDown}
+              onClick={stopBar}
+              style={{
+                left: `${TEMP_BAR_BOX.left}%`,
+                top: `${TEMP_BAR_BOX.top}%`,
+                width: `${TEMP_BAR_BOX.width}%`,
+                height: `${TEMP_BAR_BOX.height}%`,
+              }}
+            >
+              <div
+                ref={fillRef}
+                className="heater-temp-bar-fill"
+                style={{ transitionDuration: `${FILL_DURATION_MS}ms` }}
               />
-            ))}
-          </div>
+              {TEMP_BAR_TICKS.map((tick) => (
+                <span
+                  key={tick.key}
+                  className="heater-temp-bar-tick"
+                  style={{ left: `${tick.left}%`, width: `${tick.width}%` }}
+                />
+              ))}
+            </div>
+            {barRunning && (
+              <p
+                className="heater-temp-bar-hint"
+                style={{ left: `${TEMP_BAR_BOX.left}%`, top: `${TEMP_BAR_BOX.top + TEMP_BAR_BOX.height + 2}%` }}
+              >
+                Use your space key to get the right temperature.
+              </p>
+            )}
+          </>
         )}
         {STATIC_ITEMS.map((item) => (
           <img
             key={item.key}
             src={item.src}
             alt={`${item.alt}. Select it and press Enter to measure a scoop.`}
-            className="station-item selectable"
+            className={`station-item selectable${showTinHint ? ' tin-highlight' : ''}`}
             data-focusable
             tabIndex={0}
             style={{
@@ -1751,6 +1946,14 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
             onKeyDown={handleTinKeyDown(item)}
           />
         ))}
+        {showTinHint && (
+          <p
+            className="matcha-tin-hint"
+            style={{ left: `${TIN_HINT_LEFT}%`, top: `${TIN_HINT_TOP}%` }}
+          >
+            Use your arrow keys and Enter to pick the matcha grade your customer requested.
+          </p>
+        )}
         {selectedTin && (
           <>
             {/* The whole measuring assembly (bar + fill/markers/slider,
@@ -1766,9 +1969,18 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
                 (below) take over. */}
             {!scoopConfirmed && (
               <>
+                {/* Sixth highlight beat: picks up the instant the measuring
+                    game itself opens (scoopRunning flips true the moment
+                    selectedTin is set -- see the effect above), same
+                    flashing-halo + hint-label pattern as every earlier beat.
+                    Retires the instant the player actually stops the slider
+                    (stopScoop sets scoopRunning false right away, well
+                    before scoopConfirmed's own delayed flip -- see stopScoop
+                    above) -- there's no need to keep flashing once they've
+                    already acted. */}
                 <div
                   ref={scoopBarRef}
-                  className="scoop-bar"
+                  className={`scoop-bar${scoopRunning ? ' scoop-bar-highlight' : ''}`}
                   data-focusable
                   tabIndex={0}
                   role="button"
@@ -1808,6 +2020,11 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
                   </div>
                   <div ref={scoopSliderRef} className="scoop-bar-slider" aria-hidden="true" />
                 </div>
+                {scoopRunning && (
+                  <p className="scoop-bar-hint">
+                    Use your space key to choose the right measurement, be as accurate as possible!
+                  </p>
+                )}
                 {SCOOP_SPOON_ITEMS.map((item) => (
                   <img
                     key={item.key}
@@ -1846,7 +2063,7 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
                 alt="Measured scoop of matcha. Drag it onto the bowl to tip the powder in, or select it and press Enter."
                 className={`big-spoon${bigSpoonDrag ? ' dragging' : ''}${
                   bigSpoonStage !== 'idle' ? ' settling' : ''
-                }`}
+                }${showSpoonHint ? ' big-spoon-highlight' : ''}`}
                 data-focusable
                 tabIndex={0}
                 draggable={false}
@@ -1862,6 +2079,14 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
                 onKeyDown={handleBigSpoonKeyDown}
               />
             )}
+            {showSpoonHint && (
+              <p
+                className="big-spoon-hint"
+                style={{ left: `${SPOON_HINT_LEFT}%`, top: `${SPOON_HINT_TOP}%` }}
+              >
+                Use Enter to pour the matcha powder on your bowl.
+              </p>
+            )}
           </>
         )}
         {MOVABLE_ITEMS.map((item) => {
@@ -1876,7 +2101,25 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
           const isKettle = item.key === 'kettle';
           const isWhisk = item.key === 'whisk';
           const isBowl = item.key === 'bowl';
-          const settling = (isKettle && kettleStage !== 'idle') || (isWhisk && whiskStage !== 'idle');
+          // Once the bowl's fully faded away (bowlStage 'sent' -- see
+          // beginBowlCarry above), only the bowl itself stops rendering --
+          // the whisk stays behind on the counter rather than being carried
+          // off with it (it was only ever resting in the bowl visually
+          // while whisking; its own itemPositions entry never actually
+          // tracks the bowl's position, so there's nothing to "carry" for
+          // it in the first place).
+          if (isBowl && bowlStage === 'sent') return null;
+          const settling =
+            (isKettle && kettleStage !== 'idle') ||
+            (isWhisk && whiskStage !== 'idle') ||
+            (isBowl && bowlStage !== 'idle');
+          // The bowl shrinks/fades away on its own once it's arrived at the
+          // Make Drink zone (bowlStage 'vanishing') -- not yet during
+          // 'carrying', which should still read as a plain glide, same
+          // "settle first, then react" shape as .pouring/.mixing below
+          // only applying once their own glide-in is over. The whisk isn't
+          // included here -- see the comment above.
+          const leaving = isBowl && bowlStage === 'vanishing';
           const pouring = isKettle && (kettleStage === 'moving' || kettleStage === 'pouring');
           // Stirring wobble (see .mixing/@keyframes whiskStir in
           // MatchaMaking.css) only plays once the whisk's actually settled
@@ -1905,12 +2148,14 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
                 isWhisk
                   ? `${item.alt}. Drag onto the bowl to mix once the matcha and water are both in, or select it and press Enter.`
                   : isBowl && whiskStage === 'done'
-                  ? `${item.alt}. Drag to the Make Drink label to send it to the next station, or select it and press Enter.`
+                  ? `${item.alt}. Drag to the Make Drink zone to send it off, or select it and press Enter.`
                   : `${item.alt}. Drag to move.`
               }
               className={`station-item movable${dragging ? ' dragging' : ''}${settling ? ' settling' : ''}${
                 pouring ? ' pouring' : ''
-              }${mixing ? ' mixing' : ''}`}
+              }${mixing ? ' mixing' : ''}${isKettle && showKettleHint ? ' kettle-highlight' : ''}${
+                isWhisk && showWhiskHint ? ' whisk-highlight' : ''
+              }${isBowl && showBowlHint ? ' bowl-highlight' : ''}${leaving ? ' bowl-vanishing' : ''}`}
               data-focusable
               tabIndex={0}
               draggable={false}
@@ -1976,6 +2221,30 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
             />
           );
         })}
+        {showKettleHint && (
+          <p
+            className="kettle-hint"
+            style={{ left: `${KETTLE_HINT_LEFT}%`, top: `${KETTLE_HINT_TOP}%` }}
+          >
+            Use Enter to pour water in the bowl.
+          </p>
+        )}
+        {showWhiskHint && (
+          <p
+            className="whisk-hint"
+            style={{ left: `${WHISK_HINT_LEFT}%`, top: `${WHISK_HINT_TOP}%` }}
+          >
+            Use Enter to start whisking.
+          </p>
+        )}
+        {showBowlHint && (
+          <p
+            className="bowl-hint"
+            style={{ left: `${bowlPos.left + bowlItem.width / 2}%`, top: `${bowlPos.top - 6}%` }}
+          >
+            Use Enter to carry your matcha bowl to the next station.
+          </p>
+        )}
         {/* Falling-powder pour effect -- see pourLeft/pourTop/pourHeight
             above -- only while the spoon's actually holding at its
             hover-above-the-bowl spot (the 'moving' stage is still just the
@@ -2121,9 +2390,9 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
             MatchaMaking.css). Reuses growFromCenter for a quick fade/
             grow-in so it doesn't just harshly pop in the instant mixing
             ends. */}
-        {whiskStage === 'done' && bowlPowder && (
+        {whiskStage === 'done' && bowlPowder && bowlStage !== 'sent' && (
           <img
-            className="bowl-whisked-liquid"
+            className={`bowl-whisked-liquid${bowlStage === 'vanishing' ? ' bowl-vanishing' : ''}`}
             aria-hidden="true"
             draggable={false}
             src={WHISKED_LIQUID_IMAGES[bowlPowder.grade] ?? WHISKED_LIQUID_IMAGES['classic-grade']}
@@ -2146,37 +2415,52 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
             focusable element is what a screen reader user would be
             interacting with instead. */}
         {whiskStage === 'mixing' && (
-          <div
-            className="mix-bar"
-            aria-hidden="true"
-            style={{
-              left: `${mixBarPos.left}%`,
-              top: `${mixBarPos.top}%`,
-              width: `${MIX_BAR_WIDTH}%`,
-              height: `${MIX_BAR_HEIGHT}%`,
-            }}
-          >
-            <span
-              className="mix-bar-zone"
+          <>
+            {/* Twelfth highlight beat: flashes for the bar's whole time on
+                screen (whiskStage === 'mixing' is exactly when it's mounted
+                -- there's no single "confirm" press to retire this one on,
+                unlike every earlier beat -- the arrow keys are the ongoing
+                gameplay itself for the whole minigame, not a one-shot
+                action). Naturally goes away the instant mixing ends and the
+                bar unmounts. */}
+            <div
+              className="mix-bar mix-bar-highlight"
+              aria-hidden="true"
               style={{
-                left: `${MIX_ZONE_LEFT_FRAC * 100}%`,
-                width: `${MIX_ZONE_WIDTH_FRAC * 100}%`,
+                left: `${mixBarPos.left}%`,
+                top: `${mixBarPos.top}%`,
+                width: `${MIX_BAR_WIDTH}%`,
+                height: `${MIX_BAR_HEIGHT}%`,
               }}
-            />
-            <span
-              ref={mixBallRef}
-              className="mix-ball"
-              // Initial left matches exactly where the physics effect
-              // itself resets mixPositionRef to (50 - half the ball's own
-              // width) -- just so the ball doesn't flash at the left edge
-              // for the single frame before that effect's first tick runs
-              // and takes over via direct DOM writes from here on.
-              style={{
-                left: `${50 - (MIX_BALL_WIDTH_FRAC * 100) / 2}%`,
-                width: `${MIX_BALL_WIDTH_FRAC * 100}%`,
-              }}
-            />
-          </div>
+            >
+              <span
+                className="mix-bar-zone"
+                style={{
+                  left: `${MIX_ZONE_LEFT_FRAC * 100}%`,
+                  width: `${MIX_ZONE_WIDTH_FRAC * 100}%`,
+                }}
+              />
+              <span
+                ref={mixBallRef}
+                className="mix-ball"
+                // Initial left matches exactly where the physics effect
+                // itself resets mixPositionRef to (50 - half the ball's own
+                // width) -- just so the ball doesn't flash at the left edge
+                // for the single frame before that effect's first tick runs
+                // and takes over via direct DOM writes from here on.
+                style={{
+                  left: `${50 - (MIX_BALL_WIDTH_FRAC * 100) / 2}%`,
+                  width: `${MIX_BALL_WIDTH_FRAC * 100}%`,
+                }}
+              />
+            </div>
+            <p
+              className="mix-bar-hint"
+              style={{ left: `${mixBarPos.left + MIX_BAR_WIDTH / 2}%`, top: `${mixBarPos.top - 11}%` }}
+            >
+              Use your arrow keys to balance the ball inside the green area and whisk without spilling.
+            </p>
+          </>
         )}
         {/* Spill-droplet burst -- shown whenever the ball drifts out of the
             green zone during mixing (see spillBurstCount/lastSpillAt in the
@@ -2202,17 +2486,20 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
             <span className="bowl-spill-drop bowl-spill-drop-3" />
           </div>
         )}
-        {/* "Make Drink" drop-zone -- only appears once whisking is done
-            (see whiskStage/MAKE_DRINK_ZONE/isOverMakeDrinkZone above). Not
-            itself focusable/clickable -- it's a drop target the *bowl*
-            gets dragged onto (handlePointerUp's bowl branch) or sent to via
-            the bowl's own Enter press (handleBowlKeyDown), same "the label
-            just marks a zone, the movable item is what's actually
-            selected" pattern the ice box/cup drop zones use on the Milk
-            Selection screen. aria-hidden since the bowl's own alt text
+        {/* "Make Drink" drop-zone -- appears once whisking is done and
+            disappears the instant the bowl actually heads there (bowlStage
+            leaving 'idle' -- see beginBowlCarry above), same beat as the
+            bowl's own highlight/hint retiring, since the bowl's already
+            gliding to this exact spot by then and the marker's served its
+            purpose. Not itself focusable/clickable -- it's a drop target
+            the *bowl* gets dragged onto (handlePointerUp's bowl branch) or
+            sent to via the bowl's own Enter press (handleBowlKeyDown), same
+            "the label just marks a zone, the movable item is what's
+            actually selected" pattern the ice box/cup drop zones use on the
+            Milk Selection screen. aria-hidden since the bowl's own alt text
             (see the isBowl branch above) already describes this action to
             screen readers. */}
-        {whiskStage === 'done' && (
+        {whiskStage === 'done' && bowlStage === 'idle' && (
           <div
             className="make-drink-zone"
             aria-hidden="true"
@@ -2226,12 +2513,32 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
             Make Drink
           </div>
         )}
-        <OrderReceiptButton order={order} />
+        <OrderReceiptButton
+          order={order}
+          highlight={showOrderHint}
+          hintText="Use your Enter key to check back on your customer's order at any time."
+          hintTextOpen="Use your Enter key to close it back up."
+          onToggle={(nowOpen) => {
+            // Only the *closing* toggle (nowOpen === false) retires this
+            // highlight -- the opening one fires first and shouldn't, since
+            // the player hasn't closed it back up yet (see hintTextOpen
+            // above, which is still telling them to do exactly that).
+            if (!nowOpen) setShowOrderHint(false);
+          }}
+        />
         <ProgressBar
           activeStep={activeStep}
           customerNumber={customerNumber}
           onNavigate={onNavigate}
           onAdvance={onAdvance}
+          // Final highlight beat for this station: once the bowl's fully
+          // sent off (bowlStage 'sent' -- see beginBowlCarry above), there's
+          // nothing left to do here, so the current-step dot itself picks
+          // up the flashing baton, same opt-in highlightCurrentStep/
+          // currentStepHint props CustomerOrdering already uses for its own
+          // matching beat (see ProgressBar.js/.css).
+          highlightCurrentStep={bowlStage === 'sent'}
+          currentStepHint="Use your right arrow key to move on to the base adding station."
         />
       </div>
     </div>

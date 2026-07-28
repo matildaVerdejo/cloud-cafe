@@ -94,6 +94,77 @@
     drop-shadow(0 0 12px rgba(255, 255, 255, 0.75));
 }
 
+/* Fifth highlight beat (see showTinHint in MatchaMaking.js) -- all three
+   tins flash at once until a grade's picked. filter: drop-shadow rather
+   than box-shadow since these are <img> elements (drop-shadow follows the
+   art's own alpha shape instead of drawing a box), but otherwise the same
+   light-green (rgb(130, 190, 110)) two-layer soft glow used for every other
+   highlight beat across the app, with the item's own resting drop-shadow
+   (0 4px 6px rgba(0,0,0,0.18)) kept as the constant first layer so it
+   doesn't vanish between flashes. */
+.station-item.selectable.tin-highlight {
+  animation: tinHaloBlink 1.1s ease-in-out infinite;
+}
+
+@keyframes tinHaloBlink {
+  0%,
+  100% {
+    filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.18)) drop-shadow(0 0 14px rgba(130, 190, 110, 0.9))
+      drop-shadow(0 0 28px rgba(130, 190, 110, 0.55));
+  }
+  50% {
+    filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.18)) drop-shadow(0 0 0 rgba(130, 190, 110, 0))
+      drop-shadow(0 0 0 rgba(130, 190, 110, 0));
+  }
+}
+
+/* Hint label for the same beat -- centered above the tin cluster (see
+   TIN_HINT_LEFT/TIN_HINT_TOP in MatchaMaking.js). Same dashed-border/
+   mint-pastel/pop-in-plus-pulse "instructional callout" look used for
+   every other hint in this project (.make-drink-zone above,
+   .progress-station-hint/.order-receipt-hint/.ordering-*-hint elsewhere). */
+.matcha-tin-hint {
+  position: absolute;
+  transform: translateX(-50%);
+  margin: 0;
+  box-sizing: border-box;
+  max-width: min(420px, 30vw);
+  padding: min(10px, 0.55vw) min(20px, 1.05vw);
+  border-radius: min(16px, 0.85vw);
+  border: min(3px, 0.16vw) dashed rgba(90, 138, 79, 0.75);
+  background: rgba(232, 248, 224, 0.92);
+  color: #2f4a28;
+  font-family: 'Pixelify Sans', cursive;
+  font-weight: 700;
+  font-size: min(22px, 1.05vw);
+  text-align: center;
+  letter-spacing: 0.01em;
+  pointer-events: none;
+  z-index: 5;
+  animation: matchaTinHintIn 0.3s ease-out both, matchaTinHintPulse 2s ease-in-out 0.3s infinite;
+}
+
+@keyframes matchaTinHintIn {
+  0% {
+    opacity: 0;
+    transform: translateX(-50%) translateY(6px) scale(0.92);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0) scale(1);
+  }
+}
+
+@keyframes matchaTinHintPulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(90, 138, 79, 0.35);
+  }
+  50% {
+    box-shadow: 0 0 0 6px rgba(90, 138, 79, 0);
+  }
+}
+
 /* Movable items (kettle, bowl, whisk): draggable anywhere on the counter,
    D-pad-selectable. Re-enables pointer-events (overriding the base
    .station-item rule above) and adds the drag/focus treatment, following
@@ -129,6 +200,224 @@
     drop-shadow(0 0 6px rgba(255, 255, 255, 0.95))
     drop-shadow(0 0 12px rgba(255, 255, 255, 0.75));
 }
+
+/* Tenth highlight beat (see showKettleHint in MatchaMaking.js) -- flashes
+   the kettle the instant the temp bar sequence finishes, retiring the
+   instant the player starts the pour. Same filter: drop-shadow approach as
+   .station-item.selectable.tin-highlight/.big-spoon.big-spoon-highlight
+   (this is an <img> too), same light-green (rgb(130, 190, 110)) two-layer
+   soft glow as every other beat, with the item's own resting drop-shadow
+   kept as the constant first layer. */
+.station-item.movable.kettle-highlight {
+  animation: kettleHaloBlink 1.1s ease-in-out infinite;
+}
+
+@keyframes kettleHaloBlink {
+  0%,
+  100% {
+    filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.18)) drop-shadow(0 0 14px rgba(130, 190, 110, 0.9))
+      drop-shadow(0 0 28px rgba(130, 190, 110, 0.55));
+  }
+  50% {
+    filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.18)) drop-shadow(0 0 0 rgba(130, 190, 110, 0))
+      drop-shadow(0 0 0 rgba(130, 190, 110, 0));
+  }
+}
+
+/* Hint label for the same beat -- centered above the kettle's spawn spot
+   (see KETTLE_HINT_LEFT/KETTLE_HINT_TOP in MatchaMaking.js), same
+   dashed-border/mint-pastel/pop-in-plus-pulse look as every other hint in
+   this project. */
+.kettle-hint {
+  position: absolute;
+  transform: translateX(-50%);
+  margin: 0;
+  box-sizing: border-box;
+  max-width: min(320px, 20vw);
+  padding: min(10px, 0.55vw) min(18px, 0.95vw);
+  border-radius: min(16px, 0.85vw);
+  border: min(3px, 0.16vw) dashed rgba(90, 138, 79, 0.75);
+  background: rgba(232, 248, 224, 0.92);
+  color: #2f4a28;
+  font-family: 'Pixelify Sans', cursive;
+  font-weight: 700;
+  font-size: min(20px, 0.95vw);
+  text-align: center;
+  letter-spacing: 0.01em;
+  pointer-events: none;
+  z-index: 6;
+  animation: kettleHintIn 0.3s ease-out both, kettleHintPulse 2s ease-in-out 0.3s infinite;
+}
+
+@keyframes kettleHintIn {
+  0% {
+    opacity: 0;
+    transform: translateX(-50%) translateY(6px) scale(0.92);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0) scale(1);
+  }
+}
+
+@keyframes kettleHintPulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(90, 138, 79, 0.35);
+  }
+  50% {
+    box-shadow: 0 0 0 6px rgba(90, 138, 79, 0);
+  }
+}
+
+/* Eleventh highlight beat (see showWhiskHint in MatchaMaking.js) -- flashes
+   the whisk the instant both the matcha and water are in the bowl and the
+   kettle's back to idle, retiring the instant the player starts whisking.
+   Same filter: drop-shadow approach as .kettle-highlight (this is an <img>
+   too), same light-green (rgb(130, 190, 110)) two-layer soft glow as every
+   other beat, with the item's own resting drop-shadow kept as the constant
+   first layer. */
+.station-item.movable.whisk-highlight {
+  animation: whiskHaloBlink 1.1s ease-in-out infinite;
+}
+
+@keyframes whiskHaloBlink {
+  0%,
+  100% {
+    filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.18)) drop-shadow(0 0 14px rgba(130, 190, 110, 0.9))
+      drop-shadow(0 0 28px rgba(130, 190, 110, 0.55));
+  }
+  50% {
+    filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.18)) drop-shadow(0 0 0 rgba(130, 190, 110, 0))
+      drop-shadow(0 0 0 rgba(130, 190, 110, 0));
+  }
+}
+
+/* Hint label for the same beat -- centered above the whisk's spawn spot
+   (see WHISK_HINT_LEFT/WHISK_HINT_TOP in MatchaMaking.js), same
+   dashed-border/mint-pastel/pop-in-plus-pulse look as every other hint in
+   this project. */
+.whisk-hint {
+  position: absolute;
+  transform: translateX(-50%);
+  margin: 0;
+  box-sizing: border-box;
+  max-width: min(320px, 20vw);
+  padding: min(10px, 0.55vw) min(18px, 0.95vw);
+  border-radius: min(16px, 0.85vw);
+  border: min(3px, 0.16vw) dashed rgba(90, 138, 79, 0.75);
+  background: rgba(232, 248, 224, 0.92);
+  color: #2f4a28;
+  font-family: 'Pixelify Sans', cursive;
+  font-weight: 700;
+  font-size: min(20px, 0.95vw);
+  text-align: center;
+  letter-spacing: 0.01em;
+  pointer-events: none;
+  z-index: 6;
+  animation: whiskHintIn 0.3s ease-out both, whiskHintPulse 2s ease-in-out 0.3s infinite;
+}
+
+@keyframes whiskHintIn {
+  0% {
+    opacity: 0;
+    transform: translateX(-50%) translateY(6px) scale(0.92);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0) scale(1);
+  }
+}
+
+@keyframes whiskHintPulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(90, 138, 79, 0.35);
+  }
+  50% {
+    box-shadow: 0 0 0 6px rgba(90, 138, 79, 0);
+  }
+}
+
+/* Thirteenth highlight beat (see showBowlHint in MatchaMaking.js) -- flashes
+   the bowl the instant whisking finishes, retiring the instant the player
+   sends it off. Same filter: drop-shadow approach as .kettle-highlight/
+   .whisk-highlight (this is an <img> too), same light-green
+   (rgb(130, 190, 110)) two-layer soft glow as every other beat, with the
+   item's own resting drop-shadow kept as the constant first layer. */
+.station-item.movable.bowl-highlight {
+  animation: bowlHaloBlink 1.1s ease-in-out infinite;
+}
+
+@keyframes bowlHaloBlink {
+  0%,
+  100% {
+    filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.18)) drop-shadow(0 0 14px rgba(130, 190, 110, 0.9))
+      drop-shadow(0 0 28px rgba(130, 190, 110, 0.55));
+  }
+  50% {
+    filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.18)) drop-shadow(0 0 0 rgba(130, 190, 110, 0))
+      drop-shadow(0 0 0 rgba(130, 190, 110, 0));
+  }
+}
+
+/* Hint label for the same beat -- tracks wherever the bowl currently is
+   (see the inline left/top math in MatchaMaking.js, derived from bowlPos
+   live, same "follow the draggable item" reasoning as .mix-bar-hint
+   tracking mixBarPos), rather than a fixed spawn-spot anchor -- unlike the
+   kettle/whisk, the bowl's very likely already been dragged around by this
+   point. Same dashed-border/mint-pastel/pop-in-plus-pulse look as every
+   other hint in this project. */
+.bowl-hint {
+  position: absolute;
+  transform: translateX(-50%);
+  margin: 0;
+  box-sizing: border-box;
+  max-width: min(360px, 22vw);
+  padding: min(10px, 0.55vw) min(18px, 0.95vw);
+  border-radius: min(16px, 0.85vw);
+  border: min(3px, 0.16vw) dashed rgba(90, 138, 79, 0.75);
+  background: rgba(232, 248, 224, 0.92);
+  color: #2f4a28;
+  font-family: 'Pixelify Sans', cursive;
+  font-weight: 700;
+  font-size: min(20px, 0.95vw);
+  text-align: center;
+  letter-spacing: 0.01em;
+  pointer-events: none;
+  z-index: 6;
+  animation: bowlHintIn 0.3s ease-out both, bowlHintPulse 2s ease-in-out 0.3s infinite;
+}
+
+@keyframes bowlHintIn {
+  0% {
+    opacity: 0;
+    transform: translateX(-50%) translateY(6px) scale(0.92);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0) scale(1);
+  }
+}
+
+@keyframes bowlHintPulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(90, 138, 79, 0.35);
+  }
+  50% {
+    box-shadow: 0 0 0 6px rgba(90, 138, 79, 0);
+  }
+}
+
+/* .bowl-vanishing itself (shared by the bowl and the whisked-liquid overlay
+   still painted on it -- the whisk stays behind on the counter, not
+   included here) is declared further down, right after .bowl-whisked-
+   liquid -- that image also sets its own `animation` (growFromCenter), and
+   CSS's equal-specificity tiebreak favors whichever single-class rule
+   comes *later* in the file, so this needs to be declared after it there
+   to actually win the override on that element too. See that block for the
+   rule + keyframes themselves. */
 
 /* Applies once either the kettle's water-pour sequence (kettleStage
    'moving'/'pouring' in MatchaMaking.js -- see beginKettleDump there) or
@@ -260,6 +549,76 @@
     0 0 10px 4px rgba(224, 69, 58, 0.85);
 }
 
+/* Eighth highlight beat (see showHeaterHint in MatchaMaking.js) -- flashes
+   the instant the pour finishes, retiring the instant the heater's
+   switched on. Only ever applied while the button's in its plain/off
+   state (showHeaterHint requires !heaterOn), so it's safe to just append
+   two more box-shadow layers after the plain state's own three (depth,
+   focus-ring placeholder, on-glow placeholder) rather than needing its own
+   zone-style override. Same light-green (rgb(130, 190, 110)) two-layer
+   soft glow as every other beat. */
+.heater-button.heater-button-highlight {
+  animation: heaterButtonHaloBlink 1.1s ease-in-out infinite;
+}
+
+@keyframes heaterButtonHaloBlink {
+  0%,
+  100% {
+    box-shadow: 0 2px 3px rgba(0, 0, 0, 0.3), 0 0 0 0 rgba(255, 255, 255, 0), 0 0 0 0 rgba(255, 170, 130, 0),
+      0 0 30px 12px rgba(130, 190, 110, 0.9), 0 0 65px 26px rgba(130, 190, 110, 0.55);
+  }
+  50% {
+    box-shadow: 0 2px 3px rgba(0, 0, 0, 0.3), 0 0 0 0 rgba(255, 255, 255, 0), 0 0 0 0 rgba(255, 170, 130, 0),
+      0 0 0 0 rgba(130, 190, 110, 0), 0 0 0 0 rgba(130, 190, 110, 0);
+  }
+}
+
+/* Hint label for the same beat -- anchored below the heater plate/temp bar
+   (see HEATER_HINT_LEFT/HEATER_HINT_TOP in MatchaMaking.js), left-aligned
+   rather than centered since it sits in the frame's own left corner. Same
+   dashed-border/mint-pastel/pop-in-plus-pulse look as every other hint in
+   this project. */
+.heater-button-hint {
+  position: absolute;
+  margin: 0;
+  box-sizing: border-box;
+  max-width: min(320px, 20vw);
+  padding: min(10px, 0.55vw) min(18px, 0.95vw);
+  border-radius: min(16px, 0.85vw);
+  border: min(3px, 0.16vw) dashed rgba(90, 138, 79, 0.75);
+  background: rgba(232, 248, 224, 0.92);
+  color: #2f4a28;
+  font-family: 'Pixelify Sans', cursive;
+  font-weight: 700;
+  font-size: min(20px, 0.95vw);
+  text-align: center;
+  letter-spacing: 0.01em;
+  pointer-events: none;
+  z-index: 6;
+  animation: heaterButtonHintIn 0.3s ease-out both, heaterButtonHintPulse 2s ease-in-out 0.3s infinite;
+}
+
+@keyframes heaterButtonHintIn {
+  0% {
+    opacity: 0;
+    transform: translateY(6px) scale(0.92);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes heaterButtonHintPulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(90, 138, 79, 0.35);
+  }
+  50% {
+    box-shadow: 0 0 0 6px rgba(90, 138, 79, 0);
+  }
+}
+
 /* Temperature gauge -- sits on the counter/table in front of the heater
    (see TEMP_BAR_BOX in MatchaMaking.js). Idle/off state is plain grey;
    overflow: hidden here is what clips .heater-temp-bar-fill's square right
@@ -290,6 +649,73 @@
   outline: none;
   box-shadow: inset 0 1px 2px rgba(255, 255, 255, 0.35), inset 0 -1px 2px rgba(0, 0, 0, 0.2),
     0 0 12px 4px rgba(255, 255, 255, 0.85);
+}
+
+/* Ninth highlight beat (see barRunning in MatchaMaking.js) -- flashes the
+   instant the temp gauge appears, retiring the instant the player stops
+   it. Same light-green (rgb(130, 190, 110)) two-layer soft glow as the
+   scoop bar's own matching beat, with this bar's two resting inset layers
+   kept as constant so they don't vanish between flashes. */
+.heater-temp-bar.heater-temp-bar-highlight {
+  animation: heaterTempBarHaloBlink 1.1s ease-in-out infinite;
+}
+
+@keyframes heaterTempBarHaloBlink {
+  0%,
+  100% {
+    box-shadow: inset 0 1px 2px rgba(255, 255, 255, 0.35), inset 0 -1px 2px rgba(0, 0, 0, 0.2),
+      0 0 30px 12px rgba(130, 190, 110, 0.9), 0 0 65px 26px rgba(130, 190, 110, 0.55);
+  }
+  50% {
+    box-shadow: inset 0 1px 2px rgba(255, 255, 255, 0.35), inset 0 -1px 2px rgba(0, 0, 0, 0.2),
+      0 0 0 0 rgba(130, 190, 110, 0), 0 0 0 0 rgba(130, 190, 110, 0);
+  }
+}
+
+/* Hint label for the same beat -- left-aligned starting at the bar's own
+   left edge, just below it (see the inline top/left math in
+   MatchaMaking.js: TEMP_BAR_BOX.top + TEMP_BAR_BOX.height + 2), same
+   dashed-border/mint-pastel/pop-in-plus-pulse look as every other hint in
+   this project. */
+.heater-temp-bar-hint {
+  position: absolute;
+  margin: 0;
+  box-sizing: border-box;
+  max-width: min(320px, 20vw);
+  padding: min(10px, 0.55vw) min(18px, 0.95vw);
+  border-radius: min(16px, 0.85vw);
+  border: min(3px, 0.16vw) dashed rgba(90, 138, 79, 0.75);
+  background: rgba(232, 248, 224, 0.92);
+  color: #2f4a28;
+  font-family: 'Pixelify Sans', cursive;
+  font-weight: 700;
+  font-size: min(20px, 0.95vw);
+  text-align: center;
+  letter-spacing: 0.01em;
+  pointer-events: none;
+  z-index: 6;
+  animation: heaterTempBarHintIn 0.3s ease-out both, heaterTempBarHintPulse 2s ease-in-out 0.3s infinite;
+}
+
+@keyframes heaterTempBarHintIn {
+  0% {
+    opacity: 0;
+    transform: translateY(6px) scale(0.92);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes heaterTempBarHintPulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(90, 138, 79, 0.35);
+  }
+  50% {
+    box-shadow: 0 0 0 6px rgba(90, 138, 79, 0);
+  }
 }
 
 /* Solid light-blue fill, hidden (scaleX 0, anchored to the left edge)
@@ -425,6 +851,76 @@
   outline: none;
   box-shadow: inset 0 1px 2px rgba(255, 255, 255, 0.35), inset 0 -1px 2px rgba(0, 0, 0, 0.2),
     0 0 12px 4px rgba(255, 255, 255, 0.85);
+}
+
+/* Sixth highlight beat (see scoopRunning in MatchaMaking.js) -- flashes the
+   instant the measuring game opens, retiring the instant the player stops
+   the slider. Same light-green (rgb(130, 190, 110)) two-layer soft glow as
+   every other beat, with the bar's own two resting inset layers kept as
+   constant so they don't vanish between flashes. */
+.scoop-bar.scoop-bar-highlight {
+  animation: scoopBarHaloBlink 1.1s ease-in-out infinite;
+}
+
+@keyframes scoopBarHaloBlink {
+  0%,
+  100% {
+    box-shadow: inset 0 1px 2px rgba(255, 255, 255, 0.35), inset 0 -1px 2px rgba(0, 0, 0, 0.2),
+      0 0 30px 12px rgba(130, 190, 110, 0.9), 0 0 65px 26px rgba(130, 190, 110, 0.55);
+  }
+  50% {
+    box-shadow: inset 0 1px 2px rgba(255, 255, 255, 0.35), inset 0 -1px 2px rgba(0, 0, 0, 0.2),
+      0 0 0 0 rgba(130, 190, 110, 0), 0 0 0 0 rgba(130, 190, 110, 0);
+  }
+}
+
+/* Hint label for the same beat -- anchored from the right edge (not
+   centered via left/translateX) since the bar itself already sits almost
+   flush against the frame's right edge (SCOOP_BAR_BOX: left 93, width 4,
+   in MatchaMaking.js) -- a centered box would run off the edge. Sits above
+   the bar (bar's own top: 42%) in the clear space there, same dashed-
+   border/mint-pastel/pop-in-plus-pulse look as every other hint in this
+   project. */
+.scoop-bar-hint {
+  position: absolute;
+  right: 1%;
+  top: 8%;
+  box-sizing: border-box;
+  max-width: min(300px, 15.3vw);
+  padding: min(10px, 0.55vw) min(18px, 0.95vw);
+  border-radius: min(16px, 0.85vw);
+  border: min(3px, 0.16vw) dashed rgba(90, 138, 79, 0.75);
+  background: rgba(232, 248, 224, 0.92);
+  color: #2f4a28;
+  font-family: 'Pixelify Sans', cursive;
+  font-weight: 700;
+  font-size: min(18px, 0.86vw);
+  text-align: center;
+  letter-spacing: 0.01em;
+  pointer-events: none;
+  z-index: 6;
+  animation: scoopBarHintIn 0.3s ease-out both, scoopBarHintPulse 2s ease-in-out 0.3s infinite;
+}
+
+@keyframes scoopBarHintIn {
+  0% {
+    opacity: 0;
+    transform: translateY(6px) scale(0.92);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes scoopBarHintPulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(90, 138, 79, 0.35);
+  }
+  50% {
+    box-shadow: 0 0 0 6px rgba(90, 138, 79, 0);
+  }
 }
 
 /* Clips the fill + marker ticks to the bar's own rounded shape (see the JSX
@@ -583,6 +1079,74 @@
   cursor: default;
 }
 
+/* Seventh highlight beat (see showSpoonHint in MatchaMaking.js) -- flashes
+   the instant the spoon appears, retiring the instant the player starts
+   the pour. filter: drop-shadow (this is an <img>, same reasoning as
+   .station-item.selectable.tin-highlight above) with the same light-green
+   (rgb(130, 190, 110)) two-layer soft glow used for every other beat, and
+   the spoon's own resting drop-shadow kept as the constant first layer. */
+.big-spoon.big-spoon-highlight {
+  animation: bigSpoonHaloBlink 1.1s ease-in-out infinite;
+}
+
+@keyframes bigSpoonHaloBlink {
+  0%,
+  100% {
+    filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.18)) drop-shadow(0 0 14px rgba(130, 190, 110, 0.9))
+      drop-shadow(0 0 28px rgba(130, 190, 110, 0.55));
+  }
+  50% {
+    filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.18)) drop-shadow(0 0 0 rgba(130, 190, 110, 0))
+      drop-shadow(0 0 0 rgba(130, 190, 110, 0));
+  }
+}
+
+/* Hint label for the same beat -- anchored at the spoon's own spawn spot
+   (see SPOON_HINT_LEFT/SPOON_HINT_TOP in MatchaMaking.js), centered above
+   it same as .matcha-tin-hint. Same dashed-border/mint-pastel/pop-in-plus-
+   pulse look as every other hint in this project. */
+.big-spoon-hint {
+  position: absolute;
+  transform: translateX(-50%);
+  margin: 0;
+  box-sizing: border-box;
+  max-width: min(320px, 18vw);
+  padding: min(10px, 0.55vw) min(18px, 0.95vw);
+  border-radius: min(16px, 0.85vw);
+  border: min(3px, 0.16vw) dashed rgba(90, 138, 79, 0.75);
+  background: rgba(232, 248, 224, 0.92);
+  color: #2f4a28;
+  font-family: 'Pixelify Sans', cursive;
+  font-weight: 700;
+  font-size: min(20px, 0.95vw);
+  text-align: center;
+  letter-spacing: 0.01em;
+  pointer-events: none;
+  z-index: 6;
+  animation: bigSpoonHintIn 0.3s ease-out both, bigSpoonHintPulse 2s ease-in-out 0.3s infinite;
+}
+
+@keyframes bigSpoonHintIn {
+  0% {
+    opacity: 0;
+    transform: translateX(-50%) translateY(6px) scale(0.92);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0) scale(1);
+  }
+}
+
+@keyframes bigSpoonHintPulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(90, 138, 79, 0.35);
+  }
+  50% {
+    box-shadow: 0 0 0 6px rgba(90, 138, 79, 0);
+  }
+}
+
 /* Falling-powder pour effect (see pourLeft/pourTop/pourHeight and
    bigSpoonStage === 'pouring' in MatchaMaking.js) -- a zero-width anchor
    positioned at the spoon's mound, sized to span all the way down to the
@@ -737,7 +1301,39 @@
   pointer-events: none;
   z-index: 1;
   object-fit: cover;
+  /* left 0.2s ease, top 0.2s ease -- matches .station-item.movable's own
+     left/top transition exactly, so this overlay glides smoothly along
+     with the bowl during the Make Drink carry (see beginBowlCarry in
+     MatchaMaking.js) instead of snapping to the new position instantly
+     while the bowl itself eases over. */
+  transition: left 0.2s ease, top 0.2s ease;
   animation: growFromCenter 0.4s ease-out forwards;
+}
+
+/* Once the bowl arrives at the Make Drink zone (bowlStage 'vanishing' in
+   MatchaMaking.js), it -- and this whisked-liquid overlay still painted on
+   it, same class applied to both -- shrinks and fades out over
+   BOWL_VANISH_MS before unmounting entirely (bowlStage 'sent'). The whisk
+   is deliberately left out of this -- it stays behind on the counter
+   rather than disappearing along with the bowl. Layered on top of
+   whichever other classes are already applying (.settling's pointer-
+   events: none, etc.) rather than replacing them. Declared after
+   .bowl-whisked-liquid specifically so it wins that element's own
+   `animation` (growFromCenter) on the equal-specificity/later-in-file
+   tiebreak -- see the comment up near .whisk-hint for why. */
+.bowl-vanishing {
+  animation: bowlVanish 0.35s ease-in forwards;
+}
+
+@keyframes bowlVanish {
+  0% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(0.4);
+  }
 }
 
 /* Balance minigame bar (see MIX_BAR_BOX/whiskStage in MatchaMaking.js) --
@@ -753,6 +1349,75 @@
   background: #b7b2ac;
   border: min(5px, 0.26vw) solid rgba(110, 105, 100, 0.7);
   box-shadow: inset 0 1px 2px rgba(255, 255, 255, 0.35), inset 0 -1px 2px rgba(0, 0, 0, 0.2);
+}
+
+/* Twelfth highlight beat (see the JSX comment in MatchaMaking.js) -- flashes
+   for the bar's whole time on screen rather than retiring on a keypress,
+   since there's no single "confirm" action here (arrow keys are the
+   ongoing gameplay itself). Same light-green (rgb(130, 190, 110)) two-layer
+   soft glow as every other beat, with the bar's own two resting inset
+   layers kept as constant so they don't vanish between flashes. */
+.mix-bar.mix-bar-highlight {
+  animation: mixBarHaloBlink 1.1s ease-in-out infinite;
+}
+
+@keyframes mixBarHaloBlink {
+  0%,
+  100% {
+    box-shadow: inset 0 1px 2px rgba(255, 255, 255, 0.35), inset 0 -1px 2px rgba(0, 0, 0, 0.2),
+      0 0 30px 12px rgba(130, 190, 110, 0.9), 0 0 65px 26px rgba(130, 190, 110, 0.55);
+  }
+  50% {
+    box-shadow: inset 0 1px 2px rgba(255, 255, 255, 0.35), inset 0 -1px 2px rgba(0, 0, 0, 0.2),
+      0 0 0 0 rgba(130, 190, 110, 0), 0 0 0 0 rgba(130, 190, 110, 0);
+  }
+}
+
+/* Hint label for the same beat -- centered above wherever the bar currently
+   is (see the inline left/top math in MatchaMaking.js, derived from
+   mixBarPos same as the bar itself, since the bowl -- and so the bar -- can
+   be dragged anywhere before mixing starts). Same dashed-border/mint-
+   pastel/pop-in-plus-pulse look as every other hint in this project. */
+.mix-bar-hint {
+  position: absolute;
+  transform: translateX(-50%);
+  margin: 0;
+  box-sizing: border-box;
+  max-width: min(360px, 22vw);
+  padding: min(10px, 0.55vw) min(18px, 0.95vw);
+  border-radius: min(16px, 0.85vw);
+  border: min(3px, 0.16vw) dashed rgba(90, 138, 79, 0.75);
+  background: rgba(232, 248, 224, 0.92);
+  color: #2f4a28;
+  font-family: 'Pixelify Sans', cursive;
+  font-weight: 700;
+  font-size: min(19px, 0.9vw);
+  text-align: center;
+  letter-spacing: 0.01em;
+  pointer-events: none;
+  z-index: 6;
+  animation: mixBarHintIn 0.3s ease-out both, mixBarHintPulse 2s ease-in-out 0.3s infinite;
+}
+
+@keyframes mixBarHintIn {
+  0% {
+    opacity: 0;
+    transform: translateX(-50%) translateY(6px) scale(0.92);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0) scale(1);
+  }
+}
+
+@keyframes mixBarHintPulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(90, 138, 79, 0.35);
+  }
+  50% {
+    box-shadow: 0 0 0 6px rgba(90, 138, 79, 0);
+  }
 }
 
 /* The green target zone the ball has to be kept inside of (see

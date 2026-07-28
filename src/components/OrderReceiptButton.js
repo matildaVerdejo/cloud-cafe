@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import './OrderReceiptButton.css';
 
 // Label lookups for the raw values CustomerOrdering.js stores in its order
@@ -35,18 +35,54 @@ const TOPPING_LABELS = {
 // here as the order prop) instead of the old hardcoded AnnieOrder1.png
 // receipt image -- every order can look different now that the
 // order-builder exists. order is null until the player has placed one.
-const OrderReceiptButton = ({ order }) => {
+// highlight/hintText/hintTextOpen/onToggle are all optional and opt-in per
+// screen (same pattern as ProgressBar's highlightCurrentStep/
+// currentStepHint) -- currently only MatchaMaking passes them, the first
+// time a player lands on that station each round, to point out this button
+// and the fact that Enter opens (and closes) it from wherever focus already
+// is. Milk Selection/Toppings leave them undefined/falsy and render exactly
+// as before. hintText is shown while closed, hintTextOpen while open --
+// the flashing itself keeps going regardless of open/closed, only the
+// wording swaps to match what Enter would do next.
+const OrderReceiptButton = ({ order, highlight = false, hintText = null, hintTextOpen = null, onToggle }) => {
   const [open, setOpen] = useState(false);
+  const buttonRef = useRef(null);
+
+  // Moves focus onto this button the moment highlight turns on, same
+  // "the highlighted thing becomes the next thing selected" idea used
+  // elsewhere (.order-place-button/ProgressBar's current-step dot in
+  // CustomerOrdering.js) -- and what makes the accompanying hint's
+  // "use your Enter key" instruction actually true immediately, since
+  // Enter only opens this via its own native on-focused-button behavior.
+  useEffect(() => {
+    if (highlight) {
+      buttonRef.current?.focus();
+    }
+  }, [highlight]);
+
+  // onToggle fires for both a click AND a native Enter/Space activation
+  // (both route through this one onClick) -- callers can use this to react
+  // to the button being used (MatchaMaking currently doesn't hook anything
+  // to it; the highlight/hint intentionally keep going regardless, see the
+  // hintText/hintTextOpen swap below, rather than retiring on first use).
+  const handleClick = () => {
+    setOpen((prev) => {
+      const next = !prev;
+      onToggle?.(next);
+      return next;
+    });
+  };
 
   return (
     <div className="order-receipt-widget">
       <button
+        ref={buttonRef}
         type="button"
-        className="order-receipt-button"
+        className={`order-receipt-button${highlight ? ' highlight' : ''}`}
         data-focusable
         aria-expanded={open}
         aria-label={open ? 'Hide order receipt' : 'Show order receipt'}
-        onClick={() => setOpen((prev) => !prev)}
+        onClick={handleClick}
       >
         Order
       </button>
@@ -76,6 +112,9 @@ const OrderReceiptButton = ({ order }) => {
           <p className="order-receipt-empty">No order placed yet.</p>
         )}
       </div>
+      {highlight && (open ? hintTextOpen : hintText) && (
+        <p className="order-receipt-hint">{open ? hintTextOpen : hintText}</p>
+      )}
     </div>
   );
 };
