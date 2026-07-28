@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import './CustomerOrdering.css';
 import { useFlatFocusNav } from '../gameloop/useFlatFocusNav';
+import { getActionFromKeyEvent, shouldDebounceEnter } from '../gameloop/pal';
 import ProgressBar from './ProgressBar';
 
 // ---- Order-builder option lists ------------------------------------------
@@ -258,10 +259,11 @@ const CustomerOrdering = ({ activeStep, customerNumber, onNavigate, onAdvance, o
   // Typewriter effect -- same one the very first version of this screen's
   // speech bubble had (reveal one more character every TYPE_INTERVAL_MS, so
   // the bubble looks like the customer is actually talking) before this
-  // screen was rebuilt around the play-button/modal order form. Tied to
-  // speechText, which -- like spokenOrder above -- only ever changes on
-  // remount (new customer), so this reliably restarts once per round rather
-  // than re-triggering on unrelated re-renders (opening a dropdown, etc).
+  // screen was rebuilt around the play-button/modal order form. Runs
+  // unconditionally on mount (tied only to speechText, which -- like
+  // spokenOrder above -- only ever changes on remount/new customer) --
+  // typing happens concurrently with the read-acknowledgment gate below,
+  // not gated behind it.
   const [visibleChars, setVisibleChars] = useState(0);
   useEffect(() => {
     setVisibleChars(0);
@@ -277,6 +279,34 @@ const CustomerOrdering = ({ activeStep, customerNumber, onNavigate, onAdvance, o
     }, TYPE_INTERVAL_MS);
     return () => clearInterval(intervalId);
   }, [speechText]);
+
+  // Read-acknowledgment gate: right after landing on this screen, the
+  // speech bubble flashes the same white "halo" every focusable element
+  // gets on focus (see .ordering-speech-bubble.pending-ack in
+  // CustomerOrdering.css) -- concurrently with the typewriter above, not
+  // blocking it. No dimming/tint over the rest of the frame anymore (that
+  // idea got dropped) -- just the bubble's own flashing outline. The player
+  // presses Enter to confirm they've read (or are done reading) the order,
+  // which stops the halo. Resets automatically every round since this
+  // whole component remounts per customer. A dedicated window listener
+  // (rather than a per-button onKeyDown) is used because Enter should work
+  // regardless of what, if anything, happens to be focused -- the play
+  // button is also explicitly disabled below while this is pending, so a
+  // keyboard/D-pad user can't route around the gate and open the order
+  // form early. shouldDebounceEnter guards against a held key/remote
+  // repeat firing this more than once.
+  const [orderAcknowledged, setOrderAcknowledged] = useState(false);
+  useEffect(() => {
+    if (orderAcknowledged) return undefined;
+    const handleKeyDown = (e) => {
+      if (getActionFromKeyEvent(e) !== 'Enter') return;
+      if (shouldDebounceEnter(e)) return;
+      e.preventDefault();
+      setOrderAcknowledged(true);
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [orderAcknowledged]);
 
   // ---- Order-builder state -----------------------------------------------
   // Four sections (matcha, cup & ice, base, toppings) -- now shown inside a
@@ -329,6 +359,58 @@ const CustomerOrdering = ({ activeStep, customerNumber, onNavigate, onAdvance, o
     playButtonRef.current?.focus();
   };
 
+  // Second highlight beat, half a second after the first (orderAcknowledged
+  // above) clears -- the play button itself starts flashing the same green
+  // halo, plus a nearby "click enter to take the customer's order" label
+  // (see .ordering-tablet-* in CustomerOrdering.css). Pressing Enter here
+  // both stops the flashing and actually opens the order form -- i.e. it's
+  // not just an acknowledgment like the first Enter press, it's the
+  // equivalent of clicking the play button, matching what the label says
+  // it'll do.
+  const [tabletPromptActive, setTabletPromptActive] = useState(false);
+  useEffect(() => {
+    if (!orderAcknowledged) return undefined;
+    const timeoutId = setTimeout(() => setTabletPromptActive(true), 500);
+    return () => clearTimeout(timeoutId);
+  }, [orderAcknowledged]);
+
+  useEffect(() => {
+    if (!tabletPromptActive) return undefined;
+    const handleKeyDown = (e) => {
+      if (getActionFromKeyEvent(e) !== 'Enter') return;
+      if (shouldDebounceEnter(e)) return;
+      e.preventDefault();
+      setTabletPromptActive(false);
+      setOrderFormOpen(true);
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [tabletPromptActive]);
+
+  // Third highlight beat -- once the order form/receipt modal is actually
+  // up (orderFormOpen), the modal itself flashes the same green halo, with
+  // a "this is your customer's receipt..." label next to it (see
+  // .order-modal.receipt-highlight / .ordering-receipt-hint in
+  // CustomerOrdering.css). Unlike the first two, Enter here is just an
+  // acknowledgment (like the very first one) -- it doesn't do anything to
+  // the form itself, filling it out and eventually pressing "Place Order"
+  // is unchanged and still the real submit action. Once acknowledged it
+  // stays that way even if the player closes and reopens the modal again
+  // this round -- this is a one-time "here's what this is" callout, not
+  // something that should re-flash every time the modal toggles.
+  const [receiptAcknowledged, setReceiptAcknowledged] = useState(false);
+  useEffect(() => {
+    if (!orderFormOpen || receiptAcknowledged) return undefined;
+    const handleKeyDown = (e) => {
+      if (getActionFromKeyEvent(e) !== 'Enter') return;
+      if (shouldDebounceEnter(e)) return;
+      e.preventDefault();
+      setReceiptAcknowledged(true);
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [orderFormOpen, receiptAcknowledged]);
+
   // "Place Order" only appears once every required section has a selection
   // -- toppings is the one section left out of this check since it's an
   // optional adder (a drink with no extra toppings is still a complete
@@ -380,27 +462,46 @@ const CustomerOrdering = ({ activeStep, customerNumber, onNavigate, onAdvance, o
             CSS-border-triangle trick) so its outline can use a real `stroke`
             -- that's the only way to get the tail's point to read as the
             same ~4px border weight as the bubble's own border instead of
-            looking like a solid, thicker wedge. */}
-        <div className="ordering-speech-bubble">
-          <p className="ordering-speech-bubble-text">
-            {sliceSegments(speechSegments, visibleChars).map((seg, i) =>
-              seg.highlight ? (
-                <span key={i} className="ordering-speech-highlight">
-                  {seg.text}
-                </span>
-              ) : (
-                <React.Fragment key={i}>{seg.text}</React.Fragment>
-              )
-            )}
-          </p>
-          <svg
-            className="ordering-speech-bubble-tail"
-            viewBox="0 0 30 22"
-            preserveAspectRatio="none"
-            aria-hidden="true"
-          >
-            <polygon points="2,0 28,0 15,19" />
-          </svg>
+            looking like a solid, thicker wedge.
+
+            Wrapped (along with the read-acknowledgment hint label below) in
+            .ordering-speech-wrap, a flex column -- the wrap now owns the
+            left/top/width positioning that used to live on the bubble
+            itself, so the hint label always lands directly under the
+            bubble with a small gap regardless of how tall the bubble's
+            content makes it grow, instead of needing its own separately
+            guessed percentage position. */}
+        <div className="ordering-speech-wrap">
+          <div className={`ordering-speech-bubble${orderAcknowledged ? '' : ' pending-ack'}`}>
+            <p className="ordering-speech-bubble-text">
+              {sliceSegments(speechSegments, visibleChars).map((seg, i) =>
+                seg.highlight ? (
+                  <span key={i} className="ordering-speech-highlight">
+                    {seg.text}
+                  </span>
+                ) : (
+                  <React.Fragment key={i}>{seg.text}</React.Fragment>
+                )
+              )}
+            </p>
+            <svg
+              className="ordering-speech-bubble-tail"
+              viewBox="0 0 30 22"
+              preserveAspectRatio="none"
+              aria-hidden="true"
+            >
+              <polygon points="2,0 28,0 15,19" />
+            </svg>
+          </div>
+
+          {/* Read-acknowledgment hint -- see orderAcknowledged above.
+              Disappears (along with the bubble's flash) the moment the
+              player presses Enter. */}
+          {!orderAcknowledged && (
+            <p className="ordering-order-hint">
+              This is your customer&apos;s order &mdash; once you&apos;re done reading, click Enter.
+            </p>
+          )}
         </div>
 
         {/* Play button on the ordering computer's screen -- opens the
@@ -412,15 +513,30 @@ const CustomerOrdering = ({ activeStep, customerNumber, onNavigate, onAdvance, o
         <button
           ref={playButtonRef}
           type="button"
-          className="ordering-play-button"
+          className={`ordering-play-button${tabletPromptActive ? ' tablet-highlight' : ''}`}
           data-focusable
+          // Disabled (unfocusable/unclickable, and skipped by
+          // useFlatFocusNav's own `!el.disabled` filter) until it's
+          // actually this button's turn to be highlighted (tabletPromptActive)
+          // -- covers both the first highlight beat (bubble) and the
+          // half-second gap before the second one starts, so a keyboard/
+          // D-pad user can't route around either gate.
+          disabled={!tabletPromptActive}
           aria-label="Open order form"
           aria-haspopup="dialog"
           aria-expanded={orderFormOpen}
-          onClick={() => setOrderFormOpen(true)}
+          onClick={() => {
+            setTabletPromptActive(false);
+            setOrderFormOpen(true);
+          }}
         >
           &#9654;
         </button>
+
+        {/* Second highlight beat -- just the button's own flashing white
+            halo (see .ordering-play-button.tablet-highlight in
+            CustomerOrdering.css) plus its nearby hint label, no tint. */}
+        {tabletPromptActive && <p className="ordering-tablet-hint">Click Enter to take the customer&apos;s order.</p>}
 
         {orderFormOpen && (
           <>
@@ -429,7 +545,11 @@ const CustomerOrdering = ({ activeStep, customerNumber, onNavigate, onAdvance, o
                 keyboard/D-pad users, who close via the visible close
                 button instead. */}
             <div className="order-modal-backdrop" onClick={closeOrderForm} />
-            <div className="order-modal" role="dialog" aria-label="Order form">
+            <div
+              className={`order-modal${!receiptAcknowledged ? ' receipt-highlight' : ''}`}
+              role="dialog"
+              aria-label="Order form"
+            >
               <button
                 type="button"
                 className="order-modal-close"
@@ -562,6 +682,16 @@ const CustomerOrdering = ({ activeStep, customerNumber, onNavigate, onAdvance, o
                 )}
               </div>
             </div>
+
+            {/* Third highlight beat's label -- see receiptAcknowledged
+                above. Sits in the open margin beside the modal (the modal
+                itself is centered and min(880px, 68%) wide, so ~16% of the
+                card is free on either side). */}
+            {!receiptAcknowledged && (
+              <p className="ordering-receipt-hint">
+                This is your customer&apos;s receipt -- fill it out according to their order, then click Enter.
+              </p>
+            )}
           </>
         )}
 
