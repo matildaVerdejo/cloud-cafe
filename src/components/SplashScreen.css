@@ -1,0 +1,224 @@
+@import url('https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@400&display=swap');
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Fixed 16:9 canvas -- same convention as every other screen. Gradient
+   background rather than a full-bleed art file on purpose: this is the
+   very first thing painted (see the big comment in SplashScreen.js), so
+   there's no image to decode before it can show -- a plain CSS gradient
+   is as close to "free" as a background gets. Palette matches the game's
+   own established mint/cream/green language (the hint boxes throughout
+   this project use the same rgba(232, 248, 224, ...) family). */
+.splash-container {
+  position: relative;
+  width: 1920px;
+  max-width: 92vw;
+  aspect-ratio: 16 / 9;
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 15px 30px rgba(0, 0, 0, 0.2);
+  background: linear-gradient(180deg, #eef8e6 0%, #dcefd0 55%, #c9e4bd 100%);
+  /* Same slow, cheap, whole-container float every other screen's own
+     top-level container uses (see .main-container's gentleContainerFloat)
+     -- one transform loop on the outermost box rather than several on
+     individual children. */
+  animation: splashContainerFloat 8s ease-in-out infinite;
+}
+
+@keyframes splashContainerFloat {
+  0%,
+  100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-8px);
+  }
+}
+
+.splash-content {
+  width: 100%;
+  height: 100%;
+  position: relative;
+}
+
+/* Decorative cloud shapes, animated as ONE group (this wrapper), not
+   individually -- per this GS's tv-universal rule ("always animate the
+   parent container, not each item individually"). Each .splash-cloud is a
+   plain rounded blob (border-radius approximating a puffy cloud outline,
+   same trick used for the foam cap ellipse elsewhere in this project --
+   simple shapes over expensive filters), soft white over the gradient,
+   positioned once and left alone; only .splash-clouds itself drifts. */
+.splash-clouds {
+  position: absolute;
+  inset: 0;
+  animation: splashCloudsDrift 12s ease-in-out infinite;
+  pointer-events: none;
+}
+
+@keyframes splashCloudsDrift {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  50% {
+    transform: translateX(1.2%);
+  }
+}
+
+.splash-cloud {
+  position: absolute;
+  background: rgba(255, 255, 255, 0.55);
+  border-radius: 50% 50% 45% 45% / 60% 60% 40% 40%;
+}
+
+.splash-cloud-1 {
+  left: 4%;
+  top: 12%;
+  width: 16%;
+  height: 12%;
+}
+
+.splash-cloud-2 {
+  right: 6%;
+  top: 20%;
+  width: 12%;
+  height: 9%;
+}
+
+.splash-cloud-3 {
+  left: 10%;
+  bottom: 14%;
+  width: 10%;
+  height: 8%;
+}
+
+/* Mascot -- one-shot entrance (bounce/settle in), not a continuous loop --
+   see the big comment in SplashScreen.js on why this is bounded rather
+   than always-on. */
+.splash-mascot {
+  position: absolute;
+  left: 50%;
+  top: 34%;
+  width: 22%;
+  height: auto;
+  transform: translate(-50%, -50%);
+  filter: drop-shadow(0 10px 14px rgba(0, 0, 0, 0.15));
+  animation: splashMascotIn 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+@keyframes splashMascotIn {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -30%) scale(0.7);
+  }
+  100% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+
+/* Title lockup -- a big soft rounded card standing in for the "cloud cafe"
+   sign (same cream fill/green text/brown border language as
+   CloudCafeHome.png's own sign, without re-tracing that art's exact
+   scalloped outline). border-radius's uneven per-corner values are the
+   same "loosely cloud-shaped blob" trick as .splash-cloud above, just
+   bigger and with a border/shadow so it reads as the logo, not background
+   decoration. */
+.splash-title {
+  position: absolute;
+  left: 50%;
+  top: 58%;
+  transform: translate(-50%, -50%);
+  padding: min(18px, 1vw) min(48px, 2.6vw);
+  background: rgba(255, 255, 255, 0.92);
+  border: min(3px, 0.16vw) solid #8a7a6a;
+  border-radius: 50% 50% 45% 45% / 65% 65% 35% 35%;
+  color: #295105;
+  font-family: 'Pixelify Sans', cursive;
+  font-weight: 700;
+  font-size: min(64px, 3.2vw);
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.12);
+  animation: splashTitleIn 0.6s ease-out 0.15s both;
+}
+
+@keyframes splashTitleIn {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -40%) scale(0.92);
+  }
+  100% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+
+/* Same fill/border/text-color/pill language as MainPage's own .play-button
+   (kept in sync with that button and CustomerOrdering's own back button --
+   see the comment on .play-button in MainPage.css). Pulses gently once its
+   own entrance settles, same idea as .play-button's own
+   playButtonPulse -- a cheap, bounded, single-element loop that's fine
+   under the same performance tenet the container/cloud animations above
+   are already careful about, since it's the one element whose whole job
+   is to draw the eye toward the input this screen is waiting on. */
+.splash-start-button {
+  position: absolute;
+  left: 50%;
+  top: 80%;
+  transform: translate(-50%, -50%);
+  padding: min(14px, 0.75vw) min(36px, 1.9vw);
+  background: rgba(255, 255, 255, 0.85);
+  border: 2px solid #8a7a6a;
+  color: #5c4a3a;
+  font-family: 'Pixelify Sans', cursive;
+  font-size: min(26px, 1.25vw);
+  border-radius: 999px;
+  cursor: pointer;
+  animation: splashStartButtonIn 0.5s ease-out 0.3s both, splashStartButtonPulse 2.2s ease-in-out 0.9s infinite;
+}
+
+@keyframes splashStartButtonIn {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -30%);
+  }
+  100% {
+    opacity: 1;
+    transform: translate(-50%, -50%);
+  }
+}
+
+@keyframes splashStartButtonPulse {
+  0%,
+  100% {
+    transform: translate(-50%, -50%) scale(1);
+  }
+  50% {
+    transform: translate(-50%, -50%) scale(1.05);
+  }
+}
+
+.splash-start-button:hover {
+  animation-play-state: paused, paused;
+  transform: translate(-50%, -50%) scale(1.08);
+}
+
+.splash-start-button:active {
+  transform: translate(-50%, -50%) scale(0.95);
+}
+
+/* No custom :focus-visible rule here on purpose -- same as every other
+   button in this project (.play-button, .music-toggle-button, etc.), the
+   global button:focus-visible glow in App.css already handles the focus
+   treatment; adding a second one here would just double up on top of it. */

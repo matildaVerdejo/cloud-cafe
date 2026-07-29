@@ -58,6 +58,34 @@
   }
 }
 
+/* The finished drink's glass, set down on the plate (see FINAL_DRINK_SPOT/
+   incomingDrink in FinalCombination.js) -- a plain positioned image, same
+   "trivial leaf utility class kept as its own local copy rather than
+   importing ToppingsStation.css's .station-item" reasoning that class's
+   own comment gives for not importing MatchaMaking.css's copy in turn
+   (each screen's simple per-image classes are cheap enough to redefine
+   locally; the complex fill/clip-path classes are what actually get
+   reused cross-file). Small fade/rise-in on mount so the drink doesn't
+   just pop into place the instant this screen is reached. */
+.final-drink-cup {
+  position: absolute;
+  object-fit: contain;
+  pointer-events: none;
+  filter: drop-shadow(0 6px 8px rgba(0, 0, 0, 0.2));
+  animation: finalDrinkCupIn 0.4s ease-out both;
+}
+
+@keyframes finalDrinkCupIn {
+  0% {
+    opacity: 0;
+    transform: translateY(6px) scale(0.96);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
 /* Sits on the blank hanging receipt paper in the art (paper spans image x
    1015-1270, y 110-465 of 1394x768, measured the same way as the receipt
    on CustomerOrdering -- a safe inset from the paper's jagged/torn edges).

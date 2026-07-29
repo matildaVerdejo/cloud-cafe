@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import './App.css';
+import SplashScreen from './components/SplashScreen';
 import MainPage from './components/MainPage';
 import CustomerOrdering from './components/CustomerOrdering';
 import MatchaMaking from './components/MatchaMaking';
@@ -28,7 +29,14 @@ const STEP_KEYS = PROGRESS_STEPS.map((step) => step.key);
 const ORDERS_PER_SESSION = 3;
 
 function App() {
-  const [currentPage, setCurrentPage] = useState('main');
+  // Splash is the very first thing shown, ahead of MainPage's own
+  // storefront/Start screen -- see the big comment in SplashScreen.js for
+  // why this doesn't change anything about appReady timing (still fires on
+  // mount regardless of which page is showing) or the PREROLL ad-timing
+  // note in the messaging guide (MainPage's Play button is still the real
+  // "start screen" that gates that, unaffected by this beat coming before
+  // it).
+  const [currentPage, setCurrentPage] = useState('splash');
   // Which customer (1-3) the player is currently serving this session.
   const [customerNumber, setCustomerNumber] = useState(1);
   // The order built in CustomerOrdering's "Place Order" step -- null until
@@ -55,6 +63,16 @@ function App() {
   // reason -- a new customer's Toppings screen should never show the
   // previous customer's leftover drink.
   const [finishedDrink, setFinishedDrink] = useState(null);
+  // The fully-topped drink sent over from ToppingsStation's own "Send to
+  // Serving" drop-zone -- null until sent, then shown by FinalCombination as
+  // its own carried-over drink display (see incomingDrink there). Shape is
+  // whatever ToppingsStation's beginSendToFinal hands off ({ milk, matcha,
+  // foam, syrup, powder } -- milk/matcha straight from finishedDrink, foam/
+  // syrup/powder from that screen's own cupFoam/cupSyrup/cupPowder state).
+  // Reset to null in the same places matchaBowl/finishedDrink/currentOrder
+  // are, for the same reason -- a new customer's Serving screen should
+  // never show the previous customer's leftover drink.
+  const [servedDrink, setServedDrink] = useState(null);
   const [showExitConfirm, setShowExitConfirm] = useState(false);
   const [adPlaying, setAdPlaying] = useState(false);
   // Background music -- one <audio> element rendered once here (outside the
@@ -82,9 +100,13 @@ function App() {
   // ---- GameLoop V1 bridge setup -------------------------------------------
   useEffect(() => {
     initGameLoopBridge();
-    // MainPage is the first screen and is already painted by the time this
-    // effect runs, so this satisfies "appReady once first presentable UI is
-    // shown" without a separate splash step.
+    // SplashScreen is the first screen now (see currentPage's own initial
+    // value above) and is already painted by the time this effect runs --
+    // this effect doesn't depend on currentPage at all, so it fires the
+    // instant there's ANY presentable UI on screen, satisfying "appReady
+    // once first presentable UI is shown, even a loading/splash screen"
+    // (see the messaging guide) regardless of which page that turns out to
+    // be.
     sendAppReady();
 
     const unsubscribe = onAdMessage((message) => {
@@ -182,6 +204,16 @@ function App() {
         setShowExitConfirm(false); // Back cancels the confirm dialog
         return;
       }
+      // Splash isn't really "loading" (nothing to wait on -- see
+      // SplashScreen.js), so Back here just skips it the same way the
+      // start button/auto-timeout do, rather than falling into the
+      // idx <= 0 branch below (which would also fire a MENU_RETURN ad
+      // opportunity -- appropriate for returning from a finished session,
+      // not for skipping the very first beat of a fresh one).
+      if (currentPageRef.current === 'splash') {
+        setCurrentPage('main');
+        return;
+      }
       if (currentPageRef.current === 'main') {
         setShowExitConfirm(true);
         return;
@@ -200,11 +232,16 @@ function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showExitConfirm]);
 
+  const handleSplashDismiss = () => {
+    setCurrentPage('main');
+  };
+
   const handlePlayClick = () => {
     setCustomerNumber(1);
     setCurrentOrder(null);
     setMatchaBowl(null);
     setFinishedDrink(null);
+    setServedDrink(null);
     setCurrentPage('ordering');
   };
 
@@ -230,12 +267,14 @@ function App() {
       setCurrentOrder(null);
       setMatchaBowl(null);
       setFinishedDrink(null);
+      setServedDrink(null);
       setCurrentPage('ordering');
     } else {
       setCustomerNumber(1);
       setCurrentOrder(null);
       setMatchaBowl(null);
       setFinishedDrink(null);
+      setServedDrink(null);
       setCurrentPage('main');
       sendAdOpportunity('MENU_RETURN');
     }
@@ -268,6 +307,11 @@ function App() {
   return (
     <div className={`App${adPlaying ? ' gl-ad-playing' : ''}`}>
       <div className={`page-container ${currentPage}`}>
+        {currentPage === 'splash' && (
+          <div className="page-slide">
+            <SplashScreen onDismiss={handleSplashDismiss} />
+          </div>
+        )}
         {currentPage === 'main' && (
           <div className="page-slide">
             <MainPage onPlayClick={handlePlayClick} musicOn={musicOn} onToggleMusic={toggleMusic} />
@@ -305,13 +349,14 @@ function App() {
               activeStep="toppings"
               order={currentOrder}
               incomingDrink={finishedDrink}
+              onSendToFinal={setServedDrink}
               {...progressProps}
             />
           </div>
         )}
         {currentPage === 'final-combination' && (
           <div className="page-slide">
-            <FinalCombination activeStep="final-combination" {...progressProps} />
+            <FinalCombination activeStep="final-combination" incomingDrink={servedDrink} {...progressProps} />
           </div>
         )}
       </div>
