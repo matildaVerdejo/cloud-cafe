@@ -221,6 +221,91 @@ function getSyrupBoxFor(milkBox) {
   };
 }
 
+// ---- Pouring a cold foam onto the carried-over drink ---------------------
+// Same select/drag-onto-cup-or-Enter, 180deg-flip (WHISK_FLIP_DEG), and
+// Left/Right-aim-while-pouring mechanic as the syrup pair above (see the
+// big comment on SYRUP_HOVER_GAP/getSyrupHoverPos for the reasoning behind
+// each piece) -- the one real difference is where the poured layer ends up:
+// foam floats on TOP of whatever's already in the cup (the matcha layer if
+// one was poured, otherwise straight onto the milk) rather than sinking to
+// the bottom the way syrup does. That "on top" box is getFoamBoxFor (below)
+// applied to whichever box is currently the drink's own top layer -- its
+// own box math, not MilkSelection.js's getMatchaBoxFor, and its own CSS
+// shape too (.cup-foam-fill in ToppingsStation.css) rather than reusing
+// .cup-matcha-fill, since per request foam's top corners are rounded
+// (border-radius) instead of the pointed glass-taper meniscus matcha uses.
+// A second element, the "cap" (getFoamCapBoxFor/.cup-foam-cap below),
+// straddles the very top edge of that body as a flattened ellipse in the
+// same color -- meant to read as the flat top surface of the poured foam,
+// like you're looking slightly down into the glass, so the drink reads as
+// filled right up rather than the body's own rounded-but-still-a-bit-
+// pointy top edge doing all the work on its own.
+const FOAM_RAISE_FRAC = 0.42; // portion of the layer-below's own height that foam rises above it -- raised further (was 0.3) to shift the whole layer up, per request
+const FOAM_OVERLAP_FRAC = 0.02; // portion that dips into the layer below -- cut down alongside the raise increase above so the total height (and how far it actually reaches back down into the drink) stays about the same as before, i.e. this is a shift, not a stretch
+const FOAM_WIDTH_SCALE = 1.08; // a touch wider than the layer below, to line up with the matcha layer's own raised-top width
+
+// Same "generic, parameterized on the box underneath" shape as
+// MilkSelection.js's own getMatchaBoxFor, just with foam's own (shallower,
+// wider, higher-up) fractions above instead of matcha's.
+function getFoamBoxFor(topBox) {
+  const raise = topBox.height * FOAM_RAISE_FRAC;
+  const overlap = topBox.height * FOAM_OVERLAP_FRAC;
+  const width = topBox.width * FOAM_WIDTH_SCALE;
+  return {
+    left: topBox.left - (width - topBox.width) / 2,
+    top: topBox.top - raise,
+    width,
+    height: raise + overlap,
+  };
+}
+
+// The flattened top-surface ellipse ("cap") that straddles the foam body's
+// own top edge -- a plain circle (border-radius: 50% in CSS) squashed down
+// to a shallow oval via its own height, same idea as looking down at a
+// disc from a shallow angle. FOAM_CAP_ASPECT is the ellipse's intended
+// on-screen height:width ratio; since this container is a fixed 16:9 (not
+// square), a % width and a % height of the same on-screen pixel size
+// aren't numerically equal -- multiplying by (16/9) is the same correction
+// layoutPair's own widths (`height * canvasAspect * (9/16)`) make in the
+// opposite direction, see its own comment above TOPPING_HEIGHT.
+const FOAM_CAP_ASPECT = 0.3;
+function getFoamCapBoxFor(foamBox) {
+  const width = foamBox.width;
+  const height = width * FOAM_CAP_ASPECT * (16 / 9);
+  return {
+    left: foamBox.left,
+    top: foamBox.top - height / 2,
+    width,
+    height,
+  };
+}
+
+const FOAM_HOVER_GAP = 2; // % gap between the bottle's bottom edge and the cup's rim while hovering
+function getFoamHoverPos(item) {
+  return {
+    left: INCOMING_DRINK_SPOT.left + INCOMING_DRINK_SIZE.width / 2 - item.width / 2,
+    top: INCOMING_DRINK_SPOT.top - item.height - FOAM_HOVER_GAP,
+  };
+}
+
+const FOAM_MOVE_MS = 350;
+const FOAM_POUR_MS = 2200;
+const FOAM_MOVE_STEP = 2;
+const FOAM_MOVE_RANGE = 8;
+const FOAM_SNAP_FRACTION = 0.5;
+const FOAM_CLICK_MAX_MOVE_PCT = 1;
+
+// Colors for the falling foam stream -- reused directly for the
+// .cup-foam-fill/.cup-foam-cap color modifier classes too (see
+// ToppingsStation.css), same "one palette, one source of truth" idea as
+// SYRUP_STREAM_COLORS. Sampled from each PNG's own average opaque pixel
+// color (MatchaColdFoam.png -> pale sage green, RegColdFoam.png -> creamy
+// white) so the poured fill reads as the same substance as its bottle art.
+const FOAM_STREAM_COLORS = {
+  'matcha-cold-foam': 'rgba(200, 213, 171, 0.95)',
+  'reg-cold-foam': 'rgba(234, 232, 227, 0.95)',
+};
+
 const ToppingsStation = ({ activeStep, customerNumber, onNavigate, onAdvance, order, incomingDrink }) => {
   const containerRef = useRef(null);
   useFlatFocusNav(containerRef);
@@ -240,6 +325,16 @@ const ToppingsStation = ({ activeStep, customerNumber, onNavigate, onAdvance, or
   const incomingMilkBox = incomingDrink?.milk ? getMilkBoxFor(INCOMING_DRINK_SPOT, INCOMING_DRINK_SIZE) : null;
   const incomingMatchaBox = incomingDrink?.matcha && incomingMilkBox ? getMatchaBoxFor(incomingMilkBox) : null;
   const incomingSyrupBox = incomingMilkBox ? getSyrupBoxFor(incomingMilkBox) : null;
+  // Foam always lands on whatever the drink's current top layer is -- the
+  // matcha layer if one was poured, otherwise straight onto the milk. See
+  // getFoamBoxFor (above FOAM_HOVER_GAP) for its own box math -- a
+  // shallower, narrower-overlap variant of getMatchaBoxFor's shape, plus a
+  // touch of extra width, per request.
+  const incomingTopBox = incomingMatchaBox || incomingMilkBox;
+  const incomingFoamBox = incomingTopBox ? getFoamBoxFor(incomingTopBox) : null;
+  // The flattened top-surface ellipse straddling incomingFoamBox's own top
+  // edge -- see getFoamCapBoxFor above.
+  const incomingFoamCapBox = incomingFoamBox ? getFoamCapBoxFor(incomingFoamBox) : null;
 
   // ---- Guava/mint syrup: pick up, pour onto the drink, or snap back home -
   // Same drag/Enter-to-pour shape as Milk Selection's own milk bottles --
@@ -280,11 +375,37 @@ const ToppingsStation = ({ activeStep, customerNumber, onNavigate, onAdvance, or
   // cupMilk/cupMatcha. { key: 'guava-syrup' | 'mint-syrup' } | null.
   const [cupSyrup, setCupSyrup] = useState(null);
 
+  // ---- Matcha-cold-foam/reg-cold-foam: pick up, pour on top of the drink,
+  // or snap back home -- identical shape to the syrup state just above, see
+  // the big comment above FOAM_HOVER_GAP for what's actually different
+  // about foam (lands on TOP of the drink instead of sinking to the
+  // bottom).
+  const [foamPositions, setFoamPositions] = useState(() => {
+    const positions = {};
+    for (const item of TOPPING_ITEMS) {
+      if (item.key === 'matcha-cold-foam' || item.key === 'reg-cold-foam') {
+        positions[item.key] = { left: item.left, top: item.top };
+      }
+    }
+    return positions;
+  });
+  const [foamDrag, setFoamDrag] = useState(null); // { key, left, top } | null
+  const foamDragStartRef = useRef({ pointerX: 0, pointerY: 0, left: 0, top: 0 });
+  const [foamPourStage, setFoamPourStage] = useState('idle'); // 'idle' | 'moving' | 'pouring'
+  const [foamPouringKey, setFoamPouringKey] = useState(null); // 'matcha-cold-foam' | 'reg-cold-foam' | null
+  const [foamPourOffset, setFoamPourOffset] = useState(0);
+  const [cupFoam, setCupFoam] = useState(null); // { key } | null
+
   // Only needs an actual drink to pour onto and nothing else already
   // mid-pour -- unlike Milk Selection's own bottles/bowl there's no ice/
   // base precondition here, since the drink arriving from that screen is
-  // already whatever it's going to be by the time it gets here.
-  const canPourSyrup = !!incomingDrink && pourStage === 'idle';
+  // already whatever it's going to be by the time it gets here. Also gated
+  // on the OTHER topping's own stage so only one bottle is ever mid-pour at
+  // a time -- otherwise two simultaneous capture-phase Left/Right aim
+  // listeners (this one's and foam's, see the effects below) would both
+  // fire off a single keypress.
+  const canPourSyrup = !!incomingDrink && pourStage === 'idle' && foamPourStage === 'idle';
+  const canPourFoam = !!incomingDrink && foamPourStage === 'idle' && pourStage === 'idle';
 
   const beginSyrupPour = (key) => {
     if (!canPourSyrup) return;
@@ -400,6 +521,115 @@ const ToppingsStation = ({ activeStep, customerNumber, onNavigate, onAdvance, or
     setSyrupPositions((prev) => ({ ...prev, [item.key]: { left: item.left, top: item.top } }));
   };
 
+  // ---- Foam pick-up/pour/drag handlers -- identical shape to the syrup
+  // handlers just above, see the big comment above FOAM_HOVER_GAP for what's
+  // different about foam itself (lands on top of the drink, not the bottom).
+  const beginFoamPour = (key) => {
+    if (!canPourFoam) return;
+    const item = TOPPING_ITEMS.find((i) => i.key === key);
+    setFoamPositions((prev) => ({ ...prev, [key]: getFoamHoverPos(item) }));
+    setFoamPourOffset(0);
+    setFoamPouringKey(key);
+    setFoamPourStage('moving');
+  };
+
+  useEffect(() => {
+    if (foamPourStage === 'moving') {
+      const t = setTimeout(() => setFoamPourStage('pouring'), FOAM_MOVE_MS);
+      return () => clearTimeout(t);
+    }
+    if (foamPourStage === 'pouring') {
+      setCupFoam({ key: foamPouringKey });
+      const t = setTimeout(() => {
+        const home = TOPPING_ITEMS.find((i) => i.key === foamPouringKey);
+        setFoamPositions((prev) => ({ ...prev, [foamPouringKey]: { left: home.left, top: home.top } }));
+        setFoamPourStage('idle');
+        setFoamPouringKey(null);
+        setFoamPourOffset(0);
+      }, FOAM_POUR_MS);
+      return () => clearTimeout(t);
+    }
+    return undefined;
+  }, [foamPourStage, foamPouringKey]);
+
+  // Same capture-phase-before-useFlatFocusNav intercept as the syrup aim
+  // effect above -- see its own big comment for why this has to be capture
+  // phase + stopImmediatePropagation rather than a plain onKeyDown.
+  useEffect(() => {
+    if (foamPourStage !== 'pouring' || !foamPouringKey) return undefined;
+    const handleFoamAimKeyDown = (e) => {
+      const action = getActionFromKeyEvent(e);
+      if (action !== 'Left' && action !== 'Right') return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      setFoamPourOffset((prev) => {
+        const next = prev + (action === 'Right' ? FOAM_MOVE_STEP : -FOAM_MOVE_STEP);
+        return Math.min(FOAM_MOVE_RANGE, Math.max(-FOAM_MOVE_RANGE, next));
+      });
+    };
+    window.addEventListener('keydown', handleFoamAimKeyDown, { capture: true });
+    return () => window.removeEventListener('keydown', handleFoamAimKeyDown, { capture: true });
+  }, [foamPourStage, foamPouringKey]);
+
+  const handleFoamPointerDown = (item) => (e) => {
+    if (foamPouringKey === item.key) return; // can't re-grab mid-pour
+    const base = foamPositions[item.key];
+    e.currentTarget.setPointerCapture(e.pointerId);
+    foamDragStartRef.current = { pointerX: e.clientX, pointerY: e.clientY, left: base.left, top: base.top };
+    setFoamDrag({ key: item.key, left: base.left, top: base.top });
+  };
+
+  const handleFoamPointerMove = (item) => (e) => {
+    if (!foamDrag || foamDrag.key !== item.key) return;
+    const rect = containerRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const dxPct = ((e.clientX - foamDragStartRef.current.pointerX) / rect.width) * 100;
+    const dyPct = ((e.clientY - foamDragStartRef.current.pointerY) / rect.height) * 100;
+    setFoamDrag({
+      key: item.key,
+      left: foamDragStartRef.current.left + dxPct,
+      top: foamDragStartRef.current.top + dyPct,
+    });
+  };
+
+  const handleFoamPointerUp = (item) => (e) => {
+    if (!foamDrag || foamDrag.key !== item.key) return;
+    e.currentTarget.releasePointerCapture?.(e.pointerId);
+    if (canPourFoam && isOverIncomingCup(foamDrag.left, foamDrag.top)) {
+      setFoamDrag(null);
+      beginFoamPour(item.key);
+      return;
+    }
+    const home = { left: item.left, top: item.top };
+    const totalMove = Math.max(
+      Math.abs(e.clientX - foamDragStartRef.current.pointerX),
+      Math.abs(e.clientY - foamDragStartRef.current.pointerY)
+    );
+    const rect = containerRef.current?.getBoundingClientRect();
+    const totalMovePct = rect ? (totalMove / Math.max(rect.width, rect.height)) * 100 : 0;
+    const snapBack =
+      totalMovePct < FOAM_CLICK_MAX_MOVE_PCT ||
+      (Math.abs(foamDrag.left - home.left) < item.width * FOAM_SNAP_FRACTION &&
+        Math.abs(foamDrag.top - home.top) < item.height * FOAM_SNAP_FRACTION);
+    setFoamPositions((prev) => ({
+      ...prev,
+      [item.key]: snapBack ? home : { left: foamDrag.left, top: foamDrag.top },
+    }));
+    setFoamDrag(null);
+  };
+
+  const handleFoamKeyDown = (item) => (e) => {
+    const action = getActionFromKeyEvent(e);
+    if (action !== 'Enter') return;
+    if (shouldDebounceEnter(e)) return;
+    e.preventDefault();
+    if (canPourFoam) {
+      beginFoamPour(item.key);
+      return;
+    }
+    setFoamPositions((prev) => ({ ...prev, [item.key]: { left: item.left, top: item.top } }));
+  };
+
   // ---- Falling syrup stream -- see the big comment on SYRUP_STREAM_COLORS/
   // getSyrupBoxFor above. Anchored to the pouring bottle's own current
   // (offset-nudged) position, falling down to the syrup box's own top edge
@@ -412,6 +642,16 @@ const ToppingsStation = ({ activeStep, customerNumber, onNavigate, onAdvance, or
   const syrupPourHeight = incomingSyrupBox ? Math.max(incomingSyrupBox.top - syrupPourTop, 1) : 0;
   const syrupPourColor = pouringKey ? SYRUP_STREAM_COLORS[pouringKey] : SYRUP_STREAM_COLORS['guava-syrup'];
 
+  // ---- Falling foam stream -- same idea as the syrup stream above, just
+  // landing at the foam box's own top edge (incomingFoamBox) instead.
+  const pouringFoamItem = foamPouringKey ? TOPPING_ITEMS.find((i) => i.key === foamPouringKey) : null;
+  const pouringFoamPos = foamPouringKey ? foamPositions[foamPouringKey] : null;
+  const foamPourLeft =
+    pouringFoamItem && pouringFoamPos ? pouringFoamPos.left + pouringFoamItem.width / 2 + foamPourOffset : 0;
+  const foamPourTop = pouringFoamItem && pouringFoamPos ? pouringFoamPos.top + pouringFoamItem.height : 0;
+  const foamPourHeight = incomingFoamBox ? Math.max(incomingFoamBox.top - foamPourTop, 1) : 0;
+  const foamPourColor = foamPouringKey ? FOAM_STREAM_COLORS[foamPouringKey] : FOAM_STREAM_COLORS['reg-cold-foam'];
+
   return (
     <div className="toppings-container" ref={containerRef}>
       <h1 className="sr-only">Toppings Station</h1>
@@ -423,9 +663,16 @@ const ToppingsStation = ({ activeStep, customerNumber, onNavigate, onAdvance, or
             ToppingsStation.css) but not draggable and no selection
             behavior wired up yet -- this is purely the "place them on the
             counter" step requested; picking one still just moves focus/
-            the glow around for now. Excludes guava-syrup/mint-syrup, which
-            get their own fully interactive render below instead. */}
-        {TOPPING_ITEMS.filter((item) => item.key !== 'guava-syrup' && item.key !== 'mint-syrup').map((item) => (
+            the glow around for now. Excludes guava-syrup/mint-syrup and
+            the two cold foams, which each get their own fully interactive
+            render below instead. */}
+        {TOPPING_ITEMS.filter(
+          (item) =>
+            item.key !== 'guava-syrup' &&
+            item.key !== 'mint-syrup' &&
+            item.key !== 'matcha-cold-foam' &&
+            item.key !== 'reg-cold-foam'
+        ).map((item) => (
           <img
             key={item.key}
             src={item.src}
@@ -480,6 +727,41 @@ const ToppingsStation = ({ activeStep, customerNumber, onNavigate, onAdvance, or
             />
           );
         })}
+        {/* Matcha-cold-foam/reg-cold-foam -- identical interaction to the
+            syrup pair above (drag onto the drink or Enter to pour, 180deg
+            flip via WHISK_FLIP_DEG, Left/Right to aim while pouring); see
+            the big comment above FOAM_HOVER_GAP for what's different about
+            where foam actually lands. */}
+        {TOPPING_ITEMS.filter((item) => item.key === 'matcha-cold-foam' || item.key === 'reg-cold-foam').map(
+          (item) => {
+            const dragging = foamDrag?.key === item.key;
+            const isPouring = foamPouringKey === item.key;
+            const basePos = dragging ? foamDrag : foamPositions[item.key];
+            const pos = isPouring ? { left: basePos.left + foamPourOffset, top: basePos.top } : basePos;
+            return (
+              <img
+                key={item.key}
+                src={item.src}
+                alt={`${item.alt}. Drag onto the drink to pour some in, or select it and press Enter. While it's pouring, use Left/Right to aim the stream.`}
+                className={`station-item movable${dragging ? ' dragging' : ''}${isPouring ? ' settling' : ''}`}
+                data-focusable
+                tabIndex={0}
+                draggable={false}
+                style={{
+                  left: `${pos.left}%`,
+                  top: `${pos.top}%`,
+                  width: `${item.width}%`,
+                  height: `${item.height}%`,
+                  ...(isPouring ? { transform: `rotate(${WHISK_FLIP_DEG}deg)` } : {}),
+                }}
+                onPointerDown={handleFoamPointerDown(item)}
+                onPointerMove={handleFoamPointerMove(item)}
+                onPointerUp={handleFoamPointerUp(item)}
+                onKeyDown={handleFoamKeyDown(item)}
+              />
+            );
+          }
+        )}
         {/* Carried-over drink -- purely decorative (aria-hidden, no
             data-focusable/tabIndex, same treatment Milk Selection's own
             incoming bowl started with), just so the finished drink doesn't
@@ -525,6 +807,47 @@ const ToppingsStation = ({ activeStep, customerNumber, onNavigate, onAdvance, or
                 }}
               />
             )}
+            {/* Cold foam, poured on TOP of whatever's already in the cup --
+                its own shape (.cup-foam-fill in ToppingsStation.css), with
+                rounded top corners rather than matcha's own pointed glass-
+                taper meniscus (see the big comment above FOAM_HOVER_GAP in
+                this file), and its own color modifier class that stays
+                solid/opaque almost the whole way down instead of fading
+                the way matcha's own modifier classes do -- foam is meant
+                to read as its own distinct layer sitting on top, not as
+                blending into whatever's underneath. Rendered after the
+                matcha fill above so it paints over it. */}
+            {cupFoam && incomingFoamBox && (
+              <div
+                className={`cup-foam-fill ${cupFoam.key}`}
+                aria-hidden="true"
+                style={{
+                  left: `${incomingFoamBox.left}%`,
+                  top: `${incomingFoamBox.top}%`,
+                  width: `${incomingFoamBox.width}%`,
+                  height: `${incomingFoamBox.height}%`,
+                }}
+              />
+            )}
+            {/* Foam's own flattened top-surface ellipse, straddling the
+                body's own top edge (see getFoamCapBoxFor above) -- reads as
+                the flat surface of the poured foam sitting right at (or
+                just above) the drink's fill line, which is what actually
+                sells "filled all the way up" rather than the body's own
+                rounded-but-still-a-bit-angular top edge on its own.
+                Rendered after the body so it paints over that top edge. */}
+            {cupFoam && incomingFoamCapBox && (
+              <div
+                className={`cup-foam-cap ${cupFoam.key}`}
+                aria-hidden="true"
+                style={{
+                  left: `${incomingFoamCapBox.left}%`,
+                  top: `${incomingFoamCapBox.top}%`,
+                  width: `${incomingFoamCapBox.width}%`,
+                  height: `${incomingFoamCapBox.height}%`,
+                }}
+              />
+            )}
             {/* Syrup poured on top of everything else, but visually sinks to
                 the BOTTOM of the drink -- see the big comment on
                 getSyrupBoxFor above. .cup-syrup-fill is defined locally in
@@ -562,6 +885,24 @@ const ToppingsStation = ({ activeStep, customerNumber, onNavigate, onAdvance, or
             <span className="spoon-pour-grain spoon-pour-grain-2" style={{ background: syrupPourColor }} />
             <span className="spoon-pour-grain spoon-pour-grain-3" style={{ background: syrupPourColor }} />
             <span className="spoon-pour-grain spoon-pour-grain-4" style={{ background: syrupPourColor }} />
+          </div>
+        )}
+        {/* Falling foam stream -- same idea as the syrup stream above, see
+            the big comment on FOAM_STREAM_COLORS/getFoamHoverPos in this
+            file. Only shown during the actual 'pouring' stage. */}
+        {foamPourStage === 'pouring' && foamPouringKey && (
+          <div
+            className="spoon-pour"
+            style={{
+              left: `${foamPourLeft}%`,
+              top: `${foamPourTop}%`,
+              height: `${foamPourHeight}%`,
+            }}
+          >
+            <span className="spoon-pour-grain spoon-pour-grain-1" style={{ background: foamPourColor }} />
+            <span className="spoon-pour-grain spoon-pour-grain-2" style={{ background: foamPourColor }} />
+            <span className="spoon-pour-grain spoon-pour-grain-3" style={{ background: foamPourColor }} />
+            <span className="spoon-pour-grain spoon-pour-grain-4" style={{ background: foamPourColor }} />
           </div>
         )}
         <OrderReceiptButton order={order} />

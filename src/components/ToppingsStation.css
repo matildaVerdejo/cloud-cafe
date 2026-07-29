@@ -120,3 +120,80 @@
   background: linear-gradient(to top, rgba(101, 196, 155, 0.85) 0%, rgba(101, 196, 155, 0.85) 30%, rgba(101, 196, 155, 0) 100%);
 }
 
+/* Cold foam, poured on top of the drink -- its own dedicated shape rather
+   than reusing MilkSelection.css's .cup-matcha-fill clip-path (that
+   clip-path's top edge is a pointed glass-taper meniscus, sharp corners
+   included; foam's own top corners are rounded instead, per request).
+   border-radius's slash syntax lets each corner get its own horizontal/
+   vertical radius -- the top two corners are heavily rounded (50%/48%,
+   basically half the box's own width/height, i.e. as round as a box this
+   shape can get) while the bottom two stay only lightly rounded (10%),
+   since the bottom is a color transition into whatever's underneath, not
+   a real edge that needs to read as rounded.
+   Unlike the matcha/syrup fills this used to borrow its shape from, foam
+   is NOT meant to read as blending into whatever's underneath -- real cold
+   foam sits as its own distinct layer on top of a drink, it doesn't
+   gradually dissolve into it. So instead of matcha's 0%/26.5%/100% solid-
+   then-fade-to-transparent gradient, this stays solid almost all the way
+   down (0%-92%) and only fades over the last 8% -- just enough to soften
+   the box's own bottom edge so it doesn't read as a visibly aliased cut
+   line, without the wide fade that would make it look mixed in. Opacity
+   lowered from the first pass (0.97 -> 0.7) per request, so it reads as a
+   lighter foam rather than a solid, nearly-opaque cap. Colors sampled from
+   each bottle PNG's own average opaque pixel color (see FOAM_STREAM_COLORS
+   in ToppingsStation.js), same "one palette" reasoning as guava/mint
+   syrup. */
+.cup-foam-fill {
+  position: absolute;
+  box-sizing: border-box;
+  pointer-events: none;
+  border-radius: 50% 50% 10% 10% / 48% 48% 10% 10%;
+  transform-origin: top center;
+  animation: cupMilkGrow 0.5s ease-out both;
+}
+
+.cup-foam-fill.matcha-cold-foam {
+  background: linear-gradient(
+    to bottom,
+    rgba(200, 213, 171, 0.7) 0%,
+    rgba(200, 213, 171, 0.7) 92%,
+    rgba(200, 213, 171, 0) 100%
+  );
+}
+
+.cup-foam-fill.reg-cold-foam {
+  background: linear-gradient(
+    to bottom,
+    rgba(234, 232, 227, 0.7) 0%,
+    rgba(234, 232, 227, 0.7) 92%,
+    rgba(234, 232, 227, 0) 100%
+  );
+}
+
+/* Foam's flattened top-surface ellipse ("cap" -- see getFoamCapBoxFor in
+   ToppingsStation.js), straddling the body's own top edge. A plain circle
+   (border-radius: 50%, applied to a non-square box so it renders as an
+   ellipse) rather than the body's own shape, since this is meant to read
+   as a flat disc viewed at a shallow angle -- the "looking down at the
+   drink's surface" cue that actually sells "filled to the top", not just
+   a rounded edge on the body. Solid-ish (opacity a little higher than the
+   body's own 0.7) since it's meant to look like the one truly flat, fully-
+   poured surface, not a fading transition. Same colors as the body/stream
+   (see FOAM_STREAM_COLORS in ToppingsStation.js). No clip-path/taper math
+   needed here since it's just a plain ellipse, independent of the glass's
+   own taper. */
+.cup-foam-cap {
+  position: absolute;
+  border-radius: 50%;
+  pointer-events: none;
+  animation: cupMilkGrow 0.35s ease-out both;
+}
+
+.cup-foam-cap.matcha-cold-foam {
+  background: rgba(200, 213, 171, 0.85);
+}
+
+.cup-foam-cap.reg-cold-foam {
+  background: rgba(234, 232, 227, 0.85);
+}
+
