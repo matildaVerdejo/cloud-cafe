@@ -36,7 +36,10 @@ const CUP_SPOTS = {
   table: { left: 40.30, top: 40.10 },
 };
 const SHELF_SIZE = { width: 6.47, height: 12.39 };
-const TABLE_SIZE = { width: 19.40, height: 37.16 }; // same aspect ratio, 3x
+// Exported (alongside getMilkBoxFor/getMatchaBoxFor below) so
+// ToppingsStation.js can render its own carried-over cup at this exact same
+// size rather than guessing a scaled-down one.
+export const TABLE_SIZE = { width: 19.40, height: 37.16 }; // same aspect ratio, 3x
 
 // The four milk/water bottles, standing in a tight row on the counter to
 // the right of the sink, roughly where they used to be baked directly into
@@ -141,6 +144,13 @@ const BOTTLE_POUR_ROTATE_DEG = -35; // simple tilt for the pour -- no pinned tra
 const BOTTLE_MOVE_MS = 350; // time to glide to the hover spot -- same reasoning as MatchaMaking's KETTLE_MOVE_MS
 const BOTTLE_POUR_MS = 900; // how long the tilt/pour holds before gliding back home
 
+// How long the finished cup takes to glide into the Send Drink zone, and
+// how long its shrink/fade takes once it's arrived -- same values as
+// MatchaMaking's own BOWL_CARRY_MOVE_MS/BOWL_VANISH_MS, whose
+// .bowl-vanishing CSS animation (0.35s) this reuses directly.
+const CUP_SEND_MOVE_MS = 350;
+const CUP_SEND_VANISH_MS = 350;
+
 // Where the milk fill sits inside the cup once poured (see cupMilk/
 // beginPour below) -- fixed to the cup's table position rather than
 // tracking a later re-drag, same simplification getIceCupSlotPos already
@@ -163,14 +173,23 @@ const MILK_STREAM_COLORS = {
   coconut: 'rgba(240, 247, 247, 0.85)',
 };
 
-function getCupMilkBox() {
-  const cup = CUP_SPOTS.table;
+// Generic version of the milk-box math, parameterized on a cup position/
+// size rather than hardcoded to CUP_SPOTS.table/TABLE_SIZE -- exported so
+// ToppingsStation.js can compute the same box against its own carried-over
+// cup's position/size (INCOMING_DRINK_SPOT/INCOMING_DRINK_SIZE there)
+// without duplicating CUP_MILK_BOX_FRAC's actual fraction values. getCupMilkBox
+// below is just this called with this screen's own cup spot/size.
+export function getMilkBoxFor(cupPos, cupSize) {
   return {
-    left: cup.left + CUP_MILK_BOX_FRAC.leftFrac * TABLE_SIZE.width,
-    top: cup.top + CUP_MILK_BOX_FRAC.topFrac * TABLE_SIZE.height,
-    width: (CUP_MILK_BOX_FRAC.rightFrac - CUP_MILK_BOX_FRAC.leftFrac) * TABLE_SIZE.width,
-    height: (CUP_MILK_BOX_FRAC.bottomFrac - CUP_MILK_BOX_FRAC.topFrac) * TABLE_SIZE.height,
+    left: cupPos.left + CUP_MILK_BOX_FRAC.leftFrac * cupSize.width,
+    top: cupPos.top + CUP_MILK_BOX_FRAC.topFrac * cupSize.height,
+    width: (CUP_MILK_BOX_FRAC.rightFrac - CUP_MILK_BOX_FRAC.leftFrac) * cupSize.width,
+    height: (CUP_MILK_BOX_FRAC.bottomFrac - CUP_MILK_BOX_FRAC.topFrac) * cupSize.height,
   };
+}
+
+function getCupMilkBox() {
+  return getMilkBoxFor(CUP_SPOTS.table, TABLE_SIZE);
 }
 
 // Matcha poured on top of the milk/water base -- a second fill the same
@@ -190,8 +209,9 @@ function getCupMilkBox() {
 const CUP_MATCHA_RAISE_FRAC = 0.18;
 const CUP_MATCHA_OVERLAP_FRAC = 0.5;
 
-function getCupMatchaBox() {
-  const milkBox = getCupMilkBox();
+// Same "generic, parameterized on a milk box" split as getMilkBoxFor above
+// -- exported for ToppingsStation.js's own carried-over cup.
+export function getMatchaBoxFor(milkBox) {
   const raise = milkBox.height * CUP_MATCHA_RAISE_FRAC;
   const overlap = milkBox.height * CUP_MATCHA_OVERLAP_FRAC;
   return {
@@ -200,6 +220,10 @@ function getCupMatchaBox() {
     width: milkBox.width,
     height: raise + overlap,
   };
+}
+
+function getCupMatchaBox() {
+  return getMatchaBoxFor(getCupMilkBox());
 }
 
 // Same idea as MatchaMaking's kettle/bowl/whisk: drop a bottle back close
@@ -297,7 +321,28 @@ function isOverIceBox(leftPct, topPct) {
   );
 }
 
-const MilkSelection = ({ activeStep, customerNumber, onNavigate, onAdvance, order, incomingBowl }) => {
+// "Send to Toppings" drop-zone -- same idea as MatchaMaking's own "Make
+// Drink" zone (MAKE_DRINK_ZONE/isOverMakeDrinkZone there), just carrying
+// the finished cup forward to the Toppings station instead of the bowl to
+// this one. Bottom-right corner, clear of the milk bottle cluster above it
+// (BOTTLE_ITEMS work out to roughly left 69.5-96.5, top 45-83 -- see
+// BOTTLE_CLUSTER_CENTER/BOTTLE_BOTTOM above) and clear of the ProgressBar
+// (bottom-center, same ~77.3%-from-center-at-most reasoning as
+// MAKE_DRINK_ZONE's own comment in MatchaMaking.js, since it's the same
+// component/width here too).
+const SEND_DRINK_ZONE = { left: 78, top: 85, width: 19, height: 13 };
+
+function isOverSendDrinkZone(leftPct, topPct) {
+  const margin = 3;
+  return (
+    leftPct >= SEND_DRINK_ZONE.left - margin &&
+    leftPct <= SEND_DRINK_ZONE.left + SEND_DRINK_ZONE.width + margin &&
+    topPct >= SEND_DRINK_ZONE.top - margin &&
+    topPct <= SEND_DRINK_ZONE.top + SEND_DRINK_ZONE.height + margin
+  );
+}
+
+const MilkSelection = ({ activeStep, customerNumber, onNavigate, onAdvance, order, incomingBowl, onSendToToppings }) => {
   const containerRef = useRef(null);
   useFlatFocusNav(containerRef);
 
@@ -346,7 +391,39 @@ const MilkSelection = ({ activeStep, customerNumber, onNavigate, onAdvance, orde
   const [cupDragPos, setCupDragPos] = useState(null);
   const cupDragStartRef = useRef({ pointerX: 0, pointerY: 0, cupLeft: 0, cupTop: 0 });
 
+  // ---- Sending the finished cup on to Toppings (see SEND_DRINK_ZONE
+  // above) -- same "carry to a corner zone, then shrink/fade away" shape as
+  // MatchaMaking's own bowlStage/beginBowlCarry, just for the cup here.
+  //   'idle'      -- normal, cup behaves exactly as it always has (shelf <->
+  //                  table drag/Enter-toggle).
+  //   'carrying'  -- confirmed (dropped on the zone, or Enter/Space once
+  //                  canSendDrink) -- gliding to the zone's own center.
+  //   'vanishing' -- arrived; shrinking/fading away (reuses MatchaMaking.
+  //                  css's .bowl-vanishing, already loaded globally, on the
+  //                  cup image, its fills, and any placed ice cubes).
+  //   'sent'      -- fade's finished; the cup (and everything in it) stops
+  //                  rendering entirely, same as the bowl once bowlStage
+  //                  reaches 'sent' over on MatchaMaking.
+  // Declared up here (rather than down near cupMilk/cupMatcha, where the
+  // rest of the sending logic lives) because cupRenderPos just below
+  // already needs to read cupSendPos -- a plain render-time reference, not
+  // a closure, so it has to come after this declaration textually, not just
+  // logically.
+  const [cupSendStage, setCupSendStage] = useState('idle');
+  // Live position while gliding to/sitting in the Send Drink zone -- same
+  // role as bowlPos, kept separate from cupDragPos (which specifically
+  // means "actively being pointer-dragged right now", and whose truthiness
+  // also toggles .glass-cup.dragging elsewhere) so this doesn't fight with
+  // that class's own meaning.
+  const [cupSendPos, setCupSendPos] = useState(null);
+
   const handleCupPointerDown = (e) => {
+    // Can't pick the cup back up once it's mid-carry/vanishing/gone -- same
+    // "settling" reasoning as .milk-bottle.settling/.station-item.movable.
+    // settling elsewhere (pointer-events: none on the cup while sending, see
+    // the JSX below, is the other half of this -- this guard is a backstop
+    // in case something still calls the handler directly).
+    if (cupSendStage !== 'idle') return;
     const base = CUP_SPOTS[cupSpot];
     e.currentTarget.setPointerCapture(e.pointerId);
     cupDragStartRef.current = {
@@ -373,6 +450,15 @@ const MilkSelection = ({ activeStep, customerNumber, onNavigate, onAdvance, orde
   const handleCupPointerUp = (e) => {
     if (!cupDragPos) return;
     e.currentTarget.releasePointerCapture?.(e.pointerId);
+    // Dropping the finished cup on the Send Drink zone (once there's a
+    // base poured -- see canSendDrink above) carries it off instead of the
+    // ordinary shelf/table placement below -- same "special-cased drop
+    // target" pattern as the bottles' own drop-on-cup branch.
+    if (canSendDrink && isOverSendDrinkZone(cupDragPos.left, cupDragPos.top)) {
+      setCupDragPos(null);
+      beginSendDrink();
+      return;
+    }
     const midpoint = (CUP_SPOTS.shelf.top + CUP_SPOTS.table.top) / 2;
     setCupSpot(cupDragPos.top > midpoint ? 'table' : 'shelf');
     setCupDragPos(null);
@@ -383,10 +469,19 @@ const MilkSelection = ({ activeStep, customerNumber, onNavigate, onAdvance, orde
     if (action !== 'Enter') return;
     if (shouldDebounceEnter(e)) return;
     e.preventDefault();
+    // Once the cup qualifies to be sent on (canSendDrink), Enter sends it
+    // instead of toggling shelf <-> table -- same "the meaningful action
+    // takes over from the mundane default" reasoning as the milk bottles'
+    // own handleBottleKeyDown. There's no real reason to send a poured cup
+    // back to the shelf anyway, so this doesn't give up anything.
+    if (canSendDrink) {
+      beginSendDrink();
+      return;
+    }
     setCupSpot((prev) => (prev === 'shelf' ? 'table' : 'shelf'));
   };
 
-  const cupRenderPos = cupDragPos || CUP_SPOTS[cupSpot];
+  const cupRenderPos = cupDragPos || cupSendPos || CUP_SPOTS[cupSpot];
   // Sized by the cup's current spot the whole time -- cupSpot only flips on
   // drop (see handleCupPointerUp/handleCupKeyDown), so grabbing it off the
   // table keeps it at TABLE_SIZE for the full drag instead of snapping down
@@ -531,13 +626,22 @@ const MilkSelection = ({ activeStep, customerNumber, onNavigate, onAdvance, orde
 
   // Preconditions for starting a milk/water pour: cup has to actually be on
   // the table (nothing to pour into otherwise), at least one ice cube
-  // already has to be in it, and nothing else can already be mid-pour.
-  const canPourMilk = cupSpot === 'table' && icePlaced.some(Boolean) && pourStage === 'idle';
+  // already has to be in it, nothing else can already be mid-pour, and the
+  // drink can't already be on its way out.
+  const canPourMilk =
+    cupSpot === 'table' && icePlaced.some(Boolean) && pourStage === 'idle' && cupSendStage === 'idle';
   // Matcha only pours once there's actually a base to pour it onto -- same
   // "pour the topping after the base" ordering the user asked for -- plus
-  // the usual cup-on-table/nothing-else-mid-pour preconditions, and of
-  // course an actual bowl to pour from.
-  const canPourMatcha = cupSpot === 'table' && !!cupMilk && pourStage === 'idle' && !!incomingBowl;
+  // the usual cup-on-table/nothing-else-mid-pour preconditions, an actual
+  // bowl to pour from, and (same as canPourMilk) the drink not already
+  // being sent off.
+  const canPourMatcha =
+    cupSpot === 'table' && !!cupMilk && pourStage === 'idle' && !!incomingBowl && cupSendStage === 'idle';
+  // The cup counts as "finished enough to send" once there's at least a
+  // milk/water base in it -- matcha's an optional finishing touch on top,
+  // not a requirement, same reasoning canPourMatcha itself already leans
+  // on (it only checks cupMilk, not cupMatcha, either).
+  const canSendDrink = cupSpot === 'table' && !!cupMilk && pourStage === 'idle' && cupSendStage === 'idle';
 
   // ---- Falling-liquid pour effect -----------------------------------------
   // Reuses the exact same .spoon-pour/.spoon-pour-grain-N visual machinery
@@ -618,6 +722,36 @@ const MilkSelection = ({ activeStep, customerNumber, onNavigate, onAdvance, orde
     }
     return undefined;
   }, [pourStage, pouringKey, incomingBowl]);
+
+  // Snapshotting cupMilk/cupMatcha here (rather than letting ToppingsStation
+  // read this screen's own state, which won't exist anymore once the player
+  // eventually advances away) is what lets that next screen know what the
+  // finished drink looked like -- see onSendToToppings (a prop from App.js,
+  // which stores it in state and passes it down to ToppingsStation as
+  // incomingDrink). Same "fired right away at the moment the item starts
+  // its carry, not deferred until the fade finishes" reasoning as
+  // MatchaMaking's own beginBowlCarry.
+  const beginSendDrink = () => {
+    if (!canSendDrink) return;
+    onSendToToppings?.({ milk: cupMilk, matcha: cupMatcha });
+    setCupSendPos({
+      left: SEND_DRINK_ZONE.left + SEND_DRINK_ZONE.width / 2 - TABLE_SIZE.width / 2,
+      top: SEND_DRINK_ZONE.top + SEND_DRINK_ZONE.height / 2 - TABLE_SIZE.height / 2,
+    });
+    setCupSendStage('carrying');
+  };
+
+  useEffect(() => {
+    if (cupSendStage === 'carrying') {
+      const t = setTimeout(() => setCupSendStage('vanishing'), CUP_SEND_MOVE_MS);
+      return () => clearTimeout(t);
+    }
+    if (cupSendStage === 'vanishing') {
+      const t = setTimeout(() => setCupSendStage('sent'), CUP_SEND_VANISH_MS);
+      return () => clearTimeout(t);
+    }
+    return undefined;
+  }, [cupSendStage]);
 
   const handleBottlePointerDown = (item) => (e) => {
     const base = bottlePositions[item.key];
@@ -815,40 +949,63 @@ const MilkSelection = ({ activeStep, customerNumber, onNavigate, onAdvance, orde
             order and is kept fairly translucent, so the glass's own
             outline/highlight linework still reads on top and the liquid
             looks like it's sitting behind/inside the glass rather than
-            painted over it, without needing real alpha-channel art. */}
-        <img
-          src="./GlassCup.png"
-          alt={
-            cupSpot === 'shelf'
-              ? 'Glass cup. Drag from the shelf to the table, or select it and press Enter.'
-              : 'Glass cup. Drag it back up to the shelf, or select it and press Enter.'
-          }
-          className={`glass-cup${cupDragPos ? ' dragging' : ''}`}
-          data-focusable
-          tabIndex={0}
-          draggable={false}
-          style={{
-            left: `${cupRenderPos.left}%`,
-            top: `${cupRenderPos.top}%`,
-            width: `${cupRenderSize.width}%`,
-            height: `${cupRenderSize.height}%`,
-          }}
-          onPointerDown={handleCupPointerDown}
-          onPointerMove={handleCupPointerMove}
-          onPointerUp={handleCupPointerUp}
-          onKeyDown={handleCupKeyDown}
-        />
+            painted over it, without needing real alpha-channel art.
+            Stops rendering entirely once cupSendStage reaches 'sent' (see
+            the big comment on that state above) -- same "gone once sent"
+            treatment MatchaMaking's own bowl gets. While 'carrying'/
+            'vanishing' it's still rendered but pointer-events: none (inline
+            -- there's no .glass-cup.settling variant, so this is simpler
+            than adding one) so it can't be grabbed mid-transit, and picks
+            up .bowl-vanishing (reused from MatchaMaking.css, already
+            loaded globally) for the actual shrink/fade once 'vanishing'
+            starts. */}
+        {cupSendStage !== 'sent' && (
+          <img
+            src="./GlassCup.png"
+            alt={
+              cupSpot === 'shelf'
+                ? 'Glass cup. Drag from the shelf to the table, or select it and press Enter.'
+                : canSendDrink
+                ? 'Glass cup with the finished drink. Drag onto the Send Drink zone to send it to Toppings, or select it and press Enter.'
+                : 'Glass cup. Drag it back up to the shelf, or select it and press Enter.'
+            }
+            className={`glass-cup${cupDragPos ? ' dragging' : ''}${
+              cupSendStage === 'vanishing' ? ' bowl-vanishing' : ''
+            }`}
+            data-focusable
+            tabIndex={0}
+            draggable={false}
+            style={{
+              left: `${cupRenderPos.left}%`,
+              top: `${cupRenderPos.top}%`,
+              width: `${cupRenderSize.width}%`,
+              height: `${cupRenderSize.height}%`,
+              ...(cupSendStage !== 'idle' ? { pointerEvents: 'none' } : {}),
+            }}
+            onPointerDown={handleCupPointerDown}
+            onPointerMove={handleCupPointerMove}
+            onPointerUp={handleCupPointerUp}
+            onKeyDown={handleCupKeyDown}
+          />
+        )}
         {ICE_BOX_SPOTS.map((boxSpot, index) => {
           const placed = icePlaced[index];
+          // Once the finished drink's fully sent (cupSendStage 'sent'),
+          // any cube that was actually placed in the cup goes with it --
+          // an unplaced cube still sitting in the box is unaffected.
+          if (placed && cupSendStage === 'sent') return null;
           const dragging = iceDrag?.index === index;
           const pos = dragging ? iceDrag : placed ? getIceCupSlotPos(index) : boxSpot;
           const size = placed ? ICE_CUP_SIZE : ICE_BOX_SIZE;
+          const leaving = placed && cupSendStage === 'vanishing';
           return (
             <img
               key={index}
               src="./IceCube.png"
               alt={placed ? 'Ice cube in the cup. Drag it back to the ice box, or select it and press Enter.' : 'Ice cube. Drag it into the cup, or select it and press Enter.'}
-              className={`ice-cube${dragging ? ' dragging' : ''}${placed ? ' placed' : ''}`}
+              className={`ice-cube${dragging ? ' dragging' : ''}${placed ? ' placed' : ''}${
+                leaving ? ' bowl-vanishing' : ''
+              }`}
               data-focusable
               tabIndex={0}
               draggable={false}
@@ -873,14 +1030,18 @@ const MilkSelection = ({ activeStep, customerNumber, onNavigate, onAdvance, orde
             the liquid rather than floating on top of it. pointer-events:
             none on .cup-milk-fill (see the CSS) means this doesn't block
             dragging a cube back out even while it's stacked on top
-            visually. Only shown while the cup's actually on the table --
-            cupMilk itself doesn't get cleared when the cup goes back to the
-            shelf, but there'd be nothing sensible to anchor the fill to up
-            there (CUP_MILK_BOX_FRAC is only ever computed off
-            CUP_SPOTS.table). */}
-        {cupMilk && cupSpot === 'table' && (
+            visually. Only shown while the cup's actually on the table and
+            hasn't fully vanished yet -- cupMilk itself doesn't get cleared
+            when the cup goes back to the shelf, but there'd be nothing
+            sensible to anchor the fill to up there (CUP_MILK_BOX_FRAC is
+            only ever computed off CUP_SPOTS.table). Picks up
+            .bowl-vanishing the same as the cup image itself while
+            cupSendStage is 'vanishing', so the whole drink shrinks/fades as
+            one unit rather than the cup disappearing out from under a
+            still-solid fill for a frame. */}
+        {cupMilk && cupSpot === 'table' && cupSendStage !== 'sent' && (
           <div
-            className={`cup-milk-fill ${cupMilk.type}`}
+            className={`cup-milk-fill ${cupMilk.type}${cupSendStage === 'vanishing' ? ' bowl-vanishing' : ''}`}
             aria-hidden="true"
             style={{
               left: `${cupMilkBox.left}%`,
@@ -896,10 +1057,11 @@ const MilkSelection = ({ activeStep, customerNumber, onNavigate, onAdvance, orde
             fill so it paints on top of it (same "on top of everything
             underneath" DOM-order reasoning as the milk fill itself), using
             the milk fill's own left/top/width so its taper lines up, just a
-            shorter height. */}
-        {cupMatcha && cupSpot === 'table' && (
+            shorter height. Same cupSendStage 'sent'/'vanishing' handling as
+            the milk fill above. */}
+        {cupMatcha && cupSpot === 'table' && cupSendStage !== 'sent' && (
           <div
-            className={`cup-matcha-fill ${cupMatcha.grade}`}
+            className={`cup-matcha-fill ${cupMatcha.grade}${cupSendStage === 'vanishing' ? ' bowl-vanishing' : ''}`}
             aria-hidden="true"
             style={{
               left: `${cupMatchaBox.left}%`,
@@ -965,6 +1127,33 @@ const MilkSelection = ({ activeStep, customerNumber, onNavigate, onAdvance, orde
             <span className="spoon-pour-grain spoon-pour-grain-4" style={{ background: pourColor }} />
           </div>
         )}
+        {/* "Send to Toppings" drop-zone -- see SEND_DRINK_ZONE/canSendDrink/
+            beginSendDrink above, same pattern as MatchaMaking's own "Make
+            Drink" zone (reusing its .make-drink-zone class directly, since
+            MatchaMaking.css is already loaded globally -- see the comment
+            on the carried-over bowl/whisked-liquid images earlier in this
+            file for that same reasoning). Appears once there's a base
+            poured and disappears the instant the cup actually heads there
+            (cupSendStage leaving 'idle'), same beat as the bowl's own zone
+            retiring in MatchaMaking.js. Not itself focusable -- it's a drop
+            target the *cup* gets dragged onto or sent to via its own Enter
+            press (see handleCupPointerUp/handleCupKeyDown above), same
+            "the label just marks a zone" pattern as the ice box/cup zones
+            elsewhere on this screen. */}
+        {canSendDrink && (
+          <div
+            className="make-drink-zone"
+            aria-hidden="true"
+            style={{
+              left: `${SEND_DRINK_ZONE.left}%`,
+              top: `${SEND_DRINK_ZONE.top}%`,
+              width: `${SEND_DRINK_ZONE.width}%`,
+              height: `${SEND_DRINK_ZONE.height}%`,
+            }}
+          >
+            Send to Toppings
+          </div>
+        )}
 
         <OrderReceiptButton order={order} />
         <ProgressBar
@@ -972,6 +1161,13 @@ const MilkSelection = ({ activeStep, customerNumber, onNavigate, onAdvance, orde
           customerNumber={customerNumber}
           onNavigate={onNavigate}
           onAdvance={onAdvance}
+          // Final highlight beat for this station: once the drink's fully
+          // sent off (cupSendStage 'sent'), there's nothing left to do here,
+          // so the current-step dot flashes as the "ok to move on" signal --
+          // same opt-in highlightCurrentStep/currentStepHint props
+          // MatchaMaking uses for its own matching beat.
+          highlightCurrentStep={cupSendStage === 'sent'}
+          currentStepHint="Use your right arrow key to move on to the toppings station."
         />
       </div>
     </div>

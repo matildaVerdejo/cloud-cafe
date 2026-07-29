@@ -46,6 +46,15 @@ function App() {
   // -- a new customer's Milk Selection screen should never show the
   // previous customer's leftover bowl.
   const [matchaBowl, setMatchaBowl] = useState(null);
+  // The finished cup sent over from MilkSelection's own "Send to Toppings"
+  // drop-zone -- null until sent, then shown by ToppingsStation as its own
+  // carried-over drink display (see incomingDrink there). Shape is
+  // whatever MilkSelection's beginSendDrink hands off ({ milk, matcha }, the
+  // cup's own cupMilk/cupMatcha state at the moment it's sent). Reset to
+  // null in the same places matchaBowl/currentOrder are, for the same
+  // reason -- a new customer's Toppings screen should never show the
+  // previous customer's leftover drink.
+  const [finishedDrink, setFinishedDrink] = useState(null);
   const [showExitConfirm, setShowExitConfirm] = useState(false);
   const [adPlaying, setAdPlaying] = useState(false);
   // currentPage is read inside a window-level keydown listener that is
@@ -140,6 +149,7 @@ function App() {
     setCustomerNumber(1);
     setCurrentOrder(null);
     setMatchaBowl(null);
+    setFinishedDrink(null);
     setCurrentPage('ordering');
   };
 
@@ -164,11 +174,13 @@ function App() {
       setCustomerNumber((n) => n + 1);
       setCurrentOrder(null);
       setMatchaBowl(null);
+      setFinishedDrink(null);
       setCurrentPage('ordering');
     } else {
       setCustomerNumber(1);
       setCurrentOrder(null);
       setMatchaBowl(null);
+      setFinishedDrink(null);
       setCurrentPage('main');
       sendAdOpportunity('MENU_RETURN');
     }
@@ -227,13 +239,19 @@ function App() {
               activeStep="milk-selection"
               order={currentOrder}
               incomingBowl={matchaBowl}
+              onSendToToppings={setFinishedDrink}
               {...progressProps}
             />
           </div>
         )}
         {currentPage === 'toppings' && (
           <div className="page-slide">
-            <ToppingsStation activeStep="toppings" order={currentOrder} {...progressProps} />
+            <ToppingsStation
+              activeStep="toppings"
+              order={currentOrder}
+              incomingDrink={finishedDrink}
+              {...progressProps}
+            />
           </div>
         )}
         {currentPage === 'final-combination' && (

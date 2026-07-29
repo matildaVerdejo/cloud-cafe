@@ -3,6 +3,24 @@ import './ToppingsStation.css';
 import { useFlatFocusNav } from '../gameloop/useFlatFocusNav';
 import ProgressBar from './ProgressBar';
 import OrderReceiptButton from './OrderReceiptButton';
+import { getMilkBoxFor, getMatchaBoxFor, TABLE_SIZE } from './MilkSelection';
+
+// Where the finished cup (see incomingDrink below) sent over from Milk
+// Selection's own "Send to Toppings" drop-zone comes to rest on this
+// screen -- purely decorative (not draggable/focusable, same treatment
+// the carried-over bowl first got on Milk Selection before that became
+// interactive). Same size it displayed at over there (TABLE_SIZE,
+// imported directly rather than guessing a scaled-down copy), centered in
+// the middle of the frame -- left/top are just 50% minus half the box's
+// own width/height, which works out independently on each axis even
+// though the container itself isn't square (percentages here are already
+// relative to the container's own width/height respectively, same as
+// every other box in this file).
+const INCOMING_DRINK_SIZE = TABLE_SIZE;
+const INCOMING_DRINK_SPOT = {
+  left: 50 - INCOMING_DRINK_SIZE.width / 2,
+  top: 50 - INCOMING_DRINK_SIZE.height / 2,
+};
 
 // Background swapped from the old baked-in-items ToppingsStation.png to
 // MatchaBaseStation.png (the same empty-counter art the Matcha Making
@@ -64,15 +82,16 @@ const FOAM_PAIR = [
 // tuning once actually seen against the live render.
 const TOPPING_HEIGHT = 30; // syrup/foam pair height
 const POWDER_HEIGHT = TOPPING_HEIGHT * 0.7; // smaller than the syrup/foam pairs
-const TOPPING_ROW_BOTTOM = 64; // the powder pair's bottom edge lands here, "on the table"
+const TOPPING_ROW_BOTTOM = 45; // the powder pair's bottom edge lands here -- raised up from the table line (was 64, then 58, 50, 47), per request
 const EDGE_MARGIN = 5; // gap from the left/right edges of the frame
 // The powder pair sits VERY close together internally -- much tighter than
 // PAIR_GAP. FOAM_PAIR's spacing was already confirmed good, so it keeps
 // the wider PAIR_GAP.
 const TIGHT_PAIR_GAP = 0.15;
 // The syrup pair needs to be even closer together than TIGHT_PAIR_GAP, per
-// request.
-const SYRUP_PAIR_GAP = 0.05;
+// request -- tightened further still (was 0.05) per a later request to
+// move guava-syrup and mint-syrup closer to each other.
+const SYRUP_PAIR_GAP = 0.02;
 const PAIR_GAP = 0.6;
 // Syrup pair's top -- shifted down slightly from the very top edge (was
 // CORNER_PAIR_TOP-style 6), per request.
@@ -130,9 +149,24 @@ const TOPPING_ITEMS = [
   }),
 ];
 
-const ToppingsStation = ({ activeStep, customerNumber, onNavigate, onAdvance, order }) => {
+const ToppingsStation = ({ activeStep, customerNumber, onNavigate, onAdvance, order, incomingDrink }) => {
   const containerRef = useRef(null);
   useFlatFocusNav(containerRef);
+
+  // ---- Carried-over cup from Milk Selection (see incomingDrink above) ----
+  // The finished cup (glass + milk/water fill + optional matcha fill),
+  // sent over from that screen's own "Send to Toppings" drop-zone. Reuses
+  // MilkSelection.css's own .cup-milk-fill/.cup-matcha-fill classes and
+  // their clip-path/gradient work directly (that stylesheet is already
+  // loaded globally since MilkSelection.js is always imported by App.js --
+  // same reasoning MilkSelection itself uses for MatchaMaking's classes)
+  // rather than re-deriving the glass's own taper shape a third time.
+  // getMilkBoxFor/getMatchaBoxFor (imported from MilkSelection.js) are the
+  // same box math that screen uses for its own cup, just computed against
+  // this screen's own INCOMING_DRINK_SPOT/INCOMING_DRINK_SIZE instead of
+  // CUP_SPOTS.table/TABLE_SIZE.
+  const incomingMilkBox = incomingDrink?.milk ? getMilkBoxFor(INCOMING_DRINK_SPOT, INCOMING_DRINK_SIZE) : null;
+  const incomingMatchaBox = incomingDrink?.matcha && incomingMilkBox ? getMatchaBoxFor(incomingMilkBox) : null;
 
   return (
     <div className="toppings-container" ref={containerRef}>
@@ -163,6 +197,53 @@ const ToppingsStation = ({ activeStep, customerNumber, onNavigate, onAdvance, or
             }}
           />
         ))}
+        {/* Carried-over drink -- purely decorative (aria-hidden, no
+            data-focusable/tabIndex, same treatment Milk Selection's own
+            incoming bowl started with), just so the finished drink doesn't
+            vanish once sent over. Only the cup itself uses this screen's
+            own .station-item (not .selectable, so it's not focusable) --
+            the fills reuse MilkSelection.css's classes as-is. */}
+        {incomingDrink && (
+          <>
+            <img
+              src="./GlassCup.png"
+              alt=""
+              aria-hidden="true"
+              draggable={false}
+              className="station-item"
+              style={{
+                left: `${INCOMING_DRINK_SPOT.left}%`,
+                top: `${INCOMING_DRINK_SPOT.top}%`,
+                width: `${INCOMING_DRINK_SIZE.width}%`,
+                height: `${INCOMING_DRINK_SIZE.height}%`,
+              }}
+            />
+            {incomingMilkBox && (
+              <div
+                className={`cup-milk-fill ${incomingDrink.milk.type}`}
+                aria-hidden="true"
+                style={{
+                  left: `${incomingMilkBox.left}%`,
+                  top: `${incomingMilkBox.top}%`,
+                  width: `${incomingMilkBox.width}%`,
+                  height: `${incomingMilkBox.height}%`,
+                }}
+              />
+            )}
+            {incomingMatchaBox && (
+              <div
+                className={`cup-matcha-fill ${incomingDrink.matcha.grade}`}
+                aria-hidden="true"
+                style={{
+                  left: `${incomingMatchaBox.left}%`,
+                  top: `${incomingMatchaBox.top}%`,
+                  width: `${incomingMatchaBox.width}%`,
+                  height: `${incomingMatchaBox.height}%`,
+                }}
+              />
+            )}
+          </>
+        )}
         <OrderReceiptButton order={order} />
         <ProgressBar
           activeStep={activeStep}
