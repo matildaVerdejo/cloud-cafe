@@ -277,12 +277,22 @@ const MilkSelection = ({ activeStep, customerNumber, onNavigate, onAdvance, orde
   // whisked-liquid image, just anchored to this screen's own
   // INCOMING_BOWL_SPOT instead of wherever the bowl happened to be dragged
   // on that screen, so the whisked matcha lines up with the bowl's rim
-  // here the same way it does there.
+  // here the same way it does there. incomingBowlItem.width/height are
+  // MOVABLE_ITEMS' sizing for MatchaMaking's own counter, which read too
+  // big once the bowl "arrives" here on a screen with a different sense of
+  // scale -- INCOMING_BOWL_SCALE shrinks just this carried-over copy
+  // (MatchaMaking's own bowl is untouched). The BOWL_INNER_RIM_* fractions
+  // are applied against the scaled width/height below rather than the
+  // original, so the whisked-liquid overlay still lines up with the
+  // shrunk bowl's own rim.
+  const INCOMING_BOWL_SCALE = 0.6;
   const incomingBowlItem = MOVABLE_ITEMS.find((item) => item.key === 'bowl');
-  const incomingRimLeft = INCOMING_BOWL_SPOT.left + BOWL_INNER_RIM_CENTER.leftFrac * incomingBowlItem.width;
-  const incomingRimTop = INCOMING_BOWL_SPOT.top + BOWL_INNER_RIM_CENTER.topFrac * incomingBowlItem.height;
-  const incomingRimWidth = BOWL_INNER_RIM_WIDTH_FRAC * incomingBowlItem.width;
-  const incomingRimHeight = BOWL_INNER_RIM_HEIGHT_FRAC * incomingBowlItem.height;
+  const incomingBowlWidth = incomingBowlItem.width * INCOMING_BOWL_SCALE;
+  const incomingBowlHeight = incomingBowlItem.height * INCOMING_BOWL_SCALE;
+  const incomingRimLeft = INCOMING_BOWL_SPOT.left + BOWL_INNER_RIM_CENTER.leftFrac * incomingBowlWidth;
+  const incomingRimTop = INCOMING_BOWL_SPOT.top + BOWL_INNER_RIM_CENTER.topFrac * incomingBowlHeight;
+  const incomingRimWidth = BOWL_INNER_RIM_WIDTH_FRAC * incomingBowlWidth;
+  const incomingRimHeight = BOWL_INNER_RIM_HEIGHT_FRAC * incomingBowlHeight;
 
   // ---- Glass cup: shelf <-> table --------------------------------------
   const [cupSpot, setCupSpot] = useState('shelf');
@@ -630,8 +640,8 @@ const MilkSelection = ({ activeStep, customerNumber, onNavigate, onAdvance, orde
               style={{
                 left: `${INCOMING_BOWL_SPOT.left}%`,
                 top: `${INCOMING_BOWL_SPOT.top}%`,
-                width: `${incomingBowlItem.width}%`,
-                height: `${incomingBowlItem.height}%`,
+                width: `${incomingBowlWidth}%`,
+                height: `${incomingBowlHeight}%`,
               }}
             />
             <img
