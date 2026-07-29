@@ -197,3 +197,43 @@
   background: rgba(234, 232, 227, 0.85);
 }
 
+/* Matcha-powder/guava-powder settled flecks (see getFleckPositions/
+   POWDER_FLECK_OFFSETS_ELLIPSE/_LIQUID in ToppingsStation.js) -- small
+   solid dots rather than a smooth gradient fill, since a sprinkled powder
+   reads as distinct specks, not a liquid layer. Each fleck's left/top
+   (set inline per-fleck in ToppingsStation.js) is its own exact center
+   point -- translate(-50%, -50%) here centers the dot on that point
+   rather than anchoring its own top-left corner there. Sized off the
+   viewport the same relative way MatchaMaking.css's own .spoon-pour-grain
+   is (min(px, vw) so it scales down on smaller windows but never balloons
+   on huge ones), just a touch bigger so a sprinkled powder still reads
+   clearly at this zoomed-out a scale. */
+.cup-powder-fleck {
+  position: absolute;
+  width: min(14px, 0.75vw);
+  height: min(14px, 0.75vw);
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  animation: powderFleckAppear 0.3s ease-out both;
+}
+
+.cup-powder-fleck.matcha-powder {
+  background: rgba(139, 165, 94, 0.95);
+}
+
+.cup-powder-fleck.guava-powder {
+  background: rgba(232, 137, 122, 0.95);
+}
+
+@keyframes powderFleckAppear {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.4);
+  }
+  100% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+

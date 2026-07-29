@@ -66,6 +66,13 @@ const FOAM_PAIR = [
   { key: 'matcha-cold-foam', src: './MatchaColdFoam.png', alt: 'Matcha cold foam', canvasAspect: 155 / 297 },
   { key: 'reg-cold-foam', src: './RegColdFoam.png', alt: 'Regular cold foam', canvasAspect: 151 / 290 },
 ];
+// The same two item objects laid out at the top of the file (matcha-powder/
+// guava-powder), just grouped the same "pair" way as SYRUP_PAIR/FOAM_PAIR
+// above so the pour-mechanic code below can filter/iterate them the same
+// way (layoutPair itself is still called with [MATCHA_POWDER_ITEM,
+// GUAVA_POWDER_ITEM] directly below, in TOPPING_ITEMS -- this is just an
+// alias for the interactive-rendering code further down).
+const POWDER_PAIR = [MATCHA_POWDER_ITEM, GUAVA_POWDER_ITEM];
 
 // Eyeballed starting guess (no reference for where these six should sit on
 // the reused matcha-counter background) -- the powder pair (matcha-powder,
@@ -306,6 +313,118 @@ const FOAM_STREAM_COLORS = {
   'reg-cold-foam': 'rgba(234, 232, 227, 0.95)',
 };
 
+// ---- Pouring matcha-powder/guava-powder onto the carried-over drink -----
+// Same select/drag-onto-cup-or-Enter, 180deg-flip (WHISK_FLIP_DEG), and
+// Left/Right-aim-while-pouring mechanic as the syrup/foam pairs above (see
+// the big comment on SYRUP_HOVER_GAP/getSyrupHoverPos for the reasoning
+// behind each piece). Two things are different about powder specifically:
+//   - The falling stream is rendered as small falling particles --
+//     MatchaMaking.css's own .spoon-pour-grain circles (reused directly,
+//     same markup/classes the syrup/foam streams below already use) ARE
+//     already small round dots, which happens to be exactly the "small
+//     particles" look powder needs, so no new stream visual is needed,
+//     just powder's own colors (POWDER_STREAM_COLORS below).
+//   - Where it settles depends on what's already in the cup: cold foam
+//     holds a light dusting on ITS OWN surface rather than letting powder
+//     sink in, so if cupFoam is set the powder settles as a scatter of
+//     small flecks within the foam's own top ellipse (getFoamCapBoxFor's
+//     box, from the foam section above). With no foam to catch it, powder
+//     has nothing to sit on top of, so it's shown scattered throughout the
+//     whole visible liquid column instead (getPowderLiquidBoxFor below).
+//     Either way it's rendered as a fixed cluster of small dots
+//     (POWDER_FLECK_OFFSETS_ELLIPSE/_LIQUID + getFleckPositions below),
+//     not a smooth gradient fill like the other toppings, since a
+//     sprinkled powder reads as distinct specks rather than a solid layer.
+const POWDER_HOVER_GAP = 2; // % gap between the tin's bottom edge and the cup's rim while hovering
+function getPowderHoverPos(item) {
+  return {
+    left: INCOMING_DRINK_SPOT.left + INCOMING_DRINK_SIZE.width / 2 - item.width / 2,
+    top: INCOMING_DRINK_SPOT.top - item.height - POWDER_HOVER_GAP,
+  };
+}
+
+const POWDER_MOVE_MS = 350;
+const POWDER_POUR_MS = 2200;
+const POWDER_MOVE_STEP = 2;
+const POWDER_MOVE_RANGE = 8;
+const POWDER_SNAP_FRACTION = 0.5;
+const POWDER_CLICK_MAX_MOVE_PCT = 1;
+
+// Colors for the falling powder stream and the settled flecks alike (see
+// .cup-powder-fleck in ToppingsStation.css), same "one palette, one source
+// of truth" idea as SYRUP_STREAM_COLORS/FOAM_STREAM_COLORS. matcha-powder
+// reuses the same green family as the matcha grades/matcha-cold-foam;
+// there's no reference for guava powder's own real color, so this reuses
+// guava syrup's own pink-red hue family (same fruit) at a slightly
+// lighter/drier-looking shade appropriate for a powder rather than a
+// syrup.
+const POWDER_STREAM_COLORS = {
+  'matcha-powder': 'rgba(139, 165, 94, 0.95)',
+  'guava-powder': 'rgba(232, 137, 122, 0.95)',
+};
+
+// Fixed (not Math.random()) sets of normalized offsets (dx/dy in
+// [-0.5, 0.5], relative to whatever box getFleckPositions maps them onto)
+// for the small dots powder settles into -- fixed rather than randomized
+// so the layout doesn't reshuffle on every re-render, same "deterministic
+// stagger" reasoning as the four .spoon-pour-grain-N falling particles'
+// own fixed left/delay values. Two different sets since the two landing
+// spots are different shapes: _ELLIPSE's points all sit within the unit
+// circle (roughly dx^2+dy^2 < 0.16) so they land inside the foam cap's
+// own visual ellipse rather than drifting into its bounding box's square
+// corners (which would sit outside the visible ellipse); _LIQUID's points
+// spread across the fuller rectangle instead (with a little margin so none
+// sit right at the tapered glass walls), since with no foam to catch it
+// the powder scatters through the whole liquid rather than pooling into
+// one shape.
+const POWDER_FLECK_OFFSETS_ELLIPSE = [
+  { dx: 0, dy: 0 },
+  { dx: -0.28, dy: -0.05 },
+  { dx: 0.3, dy: 0.02 },
+  { dx: -0.15, dy: 0.22 },
+  { dx: 0.17, dy: -0.2 },
+  { dx: -0.05, dy: -0.28 },
+  { dx: 0.08, dy: 0.28 },
+  { dx: -0.32, dy: 0.12 },
+];
+const POWDER_FLECK_OFFSETS_LIQUID = [
+  { dx: -0.3, dy: -0.38 },
+  { dx: 0.25, dy: -0.3 },
+  { dx: -0.1, dy: -0.15 },
+  { dx: 0.32, dy: -0.05 },
+  { dx: -0.35, dy: 0.05 },
+  { dx: 0.05, dy: 0.1 },
+  { dx: -0.2, dy: 0.25 },
+  { dx: 0.28, dy: 0.3 },
+  { dx: 0.02, dy: 0.38 },
+  { dx: -0.3, dy: 0.4 },
+];
+
+// Maps a set of normalized offsets onto an actual box, in the same
+// percent-of-container units every other box in this file uses.
+function getFleckPositions(box, offsets) {
+  return offsets.map(({ dx, dy }) => ({
+    left: box.left + box.width * (0.5 + dx),
+    top: box.top + box.height * (0.5 + dy),
+  }));
+}
+
+// The full visible liquid column -- from the matcha/milk layer's own
+// topmost point (topBox, same "whichever's currently on top" box the foam
+// section above uses) down to the milk box's own bottom edge. Used only
+// for powder's "no foam to catch it" scatter case: incomingTopBox alone
+// isn't tall enough for this, since it only spans the raised/blended zone
+// at the very top of the drink, not all the way down to the cup's own
+// bottom.
+function getPowderLiquidBoxFor(topBox, milkBox) {
+  return {
+    left: milkBox.left,
+    top: topBox.top,
+    width: milkBox.width,
+    height: milkBox.top + milkBox.height - topBox.top,
+  };
+}
+
 const ToppingsStation = ({ activeStep, customerNumber, onNavigate, onAdvance, order, incomingDrink }) => {
   const containerRef = useRef(null);
   useFlatFocusNav(containerRef);
@@ -335,6 +454,10 @@ const ToppingsStation = ({ activeStep, customerNumber, onNavigate, onAdvance, or
   // The flattened top-surface ellipse straddling incomingFoamBox's own top
   // edge -- see getFoamCapBoxFor above.
   const incomingFoamCapBox = incomingFoamBox ? getFoamCapBoxFor(incomingFoamBox) : null;
+  // The whole visible liquid column -- only used for powder's own "no foam
+  // to catch it" scatter case, see getPowderLiquidBoxFor above.
+  const incomingPowderLiquidBox =
+    incomingTopBox && incomingMilkBox ? getPowderLiquidBoxFor(incomingTopBox, incomingMilkBox) : null;
 
   // ---- Guava/mint syrup: pick up, pour onto the drink, or snap back home -
   // Same drag/Enter-to-pour shape as Milk Selection's own milk bottles --
@@ -396,16 +519,41 @@ const ToppingsStation = ({ activeStep, customerNumber, onNavigate, onAdvance, or
   const [foamPourOffset, setFoamPourOffset] = useState(0);
   const [cupFoam, setCupFoam] = useState(null); // { key } | null
 
+  // ---- Matcha-powder/guava-powder: pick up, pour on top of the drink, or
+  // snap back home -- identical shape to the syrup/foam state above, see
+  // the big comment above POWDER_HOVER_GAP for what's different about
+  // powder itself (particle stream, and where it settles depending on
+  // whether foam's already in the cup).
+  const [powderPositions, setPowderPositions] = useState(() => {
+    const positions = {};
+    for (const item of TOPPING_ITEMS) {
+      if (item.key === 'matcha-powder' || item.key === 'guava-powder') {
+        positions[item.key] = { left: item.left, top: item.top };
+      }
+    }
+    return positions;
+  });
+  const [powderDrag, setPowderDrag] = useState(null); // { key, left, top } | null
+  const powderDragStartRef = useRef({ pointerX: 0, pointerY: 0, left: 0, top: 0 });
+  const [powderPourStage, setPowderPourStage] = useState('idle'); // 'idle' | 'moving' | 'pouring'
+  const [powderPouringKey, setPowderPouringKey] = useState(null); // 'matcha-powder' | 'guava-powder' | null
+  const [powderPourOffset, setPowderPourOffset] = useState(0);
+  const [cupPowder, setCupPowder] = useState(null); // { key } | null
+
   // Only needs an actual drink to pour onto and nothing else already
   // mid-pour -- unlike Milk Selection's own bottles/bowl there's no ice/
   // base precondition here, since the drink arriving from that screen is
   // already whatever it's going to be by the time it gets here. Also gated
-  // on the OTHER topping's own stage so only one bottle is ever mid-pour at
-  // a time -- otherwise two simultaneous capture-phase Left/Right aim
-  // listeners (this one's and foam's, see the effects below) would both
-  // fire off a single keypress.
-  const canPourSyrup = !!incomingDrink && pourStage === 'idle' && foamPourStage === 'idle';
-  const canPourFoam = !!incomingDrink && foamPourStage === 'idle' && pourStage === 'idle';
+  // on the OTHER toppings' own stages so only one bottle is ever mid-pour
+  // at a time -- otherwise two simultaneous capture-phase Left/Right aim
+  // listeners (any two of syrup's/foam's/powder's, see the effects below)
+  // would both fire off a single keypress.
+  const canPourSyrup =
+    !!incomingDrink && pourStage === 'idle' && foamPourStage === 'idle' && powderPourStage === 'idle';
+  const canPourFoam =
+    !!incomingDrink && foamPourStage === 'idle' && pourStage === 'idle' && powderPourStage === 'idle';
+  const canPourPowder =
+    !!incomingDrink && powderPourStage === 'idle' && pourStage === 'idle' && foamPourStage === 'idle';
 
   const beginSyrupPour = (key) => {
     if (!canPourSyrup) return;
@@ -630,6 +778,116 @@ const ToppingsStation = ({ activeStep, customerNumber, onNavigate, onAdvance, or
     setFoamPositions((prev) => ({ ...prev, [item.key]: { left: item.left, top: item.top } }));
   };
 
+  // ---- Powder pick-up/pour/drag handlers -- identical shape to the syrup/
+  // foam handlers above, see the big comment above POWDER_HOVER_GAP for
+  // what's different about powder itself (particle stream, foam-dependent
+  // landing spot).
+  const beginPowderPour = (key) => {
+    if (!canPourPowder) return;
+    const item = TOPPING_ITEMS.find((i) => i.key === key);
+    setPowderPositions((prev) => ({ ...prev, [key]: getPowderHoverPos(item) }));
+    setPowderPourOffset(0);
+    setPowderPouringKey(key);
+    setPowderPourStage('moving');
+  };
+
+  useEffect(() => {
+    if (powderPourStage === 'moving') {
+      const t = setTimeout(() => setPowderPourStage('pouring'), POWDER_MOVE_MS);
+      return () => clearTimeout(t);
+    }
+    if (powderPourStage === 'pouring') {
+      setCupPowder({ key: powderPouringKey });
+      const t = setTimeout(() => {
+        const home = TOPPING_ITEMS.find((i) => i.key === powderPouringKey);
+        setPowderPositions((prev) => ({ ...prev, [powderPouringKey]: { left: home.left, top: home.top } }));
+        setPowderPourStage('idle');
+        setPowderPouringKey(null);
+        setPowderPourOffset(0);
+      }, POWDER_POUR_MS);
+      return () => clearTimeout(t);
+    }
+    return undefined;
+  }, [powderPourStage, powderPouringKey]);
+
+  // Same capture-phase-before-useFlatFocusNav intercept as the syrup/foam
+  // aim effects above -- see the syrup one's own big comment for why this
+  // has to be capture phase + stopImmediatePropagation.
+  useEffect(() => {
+    if (powderPourStage !== 'pouring' || !powderPouringKey) return undefined;
+    const handlePowderAimKeyDown = (e) => {
+      const action = getActionFromKeyEvent(e);
+      if (action !== 'Left' && action !== 'Right') return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      setPowderPourOffset((prev) => {
+        const next = prev + (action === 'Right' ? POWDER_MOVE_STEP : -POWDER_MOVE_STEP);
+        return Math.min(POWDER_MOVE_RANGE, Math.max(-POWDER_MOVE_RANGE, next));
+      });
+    };
+    window.addEventListener('keydown', handlePowderAimKeyDown, { capture: true });
+    return () => window.removeEventListener('keydown', handlePowderAimKeyDown, { capture: true });
+  }, [powderPourStage, powderPouringKey]);
+
+  const handlePowderPointerDown = (item) => (e) => {
+    if (powderPouringKey === item.key) return; // can't re-grab mid-pour
+    const base = powderPositions[item.key];
+    e.currentTarget.setPointerCapture(e.pointerId);
+    powderDragStartRef.current = { pointerX: e.clientX, pointerY: e.clientY, left: base.left, top: base.top };
+    setPowderDrag({ key: item.key, left: base.left, top: base.top });
+  };
+
+  const handlePowderPointerMove = (item) => (e) => {
+    if (!powderDrag || powderDrag.key !== item.key) return;
+    const rect = containerRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const dxPct = ((e.clientX - powderDragStartRef.current.pointerX) / rect.width) * 100;
+    const dyPct = ((e.clientY - powderDragStartRef.current.pointerY) / rect.height) * 100;
+    setPowderDrag({
+      key: item.key,
+      left: powderDragStartRef.current.left + dxPct,
+      top: powderDragStartRef.current.top + dyPct,
+    });
+  };
+
+  const handlePowderPointerUp = (item) => (e) => {
+    if (!powderDrag || powderDrag.key !== item.key) return;
+    e.currentTarget.releasePointerCapture?.(e.pointerId);
+    if (canPourPowder && isOverIncomingCup(powderDrag.left, powderDrag.top)) {
+      setPowderDrag(null);
+      beginPowderPour(item.key);
+      return;
+    }
+    const home = { left: item.left, top: item.top };
+    const totalMove = Math.max(
+      Math.abs(e.clientX - powderDragStartRef.current.pointerX),
+      Math.abs(e.clientY - powderDragStartRef.current.pointerY)
+    );
+    const rect = containerRef.current?.getBoundingClientRect();
+    const totalMovePct = rect ? (totalMove / Math.max(rect.width, rect.height)) * 100 : 0;
+    const snapBack =
+      totalMovePct < POWDER_CLICK_MAX_MOVE_PCT ||
+      (Math.abs(powderDrag.left - home.left) < item.width * POWDER_SNAP_FRACTION &&
+        Math.abs(powderDrag.top - home.top) < item.height * POWDER_SNAP_FRACTION);
+    setPowderPositions((prev) => ({
+      ...prev,
+      [item.key]: snapBack ? home : { left: powderDrag.left, top: powderDrag.top },
+    }));
+    setPowderDrag(null);
+  };
+
+  const handlePowderKeyDown = (item) => (e) => {
+    const action = getActionFromKeyEvent(e);
+    if (action !== 'Enter') return;
+    if (shouldDebounceEnter(e)) return;
+    e.preventDefault();
+    if (canPourPowder) {
+      beginPowderPour(item.key);
+      return;
+    }
+    setPowderPositions((prev) => ({ ...prev, [item.key]: { left: item.left, top: item.top } }));
+  };
+
   // ---- Falling syrup stream -- see the big comment on SYRUP_STREAM_COLORS/
   // getSyrupBoxFor above. Anchored to the pouring bottle's own current
   // (offset-nudged) position, falling down to the syrup box's own top edge
@@ -652,43 +910,53 @@ const ToppingsStation = ({ activeStep, customerNumber, onNavigate, onAdvance, or
   const foamPourHeight = incomingFoamBox ? Math.max(incomingFoamBox.top - foamPourTop, 1) : 0;
   const foamPourColor = foamPouringKey ? FOAM_STREAM_COLORS[foamPouringKey] : FOAM_STREAM_COLORS['reg-cold-foam'];
 
+  // ---- Falling powder stream -- same idea as the syrup/foam streams
+  // above, just landing wherever the powder will actually settle: the
+  // foam cap's own top edge if there's foam already in the cup to catch
+  // it (cupFoam), otherwise the liquid column's own top edge
+  // (incomingPowderLiquidBox) -- see the big comment above POWDER_HOVER_GAP.
+  const pouringPowderItem = powderPouringKey ? TOPPING_ITEMS.find((i) => i.key === powderPouringKey) : null;
+  const pouringPowderPos = powderPouringKey ? powderPositions[powderPouringKey] : null;
+  const powderPourLeft =
+    pouringPowderItem && pouringPowderPos
+      ? pouringPowderPos.left + pouringPowderItem.width / 2 + powderPourOffset
+      : 0;
+  const powderPourTop =
+    pouringPowderItem && pouringPowderPos ? pouringPowderPos.top + pouringPowderItem.height : 0;
+  const powderLandingTop = cupFoam && incomingFoamCapBox ? incomingFoamCapBox.top : incomingPowderLiquidBox?.top;
+  const powderPourHeight = powderLandingTop != null ? Math.max(powderLandingTop - powderPourTop, 1) : 0;
+  const powderPourColor = powderPouringKey
+    ? POWDER_STREAM_COLORS[powderPouringKey]
+    : POWDER_STREAM_COLORS['matcha-powder'];
+
+  // ---- Where matcha-powder/guava-powder settles once poured -- see the
+  // big comment above POWDER_HOVER_GAP for why this is a scatter of small
+  // flecks (not a smooth fill) and why the landing shape/spot depends on
+  // whether foam's already in the cup. cupFoam here reflects whatever the
+  // CURRENT state is at render time, not a snapshot from when the powder
+  // itself was poured -- if foam gets poured in after the powder already
+  // settled into the liquid, the flecks stay wherever they were (they
+  // don't retroactively jump onto a foam layer added later).
+  const powderLandingBox = cupFoam && incomingFoamCapBox ? incomingFoamCapBox : incomingPowderLiquidBox;
+  const powderFleckOffsets = cupFoam && incomingFoamCapBox ? POWDER_FLECK_OFFSETS_ELLIPSE : POWDER_FLECK_OFFSETS_LIQUID;
+  const powderFleckPositions =
+    cupPowder && powderLandingBox ? getFleckPositions(powderLandingBox, powderFleckOffsets) : [];
+
   return (
     <div className="toppings-container" ref={containerRef}>
       <h1 className="sr-only">Toppings Station</h1>
 
       <div className="toppings-content">
         <img src={TOPPINGS_BACKGROUND_SRC} alt="Toppings station counter" className="toppings-art" />
-        {/* Selectable (D-pad/click-focusable, same white shape-hugging glow
-            as MatchaMaking's matcha tins -- see .station-item.selectable in
-            ToppingsStation.css) but not draggable and no selection
-            behavior wired up yet -- this is purely the "place them on the
-            counter" step requested; picking one still just moves focus/
-            the glow around for now. Excludes guava-syrup/mint-syrup and
-            the two cold foams, which each get their own fully interactive
-            render below instead. */}
-        {TOPPING_ITEMS.filter(
-          (item) =>
-            item.key !== 'guava-syrup' &&
-            item.key !== 'mint-syrup' &&
-            item.key !== 'matcha-cold-foam' &&
-            item.key !== 'reg-cold-foam'
-        ).map((item) => (
-          <img
-            key={item.key}
-            src={item.src}
-            alt={item.alt}
-            className="station-item selectable"
-            data-focusable
-            tabIndex={0}
-            draggable={false}
-            style={{
-              left: `${item.left}%`,
-              top: `${item.top}%`,
-              width: `${item.width}%`,
-              height: `${item.height}%`,
-            }}
-          />
-        ))}
+        {/* All six topping items are now fully interactive (drag-onto-the-
+            drink or Enter to pour) -- matcha-powder/guava-powder were the
+            last two still on the old "just a selectable, non-draggable
+            placeholder" treatment (see .station-item.selectable in
+            ToppingsStation.css, still used elsewhere for genuinely inert
+            items), so that placeholder block that used to render them
+            (and, before that, the syrup/foam pairs too) has been removed
+            entirely rather than left rendering an always-empty filtered
+            list. */}
         {/* Guava/mint syrup -- draggable onto the drink (or Enter to pour)
             same as Milk Selection's own bottles, reusing MatchaMaking.css's
             .station-item.movable (drag cursor, focus glow, .dragging/
@@ -762,6 +1030,40 @@ const ToppingsStation = ({ activeStep, customerNumber, onNavigate, onAdvance, or
             );
           }
         )}
+        {/* Matcha-powder/guava-powder -- identical interaction to the syrup/
+            foam pairs above (drag onto the drink or Enter to pour, 180deg
+            flip via WHISK_FLIP_DEG, Left/Right to aim while pouring); see
+            the big comment above POWDER_HOVER_GAP for what's different
+            about powder itself (particle stream, foam-dependent landing
+            spot). */}
+        {TOPPING_ITEMS.filter((item) => POWDER_PAIR.some((p) => p.key === item.key)).map((item) => {
+          const dragging = powderDrag?.key === item.key;
+          const isPouring = powderPouringKey === item.key;
+          const basePos = dragging ? powderDrag : powderPositions[item.key];
+          const pos = isPouring ? { left: basePos.left + powderPourOffset, top: basePos.top } : basePos;
+          return (
+            <img
+              key={item.key}
+              src={item.src}
+              alt={`${item.alt}. Drag onto the drink to pour some in, or select it and press Enter. While it's pouring, use Left/Right to aim the stream.`}
+              className={`station-item movable${dragging ? ' dragging' : ''}${isPouring ? ' settling' : ''}`}
+              data-focusable
+              tabIndex={0}
+              draggable={false}
+              style={{
+                left: `${pos.left}%`,
+                top: `${pos.top}%`,
+                width: `${item.width}%`,
+                height: `${item.height}%`,
+                ...(isPouring ? { transform: `rotate(${WHISK_FLIP_DEG}deg)` } : {}),
+              }}
+              onPointerDown={handlePowderPointerDown(item)}
+              onPointerMove={handlePowderPointerMove(item)}
+              onPointerUp={handlePowderPointerUp(item)}
+              onKeyDown={handlePowderKeyDown(item)}
+            />
+          );
+        })}
         {/* Carried-over drink -- purely decorative (aria-hidden, no
             data-focusable/tabIndex, same treatment Milk Selection's own
             incoming bowl started with), just so the finished drink doesn't
@@ -865,6 +1167,21 @@ const ToppingsStation = ({ activeStep, customerNumber, onNavigate, onAdvance, or
                 }}
               />
             )}
+            {/* Matcha-powder/guava-powder settles as a scatter of small
+                flecks rather than a smooth fill -- see the big comment
+                above POWDER_HOVER_GAP for why, and for why the landing
+                shape/spot (powderFleckPositions) depends on whether foam's
+                already in the cup. Rendered last (after syrup) so it sits
+                over everything else already poured. */}
+            {cupPowder &&
+              powderFleckPositions.map((pos, index) => (
+                <span
+                  key={index}
+                  className={`cup-powder-fleck ${cupPowder.key}`}
+                  aria-hidden="true"
+                  style={{ left: `${pos.left}%`, top: `${pos.top}%` }}
+                />
+              ))}
           </>
         )}
         {/* Falling syrup stream -- see the big comment on
@@ -903,6 +1220,26 @@ const ToppingsStation = ({ activeStep, customerNumber, onNavigate, onAdvance, or
             <span className="spoon-pour-grain spoon-pour-grain-2" style={{ background: foamPourColor }} />
             <span className="spoon-pour-grain spoon-pour-grain-3" style={{ background: foamPourColor }} />
             <span className="spoon-pour-grain spoon-pour-grain-4" style={{ background: foamPourColor }} />
+          </div>
+        )}
+        {/* Falling powder stream -- reuses MatchaMaking.css's own
+            .spoon-pour-grain circles directly, same "small particles" look
+            that station already uses for its own falling powder, landing
+            wherever the powder will actually settle (see powderLandingTop/
+            POWDER_HOVER_GAP above). */}
+        {powderPourStage === 'pouring' && powderPouringKey && (
+          <div
+            className="spoon-pour"
+            style={{
+              left: `${powderPourLeft}%`,
+              top: `${powderPourTop}%`,
+              height: `${powderPourHeight}%`,
+            }}
+          >
+            <span className="spoon-pour-grain spoon-pour-grain-1" style={{ background: powderPourColor }} />
+            <span className="spoon-pour-grain spoon-pour-grain-2" style={{ background: powderPourColor }} />
+            <span className="spoon-pour-grain spoon-pour-grain-3" style={{ background: powderPourColor }} />
+            <span className="spoon-pour-grain spoon-pour-grain-4" style={{ background: powderPourColor }} />
           </div>
         )}
         <OrderReceiptButton order={order} />
