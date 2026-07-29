@@ -189,3 +189,93 @@
     drop-shadow(0 0 5px rgba(255, 255, 255, 0.95))
     drop-shadow(0 0 10px rgba(255, 255, 255, 0.75));
 }
+
+/* Once a bottle's pour sequence has started (oatStage 'moving'/'pouring'
+   in MilkSelection.js -- see beginOatPour there), it's gliding to/holding
+   at its hover-over-cup spot and shouldn't be picked up again until it's
+   back on the counter -- same reasoning as MatchaMaking's
+   .station-item.movable.settling. Deliberately only pointer-events/cursor
+   here, not tabIndex/data-focusable -- those stay on the element the whole
+   time so it never drops out of the keyboard/D-pad focus order, it just
+   stops responding to Enter/Space while mid-pour (see canPourOat's own
+   oatStage === 'idle' check in MilkSelection.js). The tilt itself
+   (BOTTLE_POUR_ROTATE_DEG) is applied inline rather than via a class here,
+   reusing .milk-bottle's own existing transform transition. */
+.milk-bottle.settling {
+  pointer-events: none;
+  cursor: default;
+}
+
+/* The milk fill itself -- see the big comment on CUP_MILK_BOX_FRAC/cupMilk
+   in MilkSelection.js for why this is a plain colored shape layered on top
+   of the glass rather than something requiring a transparent cutout in
+   GlassCup.png (confirmed by checking the source PNG directly that its
+   interior has no real transparency to place this behind instead).
+   border-radius is rounded at the bottom, flatter at the top (a liquid
+   surface reads as flat, not domed) -- a rough approximation of the
+   glass's own tapered interior, same simplification as the matcha bowl's
+   circular bowl-water/bowl-powder fills, but shaped with clip-path instead
+   of a plain rectangle/border-radius: a shallow concave top edge (dips down
+   a little in the middle and rises back up at the corners -- the classic
+   concave-meniscus curve, rather than a flat liquid surface), straight
+   sharp sides that slope outward toward the top rather than running
+   vertical (following the glass's own taper -- narrower at the base, wider
+   at the rim -- instead of just sitting in a fixed-width box regardless of
+   the glass's shape), and a smoothly rounded base (a semi-ellipse from the
+   point the straight sides end down to the lowest point). Both curves are
+   approximated by the strings of polygon points below rather than real
+   curves since clip-path: polygon() can't express either directly. All
+   coordinates are percentages of the fill div's own box, so they hold up
+   across the animation's scaleY. Kept translucent (alpha under 1, see the
+   four per-liquid classes below) for two reasons: the glass's own outline/
+   highlight linework still needs to read through on top of it, and a lower
+   alpha is what sells "seen through/behind the glass" instead of "poured
+   on top of it" -- the less opaque the fill, the more it reads as tinted
+   by the glass rather than sitting on its surface. Colors are deliberately
+   close to each other (pale oat tan, warm dairy white, slightly darker
+   almond tan, faint cool-white coconut) since real versions of these
+   drinks don't look wildly different from one another either. */
+.cup-milk-fill {
+  position: absolute;
+  box-sizing: border-box;
+  pointer-events: none;
+  clip-path: polygon(
+    6% 0%, 14.8% 1.4%, 23.6% 2.6%, 32.4% 3.6%, 41.2% 4.3%,
+    50% 4.5%,
+    58.8% 4.3%, 67.6% 3.6%, 76.4% 2.6%, 85.2% 1.4%, 94% 0%,
+    90% 70%,
+    88% 76.8%, 82.4% 82.9%, 73.5% 87.8%, 62.4% 90.9%,
+    50% 92%,
+    37.6% 90.9%, 26.5% 87.8%, 17.6% 82.9%, 12% 76.8%,
+    10% 70%
+  );
+  transform-origin: bottom center;
+  animation: cupMilkGrow 0.5s ease-out both;
+}
+
+.cup-milk-fill.oat {
+  background: rgba(230, 217, 181, 0.6);
+}
+
+.cup-milk-fill.dairy {
+  background: rgba(255, 253, 246, 0.65);
+}
+
+.cup-milk-fill.almond {
+  background: rgba(238, 231, 219, 0.6);
+}
+
+.cup-milk-fill.coconut {
+  background: rgba(240, 247, 247, 0.5);
+}
+
+@keyframes cupMilkGrow {
+  0% {
+    opacity: 0;
+    transform: scaleY(0.05);
+  }
+  100% {
+    opacity: 1;
+    transform: scaleY(1);
+  }
+}
