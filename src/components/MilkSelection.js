@@ -10,6 +10,7 @@ import {
   BOWL_INNER_RIM_WIDTH_FRAC,
   BOWL_INNER_RIM_HEIGHT_FRAC,
   WHISKED_LIQUID_IMAGES,
+  SCOOP_FILL_COLORS,
 } from './MatchaMaking';
 
 // Where the bowl (whisked matcha, no whisk -- see incomingBowl below) sent
@@ -172,6 +173,35 @@ function getCupMilkBox() {
   };
 }
 
+// Matcha poured on top of the milk/water base -- a second fill the same
+// width as the milk box (getCupMilkBox), split into two zones so it reads
+// as actually blending with the base rather than either stacking as a flat
+// second color or floating separately above it:
+//   - CUP_MATCHA_RAISE_FRAC -- the portion that sits ABOVE the milk's own
+//     top edge, raising the drink's overall fill line (pure matcha here,
+//     nothing to blend with since there's no base at this height).
+//   - CUP_MATCHA_OVERLAP_FRAC -- the portion that dips back down INTO the
+//     milk fill, where .cup-matcha-fill's own background (CSS) is a
+//     top-to-bottom gradient fading from solid matcha color down to fully
+//     transparent, so the milk underneath increasingly shows through and
+//     the two colors read as gradually mixing instead of meeting at a hard
+//     line. Both fractions are expressed against the milk box's own
+//     height, same unit CUP_MILK_BOX_FRAC-derived boxes always use here.
+const CUP_MATCHA_RAISE_FRAC = 0.18;
+const CUP_MATCHA_OVERLAP_FRAC = 0.5;
+
+function getCupMatchaBox() {
+  const milkBox = getCupMilkBox();
+  const raise = milkBox.height * CUP_MATCHA_RAISE_FRAC;
+  const overlap = milkBox.height * CUP_MATCHA_OVERLAP_FRAC;
+  return {
+    left: milkBox.left,
+    top: milkBox.top - raise,
+    width: milkBox.width,
+    height: raise + overlap,
+  };
+}
+
 // Same idea as MatchaMaking's kettle/bowl/whisk: drop a bottle back close
 // to its home spot and it snaps the rest of the way in, scaled to the
 // bottle's own footprint. A drop anywhere else just leaves it there.
@@ -289,8 +319,25 @@ const MilkSelection = ({ activeStep, customerNumber, onNavigate, onAdvance, orde
   const incomingBowlItem = MOVABLE_ITEMS.find((item) => item.key === 'bowl');
   const incomingBowlWidth = incomingBowlItem.width * INCOMING_BOWL_SCALE;
   const incomingBowlHeight = incomingBowlItem.height * INCOMING_BOWL_SCALE;
-  const incomingRimLeft = INCOMING_BOWL_SPOT.left + BOWL_INNER_RIM_CENTER.leftFrac * incomingBowlWidth;
-  const incomingRimTop = INCOMING_BOWL_SPOT.top + BOWL_INNER_RIM_CENTER.topFrac * incomingBowlHeight;
+
+  // The bowl's own live position -- starts (and always snaps back to)
+  // INCOMING_BOWL_SPOT, but shifts to the hover-over-cup spot while it's
+  // being poured (see beginPour('bowl') below), same live-position pattern
+  // as bottlePositions for the milk bottles. Unlike the bottles it isn't
+  // left wherever it's dropped -- there's nowhere else meaningful for it to
+  // sit, so any drop that doesn't land a pour just snaps it home.
+  const [bowlPos, setBowlPos] = useState(INCOMING_BOWL_SPOT);
+  const [bowlDrag, setBowlDrag] = useState(null); // { left, top } | null
+  const bowlDragStartRef = useRef({ pointerX: 0, pointerY: 0, left: 0, top: 0 });
+
+  // Rim math now follows the bowl's own live position -- bowlDrag while
+  // it's actively being pointer-dragged, otherwise bowlPos (its resting or
+  // gliding-to-pour spot) -- instead of the fixed spot, so the
+  // whisked-matcha overlay travels and tilts together with the bowl
+  // through both a manual drag and the automated pour glide.
+  const incomingBowlRenderPos = bowlDrag || bowlPos;
+  const incomingRimLeft = incomingBowlRenderPos.left + BOWL_INNER_RIM_CENTER.leftFrac * incomingBowlWidth;
+  const incomingRimTop = incomingBowlRenderPos.top + BOWL_INNER_RIM_CENTER.topFrac * incomingBowlHeight;
   const incomingRimWidth = BOWL_INNER_RIM_WIDTH_FRAC * incomingBowlWidth;
   const incomingRimHeight = BOWL_INNER_RIM_HEIGHT_FRAC * incomingBowlHeight;
 
@@ -350,8 +397,11 @@ const MilkSelection = ({ activeStep, customerNumber, onNavigate, onAdvance, orde
   // Box the milk fill renders into once poured -- see getCupMilkBox/
   // CUP_MILK_BOX_FRAC above. Cheap to recompute every render (it's fixed
   // math off constants, not live drag state), same as bowlInnerRimLeft/Top
-  // in MatchaMaking.js.
+  // in MatchaMaking.js. cupMatchaBox is the shallower box the matcha layer
+  // renders into on top of it -- see getCupMatchaBox/CUP_MATCHA_HEIGHT_FRAC
+  // above.
   const cupMilkBox = getCupMilkBox();
+  const cupMatchaBox = getCupMatchaBox();
 
   // ---- Ice cubes: ice box -> cup ----------------------------------------
   // Whether each of the 7 cubes has been placed in the cup yet.
@@ -446,67 +496,100 @@ const MilkSelection = ({ activeStep, customerNumber, onNavigate, onAdvance, orde
   const [bottleDrag, setBottleDrag] = useState(null); // { key, left, top } | null
   const bottleDragStartRef = useRef({ pointerX: 0, pointerY: 0, left: 0, top: 0 });
 
-  // ---- Pouring a bottle into the cup (see the big comment on
-  // BOTTLE_HOVER_GAP/getBottleHoverPos above) -------------------------------
-  //   'idle'     -- normal, every bottle sits wherever it was left, freely
+  // ---- Pouring a bottle (or the matcha bowl) into the cup (see the big
+  // comment on BOTTLE_HOVER_GAP/getBottleHoverPos above) -------------------
+  //   'idle'     -- normal, everything sits wherever it was left, freely
   //                 draggable.
   //   'moving'   -- confirmed (dropped on the cup, or Enter/Space) --
   //                 gliding to the hover-over-cup spot and tilting. No
   //                 longer draggable.
-  //   'pouring'  -- arrived; cupMilk is set (the fill appears) and it holds
-  //                 the tilt for BOTTLE_POUR_MS before gliding back home and
-  //                 returning to 'idle' on its own -- reusable, same as the
-  //                 kettle, not a one-time-use item like the matcha spoon.
-  // Only one bottle can be mid-pour at a time (there's only one cup) --
-  // pouringKey tracks which one, alongside the shared pourStage above.
+  //   'pouring'  -- arrived; cupMilk/cupMatcha is set (the fill appears) and
+  //                 it holds the tilt for BOTTLE_POUR_MS before gliding back
+  //                 home and returning to 'idle' on its own -- reusable,
+  //                 same as the kettle, not a one-time-use item like the
+  //                 matcha spoon.
+  // Only one item can be mid-pour at a time (there's only one cup) --
+  // pouringKey tracks which one (a milk bottle's key, or 'bowl' for the
+  // carried-over matcha), alongside the shared pourStage above.
   const [pourStage, setPourStage] = useState('idle');
-  const [pouringKey, setPouringKey] = useState(null); // 'oat' | 'dairy' | 'almond' | 'coconut' | null
+  const [pouringKey, setPouringKey] = useState(null); // 'oat' | 'dairy' | 'almond' | 'coconut' | 'bowl' | null
   // The cup's own persistent "has milk been poured in" state -- doesn't
   // reset on its own (only a fresh pour re-sets it), same "second pour just
   // restarts this rather than accumulating a bigger fill" caveat as the
-  // matcha bowl's bowlWater. { type: 'oat' | 'dairy' | 'almond' | 'coconut' }
-  // | null -- type picks both the fill color (.cup-milk-fill.<type> in CSS)
-  // and which liquid was poured in last (a fresh pour of a different bottle
-  // just replaces it, same "doesn't accumulate" simplification).
+  // matcha bowl's own bowlWater back on MatchaMaking. { type: 'oat' |
+  // 'dairy' | 'almond' | 'coconut' } | null -- type picks both the fill
+  // color (.cup-milk-fill.<type> in CSS) and which liquid was poured in
+  // last (a fresh pour of a different bottle just replaces it, same
+  // "doesn't accumulate" simplification).
   const [cupMilk, setCupMilk] = useState(null);
+  // Matcha poured on top of the milk -- same shape as cupMilk, just its own
+  // state so a fresh milk pour doesn't wipe out matcha already poured (or
+  // vice versa). { grade: 'cafe-grade' | 'classic-grade' | 'ceremonial-grade' }
+  // | null -- grade picks the fill color (.cup-matcha-fill.<grade> in CSS),
+  // carried over from incomingBowl.grade at the moment of the pour.
+  const [cupMatcha, setCupMatcha] = useState(null);
 
-  // Preconditions for starting a pour: cup has to actually be on the table
-  // (nothing to pour into otherwise), at least one ice cube already has to
-  // be in it, and no other bottle can already be mid-pour.
-  const canPourAny = cupSpot === 'table' && icePlaced.some(Boolean) && pourStage === 'idle';
+  // Preconditions for starting a milk/water pour: cup has to actually be on
+  // the table (nothing to pour into otherwise), at least one ice cube
+  // already has to be in it, and nothing else can already be mid-pour.
+  const canPourMilk = cupSpot === 'table' && icePlaced.some(Boolean) && pourStage === 'idle';
+  // Matcha only pours once there's actually a base to pour it onto -- same
+  // "pour the topping after the base" ordering the user asked for -- plus
+  // the usual cup-on-table/nothing-else-mid-pour preconditions, and of
+  // course an actual bowl to pour from.
+  const canPourMatcha = cupSpot === 'table' && !!cupMilk && pourStage === 'idle' && !!incomingBowl;
 
   // ---- Falling-liquid pour effect -----------------------------------------
   // Reuses the exact same .spoon-pour/.spoon-pour-grain-N visual machinery
   // MatchaMaking.js built for the falling matcha powder and falling kettle
   // water (that stylesheet is already loaded globally -- see the comment on
   // the carried-over bowl/whisked-liquid images above for why). Anchored to
-  // whichever bottle is currently pouring (pouringKey) at its own current
-  // position (bottlePositions[pouringKey] -- during 'moving'/'pouring'
-  // that's the hover-over-cup spot getBottleHoverPos put it at, same
-  // live-position reasoning as the kettle's own kettlePourLeft/
-  // kettlePourTop) rather than a measured spout offset, since there's no
-  // pinned spout pixel for this art (see the getBottleHoverPos comment
-  // above) -- horizontally centered on the bottle, vertically from its
-  // bottom edge. Falls down to the milk fill's own top edge (cupMilkBox.top)
-  // so the stream reads as landing right where the liquid appears, the same
-  // "falls to the target fill's top" shape as bowlWaterTop/bowlPowderTop in
-  // MatchaMaking.js. All fall back to harmless zero/oat defaults when
-  // nothing's pouring -- guarded by pourStage/pouringKey in the JSX below so
-  // they're never actually rendered in that state.
-  const pouringItem = pouringKey ? BOTTLE_ITEMS.find((b) => b.key === pouringKey) : null;
-  const pouringPos = pouringKey ? bottlePositions[pouringKey] : null;
-  const pourLeft = pouringItem && pouringPos ? pouringPos.left + pouringItem.width / 2 : 0;
-  const pourTop = pouringItem && pouringPos ? pouringPos.top + pouringItem.height : 0;
-  const pourHeight = pouringPos ? Math.max(cupMilkBox.top - pourTop, 1) : 0;
-  const pourColor = MILK_STREAM_COLORS[pouringKey] ?? MILK_STREAM_COLORS.oat;
+  // whichever item is currently pouring (pouringKey) at its own current
+  // position -- bottlePositions[pouringKey] for a milk bottle, bowlPos for
+  // the matcha bowl (during 'moving'/'pouring' that's the hover-over-cup
+  // spot getBottleHoverPos put it at, same live-position reasoning as the
+  // kettle's own kettlePourLeft/kettlePourTop) rather than a measured spout
+  // offset, since there's no pinned spout pixel for either kind of art (see
+  // the getBottleHoverPos comment above) -- horizontally centered on the
+  // item, vertically from its bottom edge. Falls down to the milk fill's
+  // own top edge (cupMilkBox.top) so the stream reads as landing right
+  // where the liquid appears, the same "falls to the target fill's top"
+  // shape as bowlWaterTop/bowlPowderTop in MatchaMaking.js -- true for the
+  // matcha pour too, since it lands on top of the milk fill's own surface
+  // regardless of the (shorter) cupMatcha box underneath it. pourSource
+  // falls back to null when nothing's pouring -- guarded by pourStage/
+  // pouringKey in the JSX below so pourLeft/pourTop/pourHeight are never
+  // actually rendered in that state.
+  const pourSource =
+    pouringKey === 'bowl'
+      ? { left: bowlPos.left, top: bowlPos.top, width: incomingBowlWidth, height: incomingBowlHeight }
+      : pouringKey
+      ? (() => {
+          const item = BOTTLE_ITEMS.find((b) => b.key === pouringKey);
+          const pos = bottlePositions[pouringKey];
+          return { left: pos.left, top: pos.top, width: item.width, height: item.height };
+        })()
+      : null;
+  const pourLeft = pourSource ? pourSource.left + pourSource.width / 2 : 0;
+  const pourTop = pourSource ? pourSource.top + pourSource.height : 0;
+  const pourHeight = pourSource ? Math.max(cupMilkBox.top - pourTop, 1) : 0;
+  const pourColor =
+    pouringKey === 'bowl'
+      ? SCOOP_FILL_COLORS[incomingBowl?.grade] ?? SCOOP_FILL_COLORS['classic-grade']
+      : MILK_STREAM_COLORS[pouringKey] ?? MILK_STREAM_COLORS.oat;
 
   const beginPour = (key) => {
-    if (!canPourAny) return;
-    const item = BOTTLE_ITEMS.find((b) => b.key === key);
-    setBottlePositions((prev) => ({
-      ...prev,
-      [key]: getBottleHoverPos(CUP_SPOTS.table, TABLE_SIZE, item),
-    }));
+    if (key === 'bowl') {
+      if (!canPourMatcha) return;
+      setBowlPos(getBottleHoverPos(CUP_SPOTS.table, TABLE_SIZE, { width: incomingBowlWidth, height: incomingBowlHeight }));
+    } else {
+      if (!canPourMilk) return;
+      const item = BOTTLE_ITEMS.find((b) => b.key === key);
+      setBottlePositions((prev) => ({
+        ...prev,
+        [key]: getBottleHoverPos(CUP_SPOTS.table, TABLE_SIZE, item),
+      }));
+    }
     setPouringKey(key);
     setPourStage('moving');
   };
@@ -517,16 +600,24 @@ const MilkSelection = ({ activeStep, customerNumber, onNavigate, onAdvance, orde
       return () => clearTimeout(t);
     }
     if (pourStage === 'pouring') {
-      setCupMilk({ type: pouringKey });
+      if (pouringKey === 'bowl') {
+        setCupMatcha({ grade: incomingBowl?.grade ?? 'classic-grade' });
+      } else {
+        setCupMilk({ type: pouringKey });
+      }
       const t = setTimeout(() => {
-        setBottlePositions((prev) => ({ ...prev, [pouringKey]: BOTTLE_HOME[pouringKey] }));
+        if (pouringKey === 'bowl') {
+          setBowlPos(INCOMING_BOWL_SPOT);
+        } else {
+          setBottlePositions((prev) => ({ ...prev, [pouringKey]: BOTTLE_HOME[pouringKey] }));
+        }
         setPourStage('idle');
         setPouringKey(null);
       }, BOTTLE_POUR_MS);
       return () => clearTimeout(t);
     }
     return undefined;
-  }, [pourStage, pouringKey]);
+  }, [pourStage, pouringKey, incomingBowl]);
 
   const handleBottlePointerDown = (item) => (e) => {
     const base = bottlePositions[item.key];
@@ -561,7 +652,7 @@ const MilkSelection = ({ activeStep, customerNumber, onNavigate, onAdvance, orde
     // instead of the ordinary placement below -- same "special-cased drop
     // target" pattern as MatchaMaking's kettle-onto-bowl/whisk-onto-bowl
     // branches.
-    if (canPourAny && isOverCup(bottleDrag.left, bottleDrag.top, cupSpot)) {
+    if (canPourMilk && isOverCup(bottleDrag.left, bottleDrag.top, cupSpot)) {
       setBottleDrag(null);
       beginPour(item.key);
       return;
@@ -585,7 +676,7 @@ const MilkSelection = ({ activeStep, customerNumber, onNavigate, onAdvance, orde
   };
 
   // D-pad / keyboard equivalent of a click -- once the pour preconditions
-  // are met (see canPourAny above), Enter pours whichever bottle is
+  // are met (see canPourMilk above), Enter pours whichever bottle is
   // focused -- same "no keyboard equivalent of a partial drag, so Enter
   // goes straight to the one meaningful outcome" reasoning as
   // MatchaMaking's handleKettleKeyDown. Otherwise it just snaps the
@@ -596,12 +687,60 @@ const MilkSelection = ({ activeStep, customerNumber, onNavigate, onAdvance, orde
     if (action !== 'Enter') return;
     if (shouldDebounceEnter(e)) return;
     e.preventDefault();
-    if (canPourAny) {
+    if (canPourMilk) {
       beginPour(item.key);
       return;
     }
     const home = BOTTLE_HOME[item.key];
     setBottlePositions((prev) => ({ ...prev, [item.key]: { left: home.left, top: home.top } }));
+  };
+
+  // ---- Matcha bowl: pick up, pour onto the cup (once there's already a
+  // milk/water base), or snap back home -- same shape as the milk bottles'
+  // own handlers, just simpler since there's only one bowl and it always
+  // returns to the same spot rather than staying wherever it's dropped
+  // (see the bowlPos comment above). ------------------------------------
+  const handleBowlPointerDown = (e) => {
+    const base = bowlPos;
+    e.currentTarget.setPointerCapture(e.pointerId);
+    bowlDragStartRef.current = { pointerX: e.clientX, pointerY: e.clientY, left: base.left, top: base.top };
+    setBowlDrag({ left: base.left, top: base.top });
+  };
+
+  const handleBowlPointerMove = (e) => {
+    if (!bowlDrag) return;
+    const rect = containerRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const dxPct = ((e.clientX - bowlDragStartRef.current.pointerX) / rect.width) * 100;
+    const dyPct = ((e.clientY - bowlDragStartRef.current.pointerY) / rect.height) * 100;
+    setBowlDrag({
+      left: bowlDragStartRef.current.left + dxPct,
+      top: bowlDragStartRef.current.top + dyPct,
+    });
+  };
+
+  const handleBowlPointerUp = (e) => {
+    if (!bowlDrag) return;
+    e.currentTarget.releasePointerCapture?.(e.pointerId);
+    if (canPourMatcha && isOverCup(bowlDrag.left, bowlDrag.top, cupSpot)) {
+      setBowlDrag(null);
+      beginPour('bowl');
+      return;
+    }
+    // Any other drop (missed the cup, or the pour preconditions aren't met
+    // yet) just snaps it back home -- unlike the bottles, there's nowhere
+    // else on this counter that makes sense for the bowl to sit.
+    setBowlPos(INCOMING_BOWL_SPOT);
+    setBowlDrag(null);
+  };
+
+  const handleBowlKeyDown = (e) => {
+    const action = getActionFromKeyEvent(e);
+    if (action !== 'Enter') return;
+    if (shouldDebounceEnter(e)) return;
+    if (!canPourMatcha) return;
+    e.preventDefault();
+    beginPour('bowl');
   };
 
   return (
@@ -621,28 +760,37 @@ const MilkSelection = ({ activeStep, customerNumber, onNavigate, onAdvance, orde
             this screen's own imported copies of MatchaMaking's
             BOWL_INNER_RIM_* positioning math so the whisked-liquid image
             still lines up with the bowl's rim the same way it does there.
-            Purely decorative (aria-hidden, no data-focusable/tabIndex) --
-            nothing to drag/select here yet, this just shows the
-            drink-in-progress carried over rather than disappearing.
-            .station-item and .bowl-whisked-liquid are both defined in
-            MatchaMaking.css, which is already loaded globally since
-            MatchaMaking.js is always imported by App.js -- reused here
-            rather than duplicated so the look can't drift out of sync
-            between the two screens. */}
+            Now interactive -- draggable onto the cup (once it's on the
+            table with milk/water already in it) or Enter-to-pour, same
+            glide/tilt/pour/glide-home sequence as the milk bottles (see
+            beginPour/bowlPos above), just reusing MatchaMaking.css's own
+            .station-item.movable classes (drag cursor, focus glow,
+            .settling) instead of .milk-bottle's, since this art was sized
+            for that screen's own movable-item treatment. .station-item and
+            .bowl-whisked-liquid are both defined in MatchaMaking.css, which
+            is already loaded globally since MatchaMaking.js is always
+            imported by App.js -- reused here rather than duplicated so the
+            look can't drift out of sync between the two screens. */}
         {incomingBowl && (
           <>
             <img
               src={incomingBowlItem.src}
-              alt=""
-              aria-hidden="true"
+              alt="Bowl of whisked matcha. Drag onto the cup to pour it in once there's milk or water in it, or select it and press Enter."
               draggable={false}
-              className="station-item"
+              data-focusable
+              tabIndex={0}
+              className={`station-item movable${bowlDrag ? ' dragging' : ''}${pouringKey === 'bowl' ? ' settling' : ''}`}
               style={{
-                left: `${INCOMING_BOWL_SPOT.left}%`,
-                top: `${INCOMING_BOWL_SPOT.top}%`,
+                left: `${(bowlDrag || bowlPos).left}%`,
+                top: `${(bowlDrag || bowlPos).top}%`,
                 width: `${incomingBowlWidth}%`,
                 height: `${incomingBowlHeight}%`,
+                ...(pouringKey === 'bowl' ? { transform: `rotate(${BOTTLE_POUR_ROTATE_DEG}deg)` } : {}),
               }}
+              onPointerDown={handleBowlPointerDown}
+              onPointerMove={handleBowlPointerMove}
+              onPointerUp={handleBowlPointerUp}
+              onKeyDown={handleBowlKeyDown}
             />
             <img
               src={WHISKED_LIQUID_IMAGES[incomingBowl.grade] ?? WHISKED_LIQUID_IMAGES['classic-grade']}
@@ -655,6 +803,7 @@ const MilkSelection = ({ activeStep, customerNumber, onNavigate, onAdvance, orde
                 top: `${incomingRimTop}%`,
                 width: `${incomingRimWidth}%`,
                 height: `${incomingRimHeight}%`,
+                ...(pouringKey === 'bowl' ? { transform: `rotate(${BOTTLE_POUR_ROTATE_DEG}deg)` } : {}),
               }}
             />
           </>
@@ -738,6 +887,25 @@ const MilkSelection = ({ activeStep, customerNumber, onNavigate, onAdvance, orde
               top: `${cupMilkBox.top}%`,
               width: `${cupMilkBox.width}%`,
               height: `${cupMilkBox.height}%`,
+            }}
+          />
+        )}
+        {/* Matcha poured on top of the milk -- see the big comment on
+            CUP_MATCHA_HEIGHT_FRAC/getCupMatchaBox above for the box, and
+            cupMatcha above for the state. Rendered right after the milk
+            fill so it paints on top of it (same "on top of everything
+            underneath" DOM-order reasoning as the milk fill itself), using
+            the milk fill's own left/top/width so its taper lines up, just a
+            shorter height. */}
+        {cupMatcha && cupSpot === 'table' && (
+          <div
+            className={`cup-matcha-fill ${cupMatcha.grade}`}
+            aria-hidden="true"
+            style={{
+              left: `${cupMatchaBox.left}%`,
+              top: `${cupMatchaBox.top}%`,
+              width: `${cupMatchaBox.width}%`,
+              height: `${cupMatchaBox.height}%`,
             }}
           />
         )}

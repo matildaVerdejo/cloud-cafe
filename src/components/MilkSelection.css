@@ -269,6 +269,75 @@
   background: rgba(240, 247, 247, 0.5);
 }
 
+/* Matcha poured on top of the milk (see cupMatcha/getCupMatchaBox in
+   MilkSelection.js) -- same "plain colored shape, clip-path for the
+   liquid's own outline" technique as .cup-milk-fill, just its own polygon
+   (concave top-surface curve like the milk's own, re-expressed as a bigger
+   percentage of this box's own shorter height so the ABSOLUTE dip depth on
+   screen matches; top corners widened to 3%/97% -- a touch past this
+   layer's own taper math, which alone only works out to about 5%/95% since
+   the glass is a little wider up here than at the milk's own top edge --
+   so the top of the fill hugs the glass walls at this height instead of
+   reading slightly narrow; sides taper back down to the same 8.86%/91.14%
+   the milk fill's own top used, so the two still line up as one continuous
+   glass wall at the handoff point; flat bottom edge -- no rounding needed
+   there since it's just a color transition into the milk underneath, not a
+   real edge touching the glass).
+   The background itself (see the three grade classes below) is a
+   top-to-bottom gradient rather than a flat color -- solid from 0% down to
+   ~26.5% (the point CUP_MATCHA_RAISE_FRAC/CUP_MATCHA_OVERLAP_FRAC in
+   MilkSelection.js works out to, i.e. exactly where the milk's own original
+   top edge falls within this taller box), then fading to fully transparent
+   by 100%. That upper solid band is the part of this layer sitting above
+   the milk (nothing to blend with there); the fade below it is what's
+   actually stacked over the milk fill, so the milk color underneath
+   increasingly shows through as the gradient goes to transparent -- read
+   together, the two colors blend into each other instead of meeting at a
+   hard line. transform-origin is top center (not bottom, like the milk
+   fill) since this layer grows downward from the pour point rather than
+   upward from the glass's base. */
+.cup-matcha-fill {
+  position: absolute;
+  box-sizing: border-box;
+  pointer-events: none;
+  clip-path: polygon(
+    3% 0%, 12.4% 2.05%, 21.8% 3.89%, 31.2% 5.36%, 40.6% 6.3%,
+    50% 6.62%,
+    59.4% 6.3%, 68.8% 5.36%, 78.2% 3.89%, 87.6% 2.05%, 97% 0%,
+    91.14% 100%,
+    8.86% 100%
+  );
+  transform-origin: top center;
+  animation: cupMilkGrow 0.5s ease-out both;
+}
+
+.cup-matcha-fill.cafe-grade {
+  background: linear-gradient(
+    to bottom,
+    rgba(202, 219, 175, 0.85) 0%,
+    rgba(202, 219, 175, 0.85) 26.5%,
+    rgba(202, 219, 175, 0) 100%
+  );
+}
+
+.cup-matcha-fill.classic-grade {
+  background: linear-gradient(
+    to bottom,
+    rgba(163, 185, 121, 0.85) 0%,
+    rgba(163, 185, 121, 0.85) 26.5%,
+    rgba(163, 185, 121, 0) 100%
+  );
+}
+
+.cup-matcha-fill.ceremonial-grade {
+  background: linear-gradient(
+    to bottom,
+    rgba(128, 155, 122, 0.85) 0%,
+    rgba(128, 155, 122, 0.85) 26.5%,
+    rgba(128, 155, 122, 0) 100%
+  );
+}
+
 @keyframes cupMilkGrow {
   0% {
     opacity: 0;

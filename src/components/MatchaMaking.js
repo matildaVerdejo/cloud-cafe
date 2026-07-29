@@ -83,8 +83,11 @@ const SCOOP_CONFIRM_LINGER_MS = 1500;
 // the higher grades read as "richer". Falls back to the mid (classic)
 // shade in SCOOP_FILL_COLORS[selectedTin] lookups if selectedTin is ever
 // something unexpected (defensive only -- selectedTin is always one of
-// these three keys or null in practice).
-const SCOOP_FILL_COLORS = {
+// these three keys or null in practice). Exported so MilkSelection.js can
+// color its own matcha-pour effect/fill to match whichever grade was
+// carried over (incomingBowl.grade), instead of picking its own separate
+// palette that could drift out of sync with this one.
+export const SCOOP_FILL_COLORS = {
   'cafe-grade': '#CADBAF',
   'classic-grade': '#A3B979',
   'ceremonial-grade': '#809B7A',

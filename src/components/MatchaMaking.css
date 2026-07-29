@@ -1305,8 +1305,15 @@
      left/top transition exactly, so this overlay glides smoothly along
      with the bowl during the Make Drink carry (see beginBowlCarry in
      MatchaMaking.js) instead of snapping to the new position instantly
-     while the bowl itself eases over. */
-  transition: left 0.2s ease, top 0.2s ease;
+     while the bowl itself eases over. transform 0.15s ease added for
+     MilkSelection's own matcha-pour sequence, where the carried-over bowl
+     tilts to pour -- this element rides along as one rigid unit with it
+     (see the bowlPos/isBowlPouring comments in MilkSelection.js), so it
+     needs to ease the rotation just as smoothly as the bowl itself does
+     (.station-item.movable's own transform transition) rather than
+     snapping straight to the tilted angle. Unused/harmless on
+     MatchaMaking's own screen, which never rotates this element. */
+  transition: left 0.2s ease, top 0.2s ease, transform 0.15s ease;
   animation: growFromCenter 0.4s ease-out forwards;
 }
 
