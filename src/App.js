@@ -57,6 +57,13 @@ function App() {
   const [finishedDrink, setFinishedDrink] = useState(null);
   const [showExitConfirm, setShowExitConfirm] = useState(false);
   const [adPlaying, setAdPlaying] = useState(false);
+  // Background music -- one <audio> element rendered once here (outside the
+  // per-page conditionals below) so it survives every page navigation and
+  // just keeps looping until the tab/app itself closes. musicOn is the
+  // single source of truth for whether it *should* be playing; the mute
+  // button on MainPage just flips this. Defaults to on.
+  const [musicOn, setMusicOn] = useState(true);
+  const audioRef = useRef(null);
   // currentPage is read inside a window-level keydown listener that is
   // attached once; keep a ref so the handler always sees the latest value
   // without re-attaching the listener on every navigation.
@@ -89,6 +96,54 @@ function App() {
     });
     return unsubscribe;
   }, []);
+
+  // ---- Background music: autoplay + first-gesture fallback ---------------
+  // Most browsers block audio with sound until the user has interacted with
+  // the page at least once. We try to start it immediately on mount (works
+  // on platforms/TV browsers that allow it), and also attach a one-time
+  // listener for the first keydown/click/pointerdown anywhere so it starts
+  // right away everywhere else. Either path only actually starts playback
+  // if musicOn is still true (i.e. the player hasn't muted it first).
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return undefined;
+    audio.volume = 0.5;
+    const tryPlay = () => {
+      if (musicOn) {
+        audio.play().catch(() => {
+          // Autoplay was blocked -- the first-gesture listener below will
+          // retry once the player interacts.
+        });
+      }
+    };
+    tryPlay();
+    const handleFirstGesture = () => {
+      tryPlay();
+      window.removeEventListener('keydown', handleFirstGesture);
+      window.removeEventListener('pointerdown', handleFirstGesture);
+    };
+    window.addEventListener('keydown', handleFirstGesture);
+    window.addEventListener('pointerdown', handleFirstGesture);
+    return () => {
+      window.removeEventListener('keydown', handleFirstGesture);
+      window.removeEventListener('pointerdown', handleFirstGesture);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Keep the audio element in sync whenever the player toggles the mute
+  // button -- pause immediately on mute, resume immediately on unmute.
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    if (musicOn) {
+      audio.play().catch(() => {});
+    } else {
+      audio.pause();
+    }
+  }, [musicOn]);
+
+  const toggleMusic = () => setMusicOn((on) => !on);
 
   // ---- Lifecycle: suspend on hidden/backgrounded, resume on visible ------
   useEffect(() => {
@@ -215,7 +270,7 @@ function App() {
       <div className={`page-container ${currentPage}`}>
         {currentPage === 'main' && (
           <div className="page-slide">
-            <MainPage onPlayClick={handlePlayClick} />
+            <MainPage onPlayClick={handlePlayClick} musicOn={musicOn} onToggleMusic={toggleMusic} />
           </div>
         )}
         {currentPage === 'ordering' && (
@@ -278,6 +333,12 @@ function App() {
       )}
 
       {adPlaying && <div className="gl-ad-curtain">Ad playing…</div>}
+
+      {/* Rendered once here (not inside any per-page conditional) so it
+          keeps looping across every screen/customer for the whole session --
+          only musicOn (toggled from the mute button on MainPage) or closing
+          the app stops it. See the background-music effects above. */}
+      <audio ref={audioRef} src="./BackgroundMusic.mp3" loop preload="auto" />
 
       {/* Removable GameLoop V1 debug overlay — hidden for now (design work in
           progress). Uncomment to bring it back for validating appReady/
