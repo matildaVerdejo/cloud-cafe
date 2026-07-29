@@ -1,9 +1,11 @@
-import React, { useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import './ToppingsStation.css';
 import { useFlatFocusNav } from '../gameloop/useFlatFocusNav';
+import { getActionFromKeyEvent, shouldDebounceEnter } from '../gameloop/pal';
 import ProgressBar from './ProgressBar';
 import OrderReceiptButton from './OrderReceiptButton';
 import { getMilkBoxFor, getMatchaBoxFor, TABLE_SIZE } from './MilkSelection';
+import { WHISK_FLIP_DEG } from './MatchaMaking';
 
 // Where the finished cup (see incomingDrink below) sent over from Milk
 // Selection's own "Send to Toppings" drop-zone comes to rest on this
@@ -149,6 +151,76 @@ const TOPPING_ITEMS = [
   }),
 ];
 
+// ---- Pouring a syrup onto the carried-over drink -------------------------
+// Same overall shape as Milk Selection's bottle-pour sequence (glide to a
+// hover spot above the cup, "pour", glide back home), with two differences
+// specific to syrup: the bottle does a full 180deg flip (reusing
+// MatchaMaking's own WHISK_FLIP_DEG -- a syrup bottle tips all the way
+// upside-down to pour, not a partial tilt like the milk bottles) rather
+// than staying upright, and while it's flipped the player can nudge it
+// left/right (see the pourOffset state and its own capture-phase keydown
+// effect in the component below) to aim the stream, purely for feel -- it
+// doesn't change where the syrup ends up (see .cup-syrup-fill below,
+// always anchored to the same spot regardless of aim).
+//
+// The two syrups sink to the BOTTOM of the drink rather than sitting on
+// top (matcha's own spot) -- .cup-syrup-fill (ToppingsStation.css) is a
+// gradient solid at the very bottom, fading to transparent as it rises,
+// same "blend into what's already there" idea as .cup-matcha-fill but
+// upside-down and anchored to the milk box's own bottom edge instead of
+// its top.
+const SYRUP_HOVER_GAP = 2; // % gap between the bottle's bottom edge and the cup's rim while hovering
+function getSyrupHoverPos(item) {
+  return {
+    left: INCOMING_DRINK_SPOT.left + INCOMING_DRINK_SIZE.width / 2 - item.width / 2,
+    top: INCOMING_DRINK_SPOT.top - item.height - SYRUP_HOVER_GAP,
+  };
+}
+
+// Generous hit-test box for "was the bottle dropped on the cup", same
+// margin-based approach as Milk Selection's own isOverCup.
+function isOverIncomingCup(leftPct, topPct) {
+  const margin = 3;
+  return (
+    leftPct >= INCOMING_DRINK_SPOT.left - margin &&
+    leftPct <= INCOMING_DRINK_SPOT.left + INCOMING_DRINK_SIZE.width + margin &&
+    topPct >= INCOMING_DRINK_SPOT.top - margin &&
+    topPct <= INCOMING_DRINK_SPOT.top + INCOMING_DRINK_SIZE.height + margin
+  );
+}
+
+const SYRUP_MOVE_MS = 350; // time to glide to the hover spot
+const SYRUP_POUR_MS = 2200; // how long 'pouring' holds (long enough to actually use the left/right aim) before gliding back home
+const SYRUP_MOVE_STEP = 2; // % nudge per Left/Right press while pouring
+const SYRUP_MOVE_RANGE = 8; // max % the bottle (and stream) can be nudged off-center in either direction
+const SYRUP_SNAP_FRACTION = 0.5; // same "drop close to home, it snaps the rest of the way" idea as Milk Selection's BOTTLE_SNAP_FRACTION
+const SYRUP_CLICK_MAX_MOVE_PCT = 1; // below this much movement, a pointer-down -> up is a click, not a drag
+
+// Colors for the falling syrup stream -- reused directly (no extra alpha
+// adjustment) for .cup-syrup-fill's own gradient solid-color stop too,
+// same "one palette, one source of truth" idea as MatchaMaking's
+// SCOOP_FILL_COLORS/scoopColor.
+const SYRUP_STREAM_COLORS = {
+  'guava-syrup': 'rgba(224, 90, 111, 0.92)',
+  'mint-syrup': 'rgba(101, 196, 155, 0.9)',
+};
+
+// The bottom portion of the milk box's own shape (see getMilkBoxFor in
+// MilkSelection.js) -- covers the bottom SYRUP_HEIGHT_FRAC of it, anchored
+// to the milk box's actual bottom edge (there's no "raise" zone the way
+// matcha has one, since syrup doesn't need to raise the drink's overall
+// fill line, just tint the bottom of what's already there).
+const SYRUP_HEIGHT_FRAC = 0.4;
+function getSyrupBoxFor(milkBox) {
+  const height = milkBox.height * SYRUP_HEIGHT_FRAC;
+  return {
+    left: milkBox.left,
+    top: milkBox.top + milkBox.height - height,
+    width: milkBox.width,
+    height,
+  };
+}
+
 const ToppingsStation = ({ activeStep, customerNumber, onNavigate, onAdvance, order, incomingDrink }) => {
   const containerRef = useRef(null);
   useFlatFocusNav(containerRef);
@@ -167,6 +239,178 @@ const ToppingsStation = ({ activeStep, customerNumber, onNavigate, onAdvance, or
   // CUP_SPOTS.table/TABLE_SIZE.
   const incomingMilkBox = incomingDrink?.milk ? getMilkBoxFor(INCOMING_DRINK_SPOT, INCOMING_DRINK_SIZE) : null;
   const incomingMatchaBox = incomingDrink?.matcha && incomingMilkBox ? getMatchaBoxFor(incomingMilkBox) : null;
+  const incomingSyrupBox = incomingMilkBox ? getSyrupBoxFor(incomingMilkBox) : null;
+
+  // ---- Guava/mint syrup: pick up, pour onto the drink, or snap back home -
+  // Same drag/Enter-to-pour shape as Milk Selection's own milk bottles --
+  // see the big comment on SYRUP_HOVER_GAP/getSyrupHoverPos above for what's
+  // different about syrup specifically (the flip, the aim, the bottom-of-
+  // the-cup landing spot).
+  const [syrupPositions, setSyrupPositions] = useState(() => {
+    const positions = {};
+    for (const item of TOPPING_ITEMS) {
+      if (item.key === 'guava-syrup' || item.key === 'mint-syrup') {
+        positions[item.key] = { left: item.left, top: item.top };
+      }
+    }
+    return positions;
+  });
+  const [syrupDrag, setSyrupDrag] = useState(null); // { key, left, top } | null
+  const syrupDragStartRef = useRef({ pointerX: 0, pointerY: 0, left: 0, top: 0 });
+
+  //   'idle'     -- normal, whichever syrup sits wherever it was left, freely
+  //                 draggable.
+  //   'moving'   -- confirmed (dropped on the cup, or Enter/Space) -- gliding
+  //                 to the hover-over-cup spot and flipping upside-down.
+  //   'pouring'  -- arrived; cupSyrup is set (the fill appears) and it holds
+  //                 the flip for SYRUP_POUR_MS -- during which Left/Right
+  //                 nudges pourOffset (see the effect below) -- before
+  //                 gliding back home and returning to 'idle' on its own,
+  //                 same reusable-not-one-time-use item as the milk bottles.
+  const [pourStage, setPourStage] = useState('idle');
+  const [pouringKey, setPouringKey] = useState(null); // 'guava-syrup' | 'mint-syrup' | null
+  // Horizontal nudge (see SYRUP_MOVE_STEP/SYRUP_MOVE_RANGE above), reset to
+  // 0 at the start of every pour. Purely cosmetic -- see the big comment on
+  // getSyrupBoxFor above for why it doesn't move where the syrup actually
+  // lands.
+  const [pourOffset, setPourOffset] = useState(0);
+  // The drink's own persistent "has syrup been poured in" state -- doesn't
+  // reset on its own (only a fresh pour re-sets it), same "second pour just
+  // restarts this rather than accumulating" caveat as Milk Selection's
+  // cupMilk/cupMatcha. { key: 'guava-syrup' | 'mint-syrup' } | null.
+  const [cupSyrup, setCupSyrup] = useState(null);
+
+  // Only needs an actual drink to pour onto and nothing else already
+  // mid-pour -- unlike Milk Selection's own bottles/bowl there's no ice/
+  // base precondition here, since the drink arriving from that screen is
+  // already whatever it's going to be by the time it gets here.
+  const canPourSyrup = !!incomingDrink && pourStage === 'idle';
+
+  const beginSyrupPour = (key) => {
+    if (!canPourSyrup) return;
+    const item = TOPPING_ITEMS.find((i) => i.key === key);
+    setSyrupPositions((prev) => ({ ...prev, [key]: getSyrupHoverPos(item) }));
+    setPourOffset(0);
+    setPouringKey(key);
+    setPourStage('moving');
+  };
+
+  useEffect(() => {
+    if (pourStage === 'moving') {
+      const t = setTimeout(() => setPourStage('pouring'), SYRUP_MOVE_MS);
+      return () => clearTimeout(t);
+    }
+    if (pourStage === 'pouring') {
+      setCupSyrup({ key: pouringKey });
+      const t = setTimeout(() => {
+        const home = TOPPING_ITEMS.find((i) => i.key === pouringKey);
+        setSyrupPositions((prev) => ({ ...prev, [pouringKey]: { left: home.left, top: home.top } }));
+        setPourStage('idle');
+        setPouringKey(null);
+        setPourOffset(0);
+      }, SYRUP_POUR_MS);
+      return () => clearTimeout(t);
+    }
+    return undefined;
+  }, [pourStage, pouringKey]);
+
+  // Left/Right aim while pouring -- a capture-phase window listener (rather
+  // than a plain onKeyDown on the bottle) so it runs and can
+  // stopImmediatePropagation() BEFORE useFlatFocusNav's own bubble-phase
+  // window listener gets a chance to treat Left/Right as "move focus to the
+  // nearest focusable element" instead -- that hook attaches its listener
+  // unconditionally at mount (bubble phase, the default), so without this
+  // capture-phase intercept every Left/Right press during a pour would just
+  // shift keyboard focus around the screen rather than nudging the stream.
+  // Only attached while an actual syrup pour is in progress, and removed
+  // the instant it isn't, so ordinary D-pad navigation is completely
+  // unaffected the rest of the time.
+  useEffect(() => {
+    if (pourStage !== 'pouring' || !pouringKey) return undefined;
+    const handleAimKeyDown = (e) => {
+      const action = getActionFromKeyEvent(e);
+      if (action !== 'Left' && action !== 'Right') return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      setPourOffset((prev) => {
+        const next = prev + (action === 'Right' ? SYRUP_MOVE_STEP : -SYRUP_MOVE_STEP);
+        return Math.min(SYRUP_MOVE_RANGE, Math.max(-SYRUP_MOVE_RANGE, next));
+      });
+    };
+    window.addEventListener('keydown', handleAimKeyDown, { capture: true });
+    return () => window.removeEventListener('keydown', handleAimKeyDown, { capture: true });
+  }, [pourStage, pouringKey]);
+
+  const handleSyrupPointerDown = (item) => (e) => {
+    if (pouringKey === item.key) return; // can't re-grab mid-pour
+    const base = syrupPositions[item.key];
+    e.currentTarget.setPointerCapture(e.pointerId);
+    syrupDragStartRef.current = { pointerX: e.clientX, pointerY: e.clientY, left: base.left, top: base.top };
+    setSyrupDrag({ key: item.key, left: base.left, top: base.top });
+  };
+
+  const handleSyrupPointerMove = (item) => (e) => {
+    if (!syrupDrag || syrupDrag.key !== item.key) return;
+    const rect = containerRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const dxPct = ((e.clientX - syrupDragStartRef.current.pointerX) / rect.width) * 100;
+    const dyPct = ((e.clientY - syrupDragStartRef.current.pointerY) / rect.height) * 100;
+    setSyrupDrag({
+      key: item.key,
+      left: syrupDragStartRef.current.left + dxPct,
+      top: syrupDragStartRef.current.top + dyPct,
+    });
+  };
+
+  const handleSyrupPointerUp = (item) => (e) => {
+    if (!syrupDrag || syrupDrag.key !== item.key) return;
+    e.currentTarget.releasePointerCapture?.(e.pointerId);
+    if (canPourSyrup && isOverIncomingCup(syrupDrag.left, syrupDrag.top)) {
+      setSyrupDrag(null);
+      beginSyrupPour(item.key);
+      return;
+    }
+    const home = { left: item.left, top: item.top };
+    const totalMove = Math.max(
+      Math.abs(e.clientX - syrupDragStartRef.current.pointerX),
+      Math.abs(e.clientY - syrupDragStartRef.current.pointerY)
+    );
+    const rect = containerRef.current?.getBoundingClientRect();
+    const totalMovePct = rect ? (totalMove / Math.max(rect.width, rect.height)) * 100 : 0;
+    const snapBack =
+      totalMovePct < SYRUP_CLICK_MAX_MOVE_PCT ||
+      (Math.abs(syrupDrag.left - home.left) < item.width * SYRUP_SNAP_FRACTION &&
+        Math.abs(syrupDrag.top - home.top) < item.height * SYRUP_SNAP_FRACTION);
+    setSyrupPositions((prev) => ({
+      ...prev,
+      [item.key]: snapBack ? home : { left: syrupDrag.left, top: syrupDrag.top },
+    }));
+    setSyrupDrag(null);
+  };
+
+  const handleSyrupKeyDown = (item) => (e) => {
+    const action = getActionFromKeyEvent(e);
+    if (action !== 'Enter') return;
+    if (shouldDebounceEnter(e)) return;
+    e.preventDefault();
+    if (canPourSyrup) {
+      beginSyrupPour(item.key);
+      return;
+    }
+    setSyrupPositions((prev) => ({ ...prev, [item.key]: { left: item.left, top: item.top } }));
+  };
+
+  // ---- Falling syrup stream -- see the big comment on SYRUP_STREAM_COLORS/
+  // getSyrupBoxFor above. Anchored to the pouring bottle's own current
+  // (offset-nudged) position, falling down to the syrup box's own top edge
+  // so it reads as landing right where the syrup will appear.
+  const pouringSyrupItem = pouringKey ? TOPPING_ITEMS.find((i) => i.key === pouringKey) : null;
+  const pouringSyrupPos = pouringKey ? syrupPositions[pouringKey] : null;
+  const syrupPourLeft =
+    pouringSyrupItem && pouringSyrupPos ? pouringSyrupPos.left + pouringSyrupItem.width / 2 + pourOffset : 0;
+  const syrupPourTop = pouringSyrupItem && pouringSyrupPos ? pouringSyrupPos.top + pouringSyrupItem.height : 0;
+  const syrupPourHeight = incomingSyrupBox ? Math.max(incomingSyrupBox.top - syrupPourTop, 1) : 0;
+  const syrupPourColor = pouringKey ? SYRUP_STREAM_COLORS[pouringKey] : SYRUP_STREAM_COLORS['guava-syrup'];
 
   return (
     <div className="toppings-container" ref={containerRef}>
@@ -179,8 +423,9 @@ const ToppingsStation = ({ activeStep, customerNumber, onNavigate, onAdvance, or
             ToppingsStation.css) but not draggable and no selection
             behavior wired up yet -- this is purely the "place them on the
             counter" step requested; picking one still just moves focus/
-            the glow around for now. */}
-        {TOPPING_ITEMS.map((item) => (
+            the glow around for now. Excludes guava-syrup/mint-syrup, which
+            get their own fully interactive render below instead. */}
+        {TOPPING_ITEMS.filter((item) => item.key !== 'guava-syrup' && item.key !== 'mint-syrup').map((item) => (
           <img
             key={item.key}
             src={item.src}
@@ -197,6 +442,44 @@ const ToppingsStation = ({ activeStep, customerNumber, onNavigate, onAdvance, or
             }}
           />
         ))}
+        {/* Guava/mint syrup -- draggable onto the drink (or Enter to pour)
+            same as Milk Selection's own bottles, reusing MatchaMaking.css's
+            .station-item.movable (drag cursor, focus glow, .dragging/
+            .settling) rather than this file's own local .selectable, since
+            that's the exact drag/focus treatment this needs and it's
+            already loaded globally (see the comment on the carried-over cup
+            below for that same reasoning). The 180deg flip (WHISK_FLIP_DEG,
+            imported from MatchaMaking.js) plays while settling/pouring --
+            see the big comment on SYRUP_HOVER_GAP above for why a full flip
+            rather than milk bottles' own partial tilt. */}
+        {TOPPING_ITEMS.filter((item) => item.key === 'guava-syrup' || item.key === 'mint-syrup').map((item) => {
+          const dragging = syrupDrag?.key === item.key;
+          const isPouring = pouringKey === item.key;
+          const basePos = dragging ? syrupDrag : syrupPositions[item.key];
+          const pos = isPouring ? { left: basePos.left + pourOffset, top: basePos.top } : basePos;
+          return (
+            <img
+              key={item.key}
+              src={item.src}
+              alt={`${item.alt}. Drag onto the drink to pour some in, or select it and press Enter. While it's pouring, use Left/Right to aim the stream.`}
+              className={`station-item movable${dragging ? ' dragging' : ''}${isPouring ? ' settling' : ''}`}
+              data-focusable
+              tabIndex={0}
+              draggable={false}
+              style={{
+                left: `${pos.left}%`,
+                top: `${pos.top}%`,
+                width: `${item.width}%`,
+                height: `${item.height}%`,
+                ...(isPouring ? { transform: `rotate(${WHISK_FLIP_DEG}deg)` } : {}),
+              }}
+              onPointerDown={handleSyrupPointerDown(item)}
+              onPointerMove={handleSyrupPointerMove(item)}
+              onPointerUp={handleSyrupPointerUp(item)}
+              onKeyDown={handleSyrupKeyDown(item)}
+            />
+          );
+        })}
         {/* Carried-over drink -- purely decorative (aria-hidden, no
             data-focusable/tabIndex, same treatment Milk Selection's own
             incoming bowl started with), just so the finished drink doesn't
@@ -242,7 +525,44 @@ const ToppingsStation = ({ activeStep, customerNumber, onNavigate, onAdvance, or
                 }}
               />
             )}
+            {/* Syrup poured on top of everything else, but visually sinks to
+                the BOTTOM of the drink -- see the big comment on
+                getSyrupBoxFor above. .cup-syrup-fill is defined locally in
+                ToppingsStation.css (unlike the milk/matcha fills, this one's
+                a toppings-specific concept, not a Milk Selection one). */}
+            {cupSyrup && incomingSyrupBox && (
+              <div
+                className={`cup-syrup-fill ${cupSyrup.key}`}
+                aria-hidden="true"
+                style={{
+                  left: `${incomingSyrupBox.left}%`,
+                  top: `${incomingSyrupBox.top}%`,
+                  width: `${incomingSyrupBox.width}%`,
+                  height: `${incomingSyrupBox.height}%`,
+                }}
+              />
+            )}
           </>
+        )}
+        {/* Falling syrup stream -- see the big comment on
+            SYRUP_STREAM_COLORS/getSyrupBoxFor above. Reuses MatchaMaking.
+            css's .spoon-pour/.spoon-pour-grain-N, same as Milk Selection's
+            own falling-liquid effect. Only shown during the actual
+            'pouring' stage, not 'moving'. */}
+        {pourStage === 'pouring' && pouringKey && (
+          <div
+            className="spoon-pour"
+            style={{
+              left: `${syrupPourLeft}%`,
+              top: `${syrupPourTop}%`,
+              height: `${syrupPourHeight}%`,
+            }}
+          >
+            <span className="spoon-pour-grain spoon-pour-grain-1" style={{ background: syrupPourColor }} />
+            <span className="spoon-pour-grain spoon-pour-grain-2" style={{ background: syrupPourColor }} />
+            <span className="spoon-pour-grain spoon-pour-grain-3" style={{ background: syrupPourColor }} />
+            <span className="spoon-pour-grain spoon-pour-grain-4" style={{ background: syrupPourColor }} />
+          </div>
         )}
         <OrderReceiptButton order={order} />
         <ProgressBar

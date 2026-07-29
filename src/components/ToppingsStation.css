@@ -90,3 +90,33 @@
     drop-shadow(0 0 12px rgba(255, 255, 255, 0.75));
 }
 
+/* Poured syrup, pooling at the bottom of the incoming drink's cup (see
+   getSyrupBoxFor/cupSyrup in ToppingsStation.js). This box covers the
+   bottom SYRUP_HEIGHT_FRAC of the same milk box the matcha fill (in
+   MilkSelection.css) is anchored to the top of -- same taper-rate-derived
+   clip-path technique (flat top edge at the cup's own taper width at that
+   height, straight tapered sides, rounded bottom reusing the milk fill's
+   own base curve remapped into this shorter box), and the cupMilkGrow
+   grow-in animation is reused by name from MilkSelection.css (loaded
+   globally, see the cross-file CSS reuse note elsewhere in this project). */
+.cup-syrup-fill {
+  position: absolute;
+  clip-path: polygon(
+    9.43% 0%, 90.57% 0%,
+    90% 25%, 88% 42%, 82.4% 57.25%, 73.5% 69.5%, 62.4% 77.25%,
+    50% 80%,
+    37.6% 77.25%, 26.5% 69.5%, 17.6% 57.25%, 12% 42%, 10% 25%
+  );
+  transform-origin: bottom center;
+  animation: cupMilkGrow 0.5s ease-out both;
+  pointer-events: none;
+}
+
+.cup-syrup-fill.guava-syrup {
+  background: linear-gradient(to top, rgba(224, 90, 111, 0.88) 0%, rgba(224, 90, 111, 0.88) 30%, rgba(224, 90, 111, 0) 100%);
+}
+
+.cup-syrup-fill.mint-syrup {
+  background: linear-gradient(to top, rgba(101, 196, 155, 0.85) 0%, rgba(101, 196, 155, 0.85) 30%, rgba(101, 196, 155, 0) 100%);
+}
+
