@@ -1457,7 +1457,7 @@
   transform: translateY(-50%);
   aspect-ratio: 1;
   border-radius: 50%;
-  background: radial-gradient(circle at 35% 30%, #fff7e8 0%, #e8c97a 55%, #b8912f 100%);
+  background: radial-gradient(circle at 35% 30%, #ffffff 0%, #f2f2f2 55%, #d9d9d9 100%);
   box-shadow: 0 2px 3px rgba(0, 0, 0, 0.35);
   transition: none;
 }
