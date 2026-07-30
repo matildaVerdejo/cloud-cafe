@@ -8,7 +8,8 @@
 // clips layered on top of it, the same pattern CustomerOrdering.js's own
 // per-character ordering voice line already uses.
 
-const BUTTON_CLICK_SRC = './ButtonClickOn.mp3';
+const BUTTON_CLICK_ON_SRC = './ButtonClickOn.mp3';
+const BUTTON_CLICK_OFF_SRC = './ButtonClickOff.mp3';
 
 // Fresh `new Audio()` per call (rather than one shared/reused instance) so
 // rapid repeat clicks each get their own full playback instead of cutting
@@ -16,7 +17,22 @@ const BUTTON_CLICK_SRC = './ButtonClickOn.mp3';
 // autoplay-block possibility every other one-shot Audio() call in this
 // project already guards against -- if it's blocked, that one click just
 // plays silently.
-export function playButtonClick() {
-  const audio = new Audio(BUTTON_CLICK_SRC);
+function playClip(src) {
+  const audio = new Audio(src);
   audio.play().catch(() => {});
+}
+
+// The general-purpose click used for most buttons (Start, the ordering
+// iPad screen, Place Order, the order-form's dropdowns/toppings, etc.).
+export function playButtonClick() {
+  playClip(BUTTON_CLICK_ON_SRC);
+}
+
+// The "off" pair for toggle-style buttons that open AND close a panel --
+// today that's the Settings gear and the per-station "Order" receipt
+// button. Callers are responsible for knowing which way the toggle is
+// about to go (i.e. check the *current* open state before flipping it) and
+// picking playButtonClick (opening) vs this (closing) accordingly.
+export function playButtonClickOff() {
+  playClip(BUTTON_CLICK_OFF_SRC);
 }

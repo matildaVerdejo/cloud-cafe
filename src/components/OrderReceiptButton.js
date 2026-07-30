@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import './OrderReceiptButton.css';
-import { playButtonClick } from '../gameloop/sfx';
+import { playButtonClick, playButtonClickOff } from '../gameloop/sfx';
 
 // Label lookups for the raw values CustomerOrdering.js stores in its order
 // object (see the option lists at the top of that file) -- kept as small
@@ -67,7 +67,20 @@ const OrderReceiptButton = ({ order, highlight = false, hintText = null, hintTex
   // to it; the highlight/hint intentionally keep going regardless, see the
   // hintText/hintTextOpen swap below, rather than retiring on first use).
   const handleClick = () => {
-    playButtonClick();
+    // `open` (component state, read here rather than inside the setOpen
+    // updater below) is the drawer's state *before* this click -- true
+    // means the click is about to close it (the "off" clip), false means
+    // it's about to open (the regular click). Deliberately not done inside
+    // the setOpen(prev => ...) updater itself: React.StrictMode
+    // intentionally double-invokes updater functions in dev to surface
+    // impure ones, which would double-play whichever clip fired if the
+    // side effect lived in there. See playButtonClickOff's own doc comment
+    // in sfx.js.
+    if (open) {
+      playButtonClickOff();
+    } else {
+      playButtonClick();
+    }
     setOpen((prev) => {
       const next = !prev;
       onToggle?.(next);

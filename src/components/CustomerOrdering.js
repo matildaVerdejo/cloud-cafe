@@ -233,7 +233,10 @@ function Dropdown({ placeholder, options, value, onSelect, isOpen, onToggle }) {
         type="button"
         className={`order-dropdown-toggle${isOpen ? ' open' : ''}${selected ? ' filled' : ''}`}
         data-focusable
-        onClick={onToggle}
+        onClick={() => {
+          playButtonClick();
+          onToggle();
+        }}
       >
         {selected ? selected.label : placeholder}
       </button>
@@ -246,6 +249,7 @@ function Dropdown({ placeholder, options, value, onSelect, isOpen, onToggle }) {
               className={`order-dropdown-option${opt.value === value ? ' selected' : ''}`}
               data-focusable
               onClick={() => {
+                playButtonClick();
                 onSelect(opt.value);
                 // Refocuses the toggle button once an option's picked --
                 // without this, focus would vanish along with the (now
@@ -377,11 +381,13 @@ const CustomerOrdering = ({ activeStep, customerNumber, onNavigate, onAdvance, o
 
   const toppingsAddRef = useRef(null);
   const addTopping = (value) => {
+    playButtonClick();
     setToppings((prev) => [...prev, { id: toppingIdRef.current++, value }]);
     setOpenControl(null);
     toppingsAddRef.current?.focus();
   };
   const removeTopping = (id) => {
+    playButtonClick();
     setToppings((prev) => prev.filter((t) => t.id !== id));
   };
 
@@ -603,26 +609,18 @@ const CustomerOrdering = ({ activeStep, customerNumber, onNavigate, onAdvance, o
 
         {orderFormOpen && (
           <>
-            {/* Clicking the dimmed backdrop closes the modal, same as
-                clicking outside any standard dialog -- doesn't affect
-                keyboard/D-pad users, who close via the visible close
-                button instead. */}
+            {/* Clicking the dimmed backdrop closes the modal (mouse-only --
+                there's no keyboard/D-pad equivalent for this early-exit
+                path anymore; the dedicated close (X) button that used to
+                cover that was removed since completing the order via Place
+                Order already closes the modal, making a separate close
+                button redundant). */}
             <div className="order-modal-backdrop" onClick={closeOrderForm} />
             <div
               className={`order-modal${!receiptDismissed ? ' receipt-highlight' : ''}`}
               role="dialog"
               aria-label="Order form"
             >
-              <button
-                type="button"
-                className="order-modal-close"
-                data-focusable
-                aria-label="Close order form"
-                onClick={closeOrderForm}
-              >
-                &times;
-              </button>
-
               {/* Four small sections, each covering one part of the order:
                   matcha (grade + teaspoons), cup & ice (cup type + ice
                   count), base (milk/water), and toppings (repeatable adder
@@ -692,7 +690,10 @@ const CustomerOrdering = ({ activeStep, customerNumber, onNavigate, onAdvance, o
                       type="button"
                       className={`order-add-button${openControl === 'toppings' ? ' open' : ''}`}
                       data-focusable
-                      onClick={() => toggleControl('toppings')}
+                      onClick={() => {
+                        playButtonClick();
+                        toggleControl('toppings');
+                      }}
                     >
                       + Add topping
                     </button>

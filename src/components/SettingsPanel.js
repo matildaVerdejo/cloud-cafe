@@ -1,6 +1,6 @@
 import React from 'react';
 import './SettingsPanel.css';
-import { playButtonClick } from '../gameloop/sfx';
+import { playButtonClick, playButtonClickOff } from '../gameloop/sfx';
 
 // Small circle button, upper-left corner. Opens a lightweight popover with
 // the one thing this panel has for now: music volume up/down. (MainPage
@@ -25,7 +25,15 @@ const SettingsPanel = ({ containerRef, open, onToggleOpen, volume, onVolumeDown,
         className="settings-toggle-button"
         data-focusable
         onClick={() => {
-          playButtonClick();
+          // open is this button's state *before* the click -- true here
+          // means the click is about to close the popover, so it gets the
+          // "off" clip; false means it's about to open, so the regular
+          // click. See playButtonClickOff's own doc comment in sfx.js.
+          if (open) {
+            playButtonClickOff();
+          } else {
+            playButtonClick();
+          }
           onToggleOpen?.();
         }}
         aria-label={open ? 'Close settings' : 'Open settings'}
