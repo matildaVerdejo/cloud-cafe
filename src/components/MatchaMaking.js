@@ -630,16 +630,91 @@ const MIX_DRIFT_AMPLITUDE = 34; // %/s^2 peak strength of the sine drift
 const MIX_DRIFT_ANGULAR_FREQ = 1.3; // radians/second -- how fast the drift's direction cycles
 const MIX_FRICTION_HALF_LIFE_S = 0.35; // seconds for velocity to decay to half, with no further input/drift
 
-// How often (at minimum) a fresh spill-droplet burst can trigger while the
-// ball is sitting outside the green zone during mixing -- see the
-// spillBurstCount state and the tick() logic below. Not gated to "only
-// once per exit" since a player who's sloppy for a long stretch should keep
-// looking sloppy (matcha keeps flicking out), not just once per excursion.
+// How often (at minimum) a fresh spill event can trigger while the ball is
+// sitting outside the green zone during mixing -- see the spills state and
+// the tick() logic below. Not gated to "only once per exit" since a player
+// who's sloppy for a long stretch should keep looking sloppy (matcha keeps
+// flicking out), not just once per excursion.
 const MIX_SPILL_INTERVAL_MS = 550;
-// Anchor point for the spill-droplet burst, as a fraction of the bowl's own
-// box -- just outside the bowl's right edge, roughly where a real whisk
-// held at an angle would fling stray liquid out and over the rim.
-const BOWL_SPILL_OFFSET = { leftFrac: 1.05, topFrac: 0.45 };
+
+// ---- Spill puddles: one pre-made PNG per mess-up, shown in order (1st
+// mess-up of a mixing session -> stage-1 PNG, 2nd -> stage-2, etc.) on
+// whichever side of the bowl the ball actually drifted off toward -- see the
+// spills state and side-detection in the balance-minigame physics effect
+// further down. Replaces the old plain-CSS droplet-burst effect entirely.
+const SPILL_IMAGE_COUNT = 4;
+// One set of 4 per grade -- same keying/classic-grade-fallback convention as
+// SCOOP_FILL_COLORS/SCOOP_SPOON_IMAGES/WHISKED_LIQUID_IMAGES above, so the
+// spill color follows whichever tin was actually scooped from instead of
+// always showing one fixed shade. The cafe-grade set is the original
+// hand-made art; classic-grade/ceremonial-grade are that same art
+// recolored (hue/saturation/brightness re-anchored to each grade's own
+// SCOOP_FILL_COLORS swatch, shading preserved) rather than separately
+// drawn, so all three stay visually consistent with each other.
+const SPILL_IMAGES_BY_GRADE = {
+  'cafe-grade': ['./Spill1.png', './Spill2.png', './Spill3.png', './Spill4.png'],
+  'classic-grade': [
+    './Spill1ClassicGrade.png',
+    './Spill2ClassicGrade.png',
+    './Spill3ClassicGrade.png',
+    './Spill4ClassicGrade.png',
+  ],
+  'ceremonial-grade': [
+    './Spill1CeremonialGrade.png',
+    './Spill2CeremonialGrade.png',
+    './Spill3CeremonialGrade.png',
+    './Spill4CeremonialGrade.png',
+  ],
+};
+// Each PNG's own native pixel size (measured directly off the source files),
+// used below to size each puddle without distorting it -- same
+// width-from-height aspect-ratio conversion this file already uses for
+// square art like SCOOP_SPOON_SIZE, just per-image here since these four
+// PNGs aren't all the same shape.
+const SPILL_IMAGE_DIMS = [
+  { width: 102, height: 85 },
+  { width: 123, height: 136 },
+  { width: 275, height: 206 },
+  { width: 238, height: 193 },
+];
+// Rendered height (as a % of the container), one per stage -- escalating
+// step by step so the puddles read as an increasingly messy spill, matching
+// how the source art itself gets bigger/more irregular from Spill1 to
+// Spill4.
+const SPILL_STAGE_HEIGHTS = [5, 6.2, 7.5, 9];
+// A little rotation per stage, purely decorative, so a run of puddles
+// landing on the same side doesn't look like the same stamp repeated.
+const SPILL_STAGE_ROTATIONS = [-8, 10, -6, 5];
+const SPILL_DIMS = SPILL_STAGE_HEIGHTS.map((heightPercent, i) => ({
+  height: heightPercent,
+  width: heightPercent * (SPILL_IMAGE_DIMS[i].width / SPILL_IMAGE_DIMS[i].height) / (16 / 9),
+}));
+
+// Anchor points for the puddle cluster on each side of the bowl, as a
+// fraction of the bowl's own box -- mirror images of each other, just
+// outside the bowl's left/right edge respectively. topFrac sits down near
+// the bowl's base (not up by the rim, where it visually read as spilling
+// out of thin air above the counter) -- roughly where liquid flung out
+// during whisking would actually land and pool on the counter beside the
+// bowl. Bumped down from an earlier 0.4 (rim-height) per feedback.
+const RIGHT_SPILL_BASE = { leftFrac: 1.06, topFrac: 0.78 };
+const LEFT_SPILL_BASE = { leftFrac: -0.06, topFrac: 0.78 };
+// How far each additional puddle landing on the *same* side nudges away
+// from the previous one (further out horizontally, further down vertically)
+// -- so a run of mess-ups on one side spreads into a puddle trail rather
+// than stacking on the exact same spot. topFrac's step is shrunk from an
+// earlier 0.16 now that the base itself sits much lower (0.78) -- the old
+// step would have pushed a third/fourth same-side puddle well below the
+// bowl's own box.
+const SPILL_SLOT_STEP = { leftFrac: 0.05, topFrac: 0.08 };
+
+// Once all SPILL_IMAGE_COUNT stages have appeared, further mess-ups don't
+// add a new image (there are only 4) -- instead every puddle already on
+// screen grows a bit bigger together, so continued sloppy whisking keeps
+// reading as "getting worse" instead of just going quiet. Capped so it
+// doesn't balloon indefinitely.
+const SPILL_GROWTH_STEP = 0.08;
+const SPILL_GROWTH_CAP = 1.5;
 
 // How big the stirring swirl (.bowl-mix-swirl) renders relative to
 // bowl-water's own full size -- shrunk down from an initial 1:1 overlay
@@ -1032,12 +1107,48 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
   // fresh at the start of every mixing attempt.
   const mixPositionRef = useRef(0); // % along the bar, left edge of the ball
   const mixVelocityRef = useRef(0); // %/second
-  // Bumped each time the ball is caught drifting out of the green zone
-  // during mixing, and used as the spill-droplets element's React `key` --
-  // same "force a fresh mount so the CSS animation always replays" trick as
-  // pourCount/waterPourCount elsewhere in this file. Real React state (not
-  // a ref) since it needs to actually trigger the spill element to mount.
-  const [spillBurstCount, setSpillBurstCount] = useState(0);
+  // One entry per mess-up during the current mixing session, in the order
+  // they happened -- { side: 'left' | 'right', left, top } -- capped at
+  // SPILL_IMAGE_COUNT entries (there are only that many PNGs). left/top are
+  // *absolute* container percentages, frozen at the exact spot on the
+  // counter the puddle landed at the moment it was created (see
+  // bowlPosRef/bowlItemRef below) -- deliberately not re-derived from the
+  // bowl's own live position on every render, so the puddles stay put on
+  // the table even once the bowl is later dragged around or carried off to
+  // the Make Drink zone, rather than following it. Entry i always renders
+  // with SPILL_DIMS[i] and whichever grade's SPILL_IMAGES_BY_GRADE[i] the
+  // scooped tin was (see bowlPowder.grade in the JSX below), so the puddles
+  // visibly escalate in size/mess as the array grows. See the balance
+  // physics effect further down for how entries get pushed and how
+  // mess-ups beyond the cap are handled instead (spillGrowth below).
+  const [spills, setSpills] = useState([]);
+  // Mirrors the spills state array above, kept in perfect lockstep (see
+  // every setSpills call below, which always also updates this) -- exists
+  // purely so the tick() closure inside the physics effect can synchronously
+  // read "how many puddles are already on this side" (for the slot-stagger
+  // math) without waiting a render cycle for state to catch up, since
+  // several mess-ups can each want to push their own entry within the same
+  // animation frame's neighborhood.
+  const spillsRef = useRef([]);
+  // Always-current snapshot of the bowl's own live position/box, refreshed
+  // every render via the effect right below (bowlPos/bowlItem themselves are
+  // plain consts recomputed each render, not refs, so they're not otherwise
+  // reachable from inside the tick() closure, which only runs its setup once
+  // per mixing session). This is what lets a freshly-created spill capture
+  // "wherever the bowl actually is right now" even though the bowl may have
+  // been dragged since mixing began.
+  const bowlPosRef = useRef({ left: 0, top: 0 });
+  const bowlItemRef = useRef({ width: 0, height: 0 });
+  // How many mess-ups have happened *after* the spills array above already
+  // hit its cap -- scales every puddle already on screen up together (see
+  // SPILL_GROWTH_STEP/SPILL_GROWTH_CAP) rather than adding a 5th image that
+  // doesn't exist.
+  const [spillGrowth, setSpillGrowth] = useState(0);
+  // Raw count of every qualifying mess-up this mixing session, tracked in a
+  // ref (not state) purely so the tick() closure below can cheaply decide
+  // "is this the Nth mess-up" without depending on the spills state array
+  // itself (which would need to be threaded through the rAF closure).
+  const messUpCountRef = useRef(0);
 
   const handlePointerDown = (item) => (e) => {
     const base = itemPositions[item.key];
@@ -1575,6 +1686,16 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
   const bowlItem = MOVABLE_ITEMS.find((item) => item.key === 'bowl');
   const bowlDragging = drag?.key === 'bowl';
   const bowlPos = bowlDragging ? drag : itemPositions.bowl;
+  // Keeps bowlPosRef/bowlItemRef (declared up above alongside the spills
+  // state) current every render -- no dependency array, so this runs after
+  // every single render, same "always-fresh mutable snapshot for a callback
+  // that can't otherwise see new render values" idiom as elsewhere in this
+  // file. Plain assignment, not wrapped in an effect body that does
+  // anything else, so it stays cheap.
+  useEffect(() => {
+    bowlPosRef.current = bowlPos;
+    bowlItemRef.current = bowlItem;
+  });
   const bowlPowderLeft = bowlPos.left + BOWL_POWDER_OFFSET.leftFrac * bowlItem.width;
   const bowlPowderTop = bowlPos.top + BOWL_POWDER_OFFSET.topFrac * bowlItem.height;
   // Full-grown target size -- always rendered at this size; the "grows
@@ -1667,12 +1788,10 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
   // shows up right above wherever the bowl currently is, not wherever it
   // happened to be when mixing started.
   const mixBarPos = getMixBarPos(bowlPos, bowlItem);
-  // Anchor point for the spill-droplet burst -- same "recompute off the
-  // bowl's current position every render" reasoning as mixBarPos above, so
-  // it stays put next to the bowl even if the bowl was dragged before
-  // mixing started.
-  const bowlSpillLeft = bowlPos.left + BOWL_SPILL_OFFSET.leftFrac * bowlItem.width;
-  const bowlSpillTop = bowlPos.top + BOWL_SPILL_OFFSET.topFrac * bowlItem.height;
+  // Growth multiplier applied to every accumulated spill puddle once mess-ups
+  // exceed SPILL_IMAGE_COUNT -- see spillGrowth/SPILL_GROWTH_STEP/
+  // SPILL_GROWTH_CAP above. Recomputed every render like mixBarPos above.
+  const spillGrowthScale = 1 + Math.min(spillGrowth * SPILL_GROWTH_STEP, SPILL_GROWTH_CAP - 1);
 
   const beginWhiskMix = () => {
     if (whiskStage !== 'idle' || !bowlPowder || !bowlWater) return;
@@ -1706,7 +1825,10 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
     // the drift meaningfully pushes it off-center.
     mixPositionRef.current = 50 - ballWidthPercent / 2;
     mixVelocityRef.current = 0;
-    setSpillBurstCount(0);
+    messUpCountRef.current = 0;
+    spillsRef.current = [];
+    setSpills([]);
+    setSpillGrowth(0);
 
     const zoneLeftPercent = MIX_ZONE_LEFT_FRAC * 100;
     const zoneRightPercent = zoneLeftPercent + MIX_ZONE_WIDTH_FRAC * 100;
@@ -1785,14 +1907,45 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
         const inZone = ballCenter >= zoneLeftPercent && ballCenter <= zoneRightPercent;
         ballEl.classList.toggle('in-zone', inZone);
 
-        // Sloppy stirring (ball outside the green zone) throws a burst of
-        // matcha out of the bowl -- retriggers every MIX_SPILL_INTERVAL_MS
-        // for as long as the ball stays out, not just once on the initial
-        // exit, so a long stretch of poor balancing keeps looking messy
-        // rather than showing a single splash and going quiet.
+        // Sloppy stirring (ball outside the green zone) spills matcha out of
+        // the bowl on whichever side it drifted toward -- retriggers every
+        // MIX_SPILL_INTERVAL_MS for as long as the ball stays out, not just
+        // once on the initial exit, so a long stretch of poor balancing
+        // keeps looking messy rather than showing a single splash and going
+        // quiet. The first SPILL_IMAGE_COUNT mess-ups each add the next
+        // puddle PNG in sequence, anchored to wherever the bowl actually is
+        // *right now* (bowlPosRef/bowlItemRef, not the stale bowlPos this
+        // effect closed over back when mixing started) and then frozen at
+        // that exact spot -- see the spills state's own comment above for
+        // why it's stored as absolute left/top rather than re-derived from
+        // the bowl's position on every render, which used to make the
+        // puddles drag along behind the bowl once it was picked up again.
+        // Every mess-up after the cap just grows the puddles already on
+        // screen instead (see SPILL_GROWTH_STEP above).
         if (!inZone && elapsedMs - lastSpillAt >= MIX_SPILL_INTERVAL_MS) {
           lastSpillAt = elapsedMs;
-          setSpillBurstCount((count) => count + 1);
+          const side = ballCenter < zoneLeftPercent ? 'left' : 'right';
+          messUpCountRef.current += 1;
+          if (messUpCountRef.current <= SPILL_IMAGE_COUNT) {
+            const sameSideBefore = spillsRef.current.filter((s) => s.side === side).length;
+            const base = side === 'right' ? RIGHT_SPILL_BASE : LEFT_SPILL_BASE;
+            const leftFrac =
+              side === 'right'
+                ? base.leftFrac + sameSideBefore * SPILL_SLOT_STEP.leftFrac
+                : base.leftFrac - sameSideBefore * SPILL_SLOT_STEP.leftFrac;
+            const topFrac = base.topFrac + sameSideBefore * SPILL_SLOT_STEP.topFrac;
+            const currentBowlPos = bowlPosRef.current;
+            const currentBowlItem = bowlItemRef.current;
+            const entry = {
+              side,
+              left: currentBowlPos.left + leftFrac * currentBowlItem.width,
+              top: currentBowlPos.top + topFrac * currentBowlItem.height,
+            };
+            spillsRef.current = [...spillsRef.current, entry];
+            setSpills(spillsRef.current);
+          } else {
+            setSpillGrowth((g) => g + 1);
+          }
         }
       }
 
@@ -2465,30 +2618,52 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
             </p>
           </>
         )}
-        {/* Spill-droplet burst -- shown whenever the ball drifts out of the
-            green zone during mixing (see spillBurstCount/lastSpillAt in the
-            mixing physics effect above), simulating stray matcha flicking
-            out of the bowl from sloppy whisking. key={spillBurstCount}
-            forces a fresh mount each time so the CSS fly-out animation
-            always replays, same "fresh mount, not restyle" trick as
-            pourCount/waterPourCount elsewhere in this file. Gated on
-            whiskStage === 'mixing' too so it can't linger rendered once
-            mixing ends. */}
-        {whiskStage === 'mixing' && spillBurstCount > 0 && (
-          <div
-            key={spillBurstCount}
-            className="bowl-spill"
-            aria-hidden="true"
-            style={{
-              left: `${bowlSpillLeft}%`,
-              top: `${bowlSpillTop}%`,
-            }}
-          >
-            <span className="bowl-spill-drop bowl-spill-drop-1" />
-            <span className="bowl-spill-drop bowl-spill-drop-2" />
-            <span className="bowl-spill-drop bowl-spill-drop-3" />
-          </div>
-        )}
+        {/* Spill puddles -- one per mess-up during whisking (see
+            spills/spillGrowth in the mixing physics effect above), shown in
+            the order they happened (stage-1 PNG first, up through stage-4)
+            on whichever side of the bowl the ball actually drifted toward,
+            colored to match whichever tin was actually scooped
+            (bowlPowder.grade -- same classic-grade fallback convention as
+            WHISKED_LIQUID_IMAGES right below). Each stays on screen once it
+            appears (they don't fade like the old droplet effect) so the
+            mess visibly builds up -- and, per feedback, keeps sitting there
+            even once the whisking challenge itself is over (whiskStage
+            moving on to 'done'), so there's no whiskStage gate here at all:
+            spills only ever gets populated during 'mixing' and only ever
+            reset at the start of a fresh mixing attempt (see that effect
+            above), so rendering whenever it's non-empty is sufficient on
+            its own. */}
+        {spills.length > 0 &&
+          (() => {
+            const spillImages =
+              SPILL_IMAGES_BY_GRADE[bowlPowder?.grade] ?? SPILL_IMAGES_BY_GRADE['classic-grade'];
+            return spills.map((spill, i) => {
+              // spill.left/spill.top are already the absolute, frozen
+              // container-percentage spot this puddle landed at (computed
+              // once, at creation time, in the physics effect's tick()
+              // above) -- deliberately NOT recomputed from the bowl's
+              // current position here, so dragging or carrying the bowl
+              // away later doesn't drag these along with it. They stay on
+              // the table.
+              const dims = SPILL_DIMS[i];
+              return (
+                <img
+                  key={i}
+                  src={spillImages[i]}
+                  alt=""
+                  aria-hidden="true"
+                  className="bowl-spill-puddle"
+                  style={{
+                    left: `${spill.left}%`,
+                    top: `${spill.top}%`,
+                    width: `${dims.width}%`,
+                    height: `${dims.height}%`,
+                    transform: `translate(-50%, -50%) rotate(${SPILL_STAGE_ROTATIONS[i]}deg) scale(${spillGrowthScale})`,
+                  }}
+                />
+              );
+            });
+          })()}
         {/* "Make Drink" drop-zone -- appears once whisking is done and
             disappears the instant the bowl actually heads there (bowlStage
             leaving 'idle' -- see beginBowlCarry above), same beat as the

@@ -1525,153 +1525,43 @@
   }
 }
 
-/* Spill-droplet burst (see spillBurstCount/BOWL_SPILL_OFFSET in
-   MatchaMaking.js) -- fires whenever the ball drifts out of the green zone
-   during mixing, simulating stray matcha flicking out of the bowl from
-   sloppy whisking. .bowl-spill itself is a zero-size anchor (same pattern
-   as .kettle-steam above) positioned just outside the bowl's edge, with
-   each droplet absolutely positioned off that same point so they all
-   originate from one spot. z-index: 4 keeps it above bowl-water/bowl-powder
-   and the whisk (2) but below the stirring swirl (3... actually above it is
-   fine too since they're on opposite sides of the bowl and won't overlap;
-   kept at 4 simply so it's never accidentally hidden behind anything else
-   painted on the bowl). */
-.bowl-spill {
+/* Spill puddles (see spills/spillGrowth/SPILL_* constants in
+   MatchaMaking.js) -- one pre-made PNG per mess-up during whisking, shown in
+   order (Spill1.png through Spill4.png) on whichever side of the bowl the
+   ball drifted toward. translate(-50%, -50%) in the inline transform (set
+   alongside the per-puddle rotate/scale in the JSX, so all three live on the
+   same transform property rather than fighting over it) centers the image
+   on its own left/top anchor point, matching bowl-water/bowl-powder's own
+   centering convention. Unlike the old droplet-burst effect these don't
+   fade out -- each one pops in once and then just sits there, since the
+   whole point now is a visibly accumulating mess. z-index: 4, same as the
+   effect it replaces, keeps it above bowl-water/bowl-powder and the whisk
+   (2) but comfortably clear of anything else painted on the bowl. */
+.bowl-spill-puddle {
   position: absolute;
-  width: 0;
-  height: 0;
   pointer-events: none;
   z-index: 4;
+  filter: drop-shadow(0 3px 4px rgba(0, 0, 0, 0.3));
+  animation: bowlSpillPuddleIn 0.35s ease-out both;
 }
 
-/* Sized and shaped to read as an actual puddle rather than a droplet --
-   much bigger than the original (min(15px) -> min(56px)), an irregular
-   organic silhouette (mismatched border-radius corners, different per drop
-   below) instead of a plain circle/teardrop, and a flatter gradient more
-   like a shallow pool of liquid than a glossy ball. */
-.bowl-spill-drop {
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  width: min(56px, 3.4vw);
-  height: min(40px, 2.4vw);
-  background: radial-gradient(ellipse at 40% 35%, #a9d69a 0%, #5a8a4f 45%, #2f4a28 85%, #24391f 100%);
-  box-shadow: 0 3px 4px rgba(0, 0, 0, 0.3), inset 0 1px 2px rgba(255, 255, 255, 0.25);
-  opacity: 0;
-}
-
-/* Three puddles land at slightly different sizes/spots/delays so the burst
-   reads as an actual messy splatter rather than one repeating shape -- same
-   "stagger three copies of the same animation" trick as
-   .kettle-steam-wisp-1/2/3 above. Each gets its own mismatched
-   border-radius corners (baked into its keyframes below, not here, since
-   the animation's own end-state transform needs to carry it) so no two
-   puddles look like the same stamp repeated. */
-.bowl-spill-drop-1 {
-  animation: bowlSpillPuddle1 1.3s ease-out forwards;
-}
-
-.bowl-spill-drop-2 {
-  top: min(10px, 0.6vw);
-  width: min(38px, 2.3vw);
-  height: min(28px, 1.7vw);
-  animation: bowlSpillPuddle2 1.15s ease-out forwards 0.08s;
-}
-
-.bowl-spill-drop-3 {
-  top: min(-6px, -0.35vw);
-  width: min(46px, 2.8vw);
-  height: min(32px, 2vw);
-  animation: bowlSpillPuddle3 1.4s ease-out forwards 0.16s;
-}
-
-/* Each puddle: pops out from the bowl (small, round, flying), lands and
-   "splats" flat and wide (the scaleX-up/scaleY-down at ~50%), lingers as a
-   puddle for a beat, then fades away in place -- rather than just flying off
-   and fading mid-air like the old droplet version. Landing spot/spread and
-   the irregular puddle silhouette (mismatched border-radius corners) differ
-   per drop so the three don't look like the same stamp repeated. */
-@keyframes bowlSpillPuddle1 {
+/* One-shot pop-in (small -> slightly overshot -> settled) the instant a
+   puddle mounts. 100% deliberately omits `transform` -- per the CSS
+   Animations "neutral keyframe" behavior, that lets the animation's last
+   step fall through to whatever transform is already set inline in the JSX
+   (each puddle's own rotate/scale), so the pop-in and the per-puddle
+   rotation/growth-scale don't have to fight over the same property. */
+@keyframes bowlSpillPuddleIn {
   0% {
     opacity: 0;
-    border-radius: 50%;
-    transform: translate(0, 0) scale(0.4);
+    transform: translate(-50%, -50%) rotate(0deg) scale(0.3);
   }
-  12% {
+  70% {
     opacity: 1;
-  }
-  45% {
-    border-radius: 50%;
-    transform: translate(min(30px, 1.8vw), min(24px, 1.5vw)) scale(0.7);
-  }
-  60% {
-    opacity: 1;
-    border-radius: 45% 55% 60% 40% / 55% 45% 60% 40%;
-    transform: translate(min(38px, 2.3vw), min(30px, 1.9vw)) scale(1.15) rotate(6deg);
-  }
-  85% {
-    opacity: 0.95;
+    transform: translate(-50%, -50%) rotate(0deg) scale(1.12);
   }
   100% {
-    opacity: 0;
-    border-radius: 45% 55% 60% 40% / 55% 45% 60% 40%;
-    transform: translate(min(38px, 2.3vw), min(30px, 1.9vw)) scale(1.15) rotate(6deg);
-  }
-}
-
-@keyframes bowlSpillPuddle2 {
-  0% {
-    opacity: 0;
-    border-radius: 50%;
-    transform: translate(0, 0) scale(0.4);
-  }
-  12% {
     opacity: 1;
-  }
-  45% {
-    border-radius: 50%;
-    transform: translate(min(20px, 1.2vw), min(-14px, -0.9vw)) scale(0.7);
-  }
-  60% {
-    opacity: 1;
-    border-radius: 60% 40% 45% 55% / 40% 60% 50% 50%;
-    transform: translate(min(26px, 1.6vw), min(-18px, -1.1vw)) scale(1.1) rotate(-8deg);
-  }
-  85% {
-    opacity: 0.95;
-  }
-  100% {
-    opacity: 0;
-    border-radius: 60% 40% 45% 55% / 40% 60% 50% 50%;
-    transform: translate(min(26px, 1.6vw), min(-18px, -1.1vw)) scale(1.1) rotate(-8deg);
-  }
-}
-
-@keyframes bowlSpillPuddle3 {
-  0% {
-    opacity: 0;
-    border-radius: 50%;
-    transform: translate(0, 0) scale(0.4);
-  }
-  12% {
-    opacity: 1;
-  }
-  45% {
-    border-radius: 50%;
-    transform: translate(min(42px, 2.6vw), min(10px, 0.6vw)) scale(0.7);
-  }
-  60% {
-    opacity: 1;
-    border-radius: 40% 60% 50% 50% / 60% 40% 55% 45%;
-    transform: translate(min(52px, 3.2vw), min(14px, 0.9vw)) scale(1.2) rotate(10deg);
-  }
-  85% {
-    opacity: 0.95;
-  }
-  100% {
-    opacity: 0;
-    border-radius: 40% 60% 50% 50% / 60% 40% 55% 45%;
-    transform: translate(min(52px, 3.2vw), min(14px, 0.9vw)) scale(1.2) rotate(10deg);
   }
 }
 

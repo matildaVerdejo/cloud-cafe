@@ -34,6 +34,18 @@
   flex-direction: column;
   align-items: center;
   gap: min(14px, 0.7vw);
+  /* Explicit z-index (this used to be unset/auto) so the bar reliably
+     paints above every in-station effect on every screen it's dropped
+     into, regardless of DOM order -- reported after growing spill puddles
+     on Matcha Making (z-index: 4, but any effect with an explicit z-index
+     would've had the same problem) ended up covering part of the bar.
+     25 clears the highest in-screen effect z-index anywhere in this project
+     (.spoon-pour / the whisked-spoon overlay, both 20) with room to spare,
+     while staying comfortably below things that should still cover the bar
+     on purpose: the Order form modal on Customer Ordering (30-32), the
+     Settings panel (50), and the exit-confirm backdrop/ad curtain
+     (9998/10000 in App.css). */
+  z-index: 25;
 }
 
 .progress-bar {
