@@ -152,13 +152,13 @@ const CUP_SEND_MOVE_MS = 350;
 const CUP_SEND_VANISH_MS = 350;
 
 // Where the milk fill sits inside the cup once poured (see cupMilk/
-// beginPour below) -- fixed to the cup's table position rather than
-// tracking a later re-drag, same simplification getIceCupSlotPos already
-// relies on (CUP_SPOTS.table, not the cup's live position). Inset from
-// TABLE_SIZE's own box as a rough approximation of the glass's tapered
-// interior -- not a pixel-perfect trace of the silhouette, same
-// simplification as the matcha bowl's own circular bowl-water/bowl-powder
-// fills.
+// beginPour below), as a fraction of the cup's own current box -- tracks the
+// cup's live position/size every render (see getMilkBoxFor/cupMilkBox and
+// getIceCupSlotPos below), same as MatchaMaking's bowl-water/bowl-powder
+// track the mixing bowl. Inset from the cup's own box as a rough
+// approximation of the glass's tapered interior -- not a pixel-perfect
+// trace of the silhouette, same simplification as the matcha bowl's own
+// circular bowl-water/bowl-powder fills.
 const CUP_MILK_BOX_FRAC = { leftFrac: 0.08, rightFrac: 0.92, topFrac: 0.36, bottomFrac: 0.94 };
 
 // Colors for the falling-liquid pour effect's grains, one per bottle (see
@@ -174,11 +174,12 @@ const MILK_STREAM_COLORS = {
 };
 
 // Generic version of the milk-box math, parameterized on a cup position/
-// size rather than hardcoded to CUP_SPOTS.table/TABLE_SIZE -- exported so
-// ToppingsStation.js can compute the same box against its own carried-over
-// cup's position/size (INCOMING_DRINK_SPOT/INCOMING_DRINK_SIZE there)
-// without duplicating CUP_MILK_BOX_FRAC's actual fraction values. getCupMilkBox
-// below is just this called with this screen's own cup spot/size.
+// size -- exported so ToppingsStation.js can compute the same box against
+// its own carried-over cup's position/size (INCOMING_DRINK_SPOT/
+// INCOMING_DRINK_SIZE there) without duplicating CUP_MILK_BOX_FRAC's actual
+// fraction values. This screen's own cupMilkBox (further down) just calls
+// this with the cup's own live cupRenderPos/cupRenderSize, recomputed every
+// render so the fill tracks the cup wherever it currently is.
 export function getMilkBoxFor(cupPos, cupSize) {
   return {
     left: cupPos.left + CUP_MILK_BOX_FRAC.leftFrac * cupSize.width,
@@ -188,12 +189,18 @@ export function getMilkBoxFor(cupPos, cupSize) {
   };
 }
 
-function getCupMilkBox() {
-  return getMilkBoxFor(CUP_SPOTS.table, TABLE_SIZE);
-}
+// This used to be a zero-arg wrapper hardcoded to CUP_SPOTS.table/TABLE_SIZE
+// (the cup's resting table spot), which meant the milk/matcha fills stayed
+// glued to that one spot even once the cup was dragged elsewhere or carried
+// off to the Send Drink zone -- confirmed as a real bug (the liquid and ice
+// cubes were left behind on the table while the empty glass itself glided
+// away). Removed in favor of just calling the already-live-position-aware
+// getMilkBoxFor(cupRenderPos, cupRenderSize) directly at each call site
+// below, same as MatchaMaking.js recomputes bowlPowderLeft/Top off the
+// bowl's own current bowlPos every render instead of a fixed spot.
 
 // Matcha poured on top of the milk/water base -- a second fill the same
-// width as the milk box (getCupMilkBox), split into two zones so it reads
+// width as the milk box (cupMilkBox), split into two zones so it reads
 // as actually blending with the base rather than either stacking as a flat
 // second color or floating separately above it:
 //   - CUP_MATCHA_RAISE_FRAC -- the portion that sits ABOVE the milk's own
@@ -220,10 +227,6 @@ export function getMatchaBoxFor(milkBox) {
     width: milkBox.width,
     height: raise + overlap,
   };
-}
-
-function getCupMatchaBox() {
-  return getMatchaBoxFor(getCupMilkBox());
 }
 
 // Same idea as MatchaMaking's kettle/bowl/whisk: drop a bottle back close
@@ -274,11 +277,17 @@ const ICE_CUP_SLOT_FRACTIONS = [
   { x: 0.70, y: 0.756 },
 ];
 
-function getIceCupSlotPos(index) {
-  const cup = CUP_SPOTS.table;
+// Takes the cup's own *current* position (cupRenderPos, passed in by both
+// call sites below) rather than hardcoding CUP_SPOTS.table like this used
+// to -- same fix as getMilkBoxFor/getMatchaBoxFor above, needed for the same
+// reason: placed ice cubes were staying behind on the table once the cup
+// was dragged or carried off to the Send Drink zone instead of riding along
+// with it. Size still always uses TABLE_SIZE since ice can only ever be
+// placed while cupSpot === 'table' in the first place (see isOverCup).
+function getIceCupSlotPos(index, cupPos) {
   const frac = ICE_CUP_SLOT_FRACTIONS[index % ICE_CUP_SLOT_FRACTIONS.length];
-  const centerX = cup.left + frac.x * TABLE_SIZE.width;
-  const centerY = cup.top + frac.y * TABLE_SIZE.height;
+  const centerX = cupPos.left + frac.x * TABLE_SIZE.width;
+  const centerY = cupPos.top + frac.y * TABLE_SIZE.height;
   return {
     left: centerX - ICE_CUP_SIZE.width / 2,
     top: centerY - ICE_CUP_SIZE.height / 2,
@@ -489,14 +498,17 @@ const MilkSelection = ({ activeStep, customerNumber, onNavigate, onAdvance, orde
   // from under the cursor and made it impossible to drag back to the
   // shelf). It shrinks/grows only at the moment cupSpot actually changes.
   const cupRenderSize = cupSpot === 'table' ? TABLE_SIZE : SHELF_SIZE;
-  // Box the milk fill renders into once poured -- see getCupMilkBox/
-  // CUP_MILK_BOX_FRAC above. Cheap to recompute every render (it's fixed
-  // math off constants, not live drag state), same as bowlInnerRimLeft/Top
-  // in MatchaMaking.js. cupMatchaBox is the shallower box the matcha layer
-  // renders into on top of it -- see getCupMatchaBox/CUP_MATCHA_HEIGHT_FRAC
-  // above.
-  const cupMilkBox = getCupMilkBox();
-  const cupMatchaBox = getCupMatchaBox();
+  // Box the milk fill renders into once poured -- see getMilkBoxFor/
+  // CUP_MILK_BOX_FRAC above. Recomputed off the cup's own *current*
+  // cupRenderPos/cupRenderSize every render (same as bowlPowderLeft/Top in
+  // MatchaMaking.js), not a fixed table spot -- this used to be hardcoded to
+  // CUP_SPOTS.table/TABLE_SIZE (via the now-removed getCupMilkBox wrapper),
+  // which was confirmed to leave the fills behind on the table once the cup
+  // was dragged or carried away. cupMatchaBox is the shallower box the
+  // matcha layer renders into on top of it -- see getMatchaBoxFor/
+  // CUP_MATCHA_HEIGHT_FRAC above.
+  const cupMilkBox = getMilkBoxFor(cupRenderPos, cupRenderSize);
+  const cupMatchaBox = getMatchaBoxFor(cupMilkBox);
 
   // ---- Ice cubes: ice box -> cup ----------------------------------------
   // Whether each of the 7 cubes has been placed in the cup yet.
@@ -510,7 +522,7 @@ const MilkSelection = ({ activeStep, customerNumber, onNavigate, onAdvance, orde
     // if it hasn't been placed yet, or its cup slot if it has, so grabbing
     // a placed cube picks it up from the cup instead of jumping back to
     // the box.
-    const base = icePlaced[index] ? getIceCupSlotPos(index) : ICE_BOX_SPOTS[index];
+    const base = icePlaced[index] ? getIceCupSlotPos(index, cupRenderPos) : ICE_BOX_SPOTS[index];
     e.currentTarget.setPointerCapture(e.pointerId);
     iceDragStartRef.current = {
       pointerX: e.clientX,
@@ -995,7 +1007,7 @@ const MilkSelection = ({ activeStep, customerNumber, onNavigate, onAdvance, orde
           // an unplaced cube still sitting in the box is unaffected.
           if (placed && cupSendStage === 'sent') return null;
           const dragging = iceDrag?.index === index;
-          const pos = dragging ? iceDrag : placed ? getIceCupSlotPos(index) : boxSpot;
+          const pos = dragging ? iceDrag : placed ? getIceCupSlotPos(index, cupRenderPos) : boxSpot;
           const size = placed ? ICE_CUP_SIZE : ICE_BOX_SIZE;
           const leaving = placed && cupSendStage === 'vanishing';
           return (
@@ -1052,7 +1064,7 @@ const MilkSelection = ({ activeStep, customerNumber, onNavigate, onAdvance, orde
           />
         )}
         {/* Matcha poured on top of the milk -- see the big comment on
-            CUP_MATCHA_HEIGHT_FRAC/getCupMatchaBox above for the box, and
+            CUP_MATCHA_RAISE_FRAC/getMatchaBoxFor above for the box, and
             cupMatcha above for the state. Rendered right after the milk
             fill so it paints on top of it (same "on top of everything
             underneath" DOM-order reasoning as the milk fill itself), using
