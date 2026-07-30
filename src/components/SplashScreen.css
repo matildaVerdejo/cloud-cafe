@@ -164,62 +164,7 @@
   }
 }
 
-/* Same fill/border/text-color/pill language as MainPage's own .play-button
-   (kept in sync with that button and CustomerOrdering's own back button --
-   see the comment on .play-button in MainPage.css). Pulses gently once its
-   own entrance settles, same idea as .play-button's own
-   playButtonPulse -- a cheap, bounded, single-element loop that's fine
-   under the same performance tenet the container/cloud animations above
-   are already careful about, since it's the one element whose whole job
-   is to draw the eye toward the input this screen is waiting on. */
-.splash-start-button {
-  position: absolute;
-  left: 50%;
-  top: 80%;
-  transform: translate(-50%, -50%);
-  padding: min(14px, 0.75vw) min(36px, 1.9vw);
-  background: rgba(255, 255, 255, 0.85);
-  border: 2px solid #8a7a6a;
-  color: #5c4a3a;
-  font-family: 'Pixelify Sans', cursive;
-  font-size: min(26px, 1.25vw);
-  border-radius: 999px;
-  cursor: pointer;
-  animation: splashStartButtonIn 0.5s ease-out 0.3s both, splashStartButtonPulse 2.2s ease-in-out 0.9s infinite;
-}
-
-@keyframes splashStartButtonIn {
-  0% {
-    opacity: 0;
-    transform: translate(-50%, -30%);
-  }
-  100% {
-    opacity: 1;
-    transform: translate(-50%, -50%);
-  }
-}
-
-@keyframes splashStartButtonPulse {
-  0%,
-  100% {
-    transform: translate(-50%, -50%) scale(1);
-  }
-  50% {
-    transform: translate(-50%, -50%) scale(1.05);
-  }
-}
-
-.splash-start-button:hover {
-  animation-play-state: paused, paused;
-  transform: translate(-50%, -50%) scale(1.08);
-}
-
-.splash-start-button:active {
-  transform: translate(-50%, -50%) scale(0.95);
-}
-
-/* No custom :focus-visible rule here on purpose -- same as every other
-   button in this project (.play-button, the Settings panel's own buttons,
-   etc.), the global button:focus-visible glow in App.css already handles
-   the focus treatment; adding a second one here would just double up on
-   top of it. */
+/* The "Tap to Start" button that used to sit here was removed -- the
+   screen now advances purely via the auto-dismiss timeout in
+   SplashScreen.js (SPLASH_AUTO_DISMISS_MS). No focusable/interactive
+   element remains on this screen by design. */

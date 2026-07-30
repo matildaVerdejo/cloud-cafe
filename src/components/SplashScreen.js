@@ -63,10 +63,6 @@ const SplashScreen = ({ onDismiss }) => {
         <div className="splash-title" aria-hidden="true">
           cloud cafe
         </div>
-
-        <button type="button" className="splash-start-button" data-focusable autoFocus onClick={dismiss}>
-          Tap to Start
-        </button>
       </div>
     </div>
   );
