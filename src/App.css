@@ -18,6 +18,19 @@ body {
   min-height: 100vh;
   background-color: #f0f0f0;
 }
+
+/* Wraps whichever single screen is currently mounted (.page-slide ->
+   that screen's own fixed 1920x1080-aspect container) -- unstyled other
+   than this, so it always sizes to exactly match that screen's own box
+   with no extra padding/margin. position: relative turns it into the
+   positioning context for SettingsPanel (rendered once as this div's own
+   last child, see App.js), so that panel's percentage-based corner
+   position lines up with every screen's own art/UI coordinate space
+   without needing to be duplicated into each screen component. */
+.page-container {
+  position: relative;
+}
+
 /* --- GameLoop scaffolding: exit confirm, ad curtain, suspend, focus --- */
 
 .gl-exit-confirm-backdrop {

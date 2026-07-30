@@ -219,6 +219,7 @@
 }
 
 /* No custom :focus-visible rule here on purpose -- same as every other
-   button in this project (.play-button, .music-toggle-button, etc.), the
-   global button:focus-visible glow in App.css already handles the focus
-   treatment; adding a second one here would just double up on top of it. */
+   button in this project (.play-button, the Settings panel's own buttons,
+   etc.), the global button:focus-visible glow in App.css already handles
+   the focus treatment; adding a second one here would just double up on
+   top of it. */

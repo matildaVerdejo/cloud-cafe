@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import './App.css';
 import SplashScreen from './components/SplashScreen';
+import SettingsPanel from './components/SettingsPanel';
 import MainPage from './components/MainPage';
 import CustomerOrdering from './components/CustomerOrdering';
 import MatchaMaking from './components/MatchaMaking';
@@ -27,6 +28,9 @@ import {
 // place so the bar and this state machine can't drift apart.
 const STEP_KEYS = PROGRESS_STEPS.map((step) => step.key);
 const ORDERS_PER_SESSION = 3;
+// How much each press of the Settings panel's volume +/- buttons changes
+// musicVolume by -- 10 presses from empty reaches full volume.
+const VOLUME_STEP = 0.1;
 
 function App() {
   // Splash is the very first thing shown, ahead of MainPage's own
@@ -77,10 +81,20 @@ function App() {
   const [adPlaying, setAdPlaying] = useState(false);
   // Background music -- one <audio> element rendered once here (outside the
   // per-page conditionals below) so it survives every page navigation and
-  // just keeps looping until the tab/app itself closes. musicOn is the
-  // single source of truth for whether it *should* be playing; the mute
-  // button on MainPage just flips this. Defaults to on.
-  const [musicOn, setMusicOn] = useState(true);
+  // just keeps looping until the tab/app itself closes. There's no on/off
+  // toggle anymore (the old MainPage mute button was removed once the
+  // Settings panel's volume control shipped -- turning musicVolume down to
+  // 0% covers the same need); this always tries to play.
+  // Music volume (0-1), adjustable from the Settings panel's up/down
+  // buttons (VOLUME_STEP, in SettingsPanel.js) -- default matches the value
+  // this used to be hardcoded to directly on the <audio> element.
+  const [musicVolume, setMusicVolume] = useState(0.5);
+  // Settings popover open/closed -- lifted up here (rather than local state
+  // inside SettingsPanel) for the same reason showExitConfirm is: the
+  // central Back-key handler below needs to know about it, to close the
+  // popover on Back before falling through to that screen's own Back
+  // behavior.
+  const [showSettings, setShowSettings] = useState(false);
   const audioRef = useRef(null);
   // currentPage is read inside a window-level keydown listener that is
   // attached once; keep a ref so the handler always sees the latest value
@@ -96,6 +110,14 @@ function App() {
   // null and the hook's handler just returns early.
   const exitDialogRef = useRef(null);
   useFlatFocusNav(exitDialogRef);
+  // Settings panel is rendered once here (see the big comment on it further
+  // down) rather than duplicated into every screen, so it needs this same
+  // "own spatial-nav scope, safe to call unconditionally" treatment as the
+  // exit dialog -- the circle button and its popover live outside every
+  // screen's own container, so none of those screens' own useFlatFocusNav
+  // hooks would otherwise let the D-pad move between them.
+  const settingsRef = useRef(null);
+  useFlatFocusNav(settingsRef);
 
   // ---- GameLoop V1 bridge setup -------------------------------------------
   useEffect(() => {
@@ -119,24 +141,32 @@ function App() {
     return unsubscribe;
   }, []);
 
+  // Keeps the <audio> element's own volume in sync with musicVolume --
+  // declared (and therefore runs, on mount) before the autoplay effect
+  // below, so playback that starts during that effect already has the
+  // right volume applied rather than briefly using the element's own
+  // default (1.0) first. Also re-applies live on every Settings panel
+  // up/down press afterward.
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    audio.volume = musicVolume;
+  }, [musicVolume]);
+
   // ---- Background music: autoplay + first-gesture fallback ---------------
   // Most browsers block audio with sound until the user has interacted with
   // the page at least once. We try to start it immediately on mount (works
   // on platforms/TV browsers that allow it), and also attach a one-time
   // listener for the first keydown/click/pointerdown anywhere so it starts
-  // right away everywhere else. Either path only actually starts playback
-  // if musicOn is still true (i.e. the player hasn't muted it first).
+  // right away everywhere else.
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return undefined;
-    audio.volume = 0.5;
     const tryPlay = () => {
-      if (musicOn) {
-        audio.play().catch(() => {
-          // Autoplay was blocked -- the first-gesture listener below will
-          // retry once the player interacts.
-        });
-      }
+      audio.play().catch(() => {
+        // Autoplay was blocked -- the first-gesture listener below will
+        // retry once the player interacts.
+      });
     };
     tryPlay();
     const handleFirstGesture = () => {
@@ -150,22 +180,18 @@ function App() {
       window.removeEventListener('keydown', handleFirstGesture);
       window.removeEventListener('pointerdown', handleFirstGesture);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Keep the audio element in sync whenever the player toggles the mute
-  // button -- pause immediately on mute, resume immediately on unmute.
-  useEffect(() => {
-    const audio = audioRef.current;
-    if (!audio) return;
-    if (musicOn) {
-      audio.play().catch(() => {});
-    } else {
-      audio.pause();
-    }
-  }, [musicOn]);
-
-  const toggleMusic = () => setMusicOn((on) => !on);
+  // Settings panel: volume up/down and the popover's own open/closed
+  // toggle. Clamped to [0, 1] and rounded to one decimal place to avoid
+  // floating-point drift (0.1 + 0.2 !== 0.3 and friends) from repeated
+  // presses landing on an odd value like 0.7000000000000001.
+  const stepMusicVolume = (delta) => {
+    setMusicVolume((v) => Math.round(Math.min(1, Math.max(0, v + delta)) * 10) / 10);
+  };
+  const decreaseMusicVolume = () => stepMusicVolume(-VOLUME_STEP);
+  const increaseMusicVolume = () => stepMusicVolume(VOLUME_STEP);
+  const toggleSettings = () => setShowSettings((open) => !open);
 
   // ---- Lifecycle: suspend on hidden/backgrounded, resume on visible ------
   useEffect(() => {
@@ -204,6 +230,10 @@ function App() {
         setShowExitConfirm(false); // Back cancels the confirm dialog
         return;
       }
+      if (showSettings) {
+        setShowSettings(false); // Back closes the Settings popover, same as the exit dialog above
+        return;
+      }
       // Splash isn't really "loading" (nothing to wait on -- see
       // SplashScreen.js), so Back here just skips it the same way the
       // start button/auto-timeout do, rather than falling into the
@@ -230,7 +260,7 @@ function App() {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [showExitConfirm]);
+  }, [showExitConfirm, showSettings]);
 
   const handleSplashDismiss = () => {
     setCurrentPage('main');
@@ -314,7 +344,7 @@ function App() {
         )}
         {currentPage === 'main' && (
           <div className="page-slide">
-            <MainPage onPlayClick={handlePlayClick} musicOn={musicOn} onToggleMusic={toggleMusic} />
+            <MainPage onPlayClick={handlePlayClick} />
           </div>
         )}
         {currentPage === 'ordering' && (
@@ -359,6 +389,23 @@ function App() {
             <FinalCombination activeStep="final-combination" incomingDrink={servedDrink} {...progressProps} />
           </div>
         )}
+
+        {/* Rendered once here rather than duplicated into every screen
+            component above -- .page-container (see App.css) always sizes
+            to exactly wrap whichever single screen is currently mounted
+            (same fixed 1920x1080-aspect box that screen's own art/UI is
+            positioned against), so anchoring this here with the same
+            percentage convention every screen already uses for its own
+            corner UI puts it in the upper-left corner of every frame for
+            free, including the splash screen. */}
+        <SettingsPanel
+          containerRef={settingsRef}
+          open={showSettings}
+          onToggleOpen={toggleSettings}
+          volume={musicVolume}
+          onVolumeDown={decreaseMusicVolume}
+          onVolumeUp={increaseMusicVolume}
+        />
       </div>
 
       {showExitConfirm && (
@@ -381,8 +428,9 @@ function App() {
 
       {/* Rendered once here (not inside any per-page conditional) so it
           keeps looping across every screen/customer for the whole session --
-          only musicOn (toggled from the mute button on MainPage) or closing
-          the app stops it. See the background-music effects above. */}
+          only closing the app stops it (there's no on/off toggle anymore,
+          see the background-music effect above; the Settings panel's
+          volume-down-to-0% covers that need). */}
       <audio ref={audioRef} src="./BackgroundMusic.mp3" loop preload="auto" />
 
       {/* Removable GameLoop V1 debug overlay — hidden for now (design work in
