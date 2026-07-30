@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import './CustomerOrdering.css';
 import { useFlatFocusNav } from '../gameloop/useFlatFocusNav';
 import { getActionFromKeyEvent, shouldDebounceEnter } from '../gameloop/pal';
+import { playButtonClick } from '../gameloop/sfx';
 import ProgressBar from './ProgressBar';
 
 // ---- Order-builder option lists ------------------------------------------
@@ -67,6 +68,24 @@ const TOPPING_SPEECH_NAMES = {
   'matcha-powder': 'matcha powder',
   'mint-leaves': 'mint leaves',
 };
+
+// ---- Per-character ordering voice line -----------------------------------
+// One short voice-over clip per customer character, keyed by character id
+// -- tied to WHO is at the counter, not to what they happen to order (the
+// spoken order text itself is randomized separately by generateSpokenOrder
+// above). Annie the bunny is the only character today; adding a new
+// character later means adding another entry here (and setting
+// CUSTOMER_CHARACTER appropriately for that round) rather than touching the
+// playback logic below at all.
+const CHARACTER_ORDERING_AUDIO = {
+  annie: './AnnieOrdering.wav',
+};
+
+// Which character is at the counter this round. Hardcoded to 'annie' since
+// she's the only customer character that exists yet -- once more characters
+// are added, this should be derived per-customer (e.g. from customerNumber
+// or a prop) instead of a fixed constant.
+const CUSTOMER_CHARACTER = 'annie';
 
 function pickRandom(list) {
   return list[Math.floor(Math.random() * list.length)];
@@ -280,6 +299,28 @@ const CustomerOrdering = ({ activeStep, customerNumber, onNavigate, onAdvance, o
     return () => clearInterval(intervalId);
   }, [speechText]);
 
+  // Character voice line -- plays once, right as the speech bubble starts
+  // typing (this effect and the typewriter one above both fire on mount,
+  // i.e. once per customer/remount, for the same reason). Keyed off the
+  // character (CUSTOMER_CHARACTER/CHARACTER_ORDERING_AUDIO above), not the
+  // rolled spokenOrder text, so this stays "Annie's ordering line" no
+  // matter what she orders -- and so later customer characters just need
+  // their own entry in that map, not a change here. Uses a plain
+  // `new Audio()` (a one-shot SFX/voice line) rather than App.js's looping
+  // <audio ref> element, which is reserved for background music. Autoplay
+  // can still be blocked the same way background music's can be (see
+  // App.js's own tryPlay/catch) if this is somehow the very first sound of
+  // the session with no prior user gesture; unlike background music there's
+  // no first-gesture retry for a one-shot line like this, it just silently
+  // doesn't play that round.
+  useEffect(() => {
+    const src = CHARACTER_ORDERING_AUDIO[CUSTOMER_CHARACTER];
+    if (!src) return undefined;
+    const audio = new Audio(src);
+    audio.play().catch(() => {});
+    return () => audio.pause();
+  }, []);
+
   // Read-acknowledgment gate: right after landing on this screen, the
   // speech bubble flashes the same white "halo" every focusable element
   // gets on focus (see .ordering-speech-bubble.pending-ack in
@@ -438,6 +479,7 @@ const CustomerOrdering = ({ activeStep, customerNumber, onNavigate, onAdvance, o
   const [showStationHint, setShowStationHint] = useState(false);
 
   const placeOrder = () => {
+    playButtonClick();
     const order = {
       matchaGrade,
       teaspoons,
@@ -546,6 +588,7 @@ const CustomerOrdering = ({ activeStep, customerNumber, onNavigate, onAdvance, o
           aria-haspopup="dialog"
           aria-expanded={orderFormOpen}
           onClick={() => {
+            playButtonClick();
             setTabletPromptActive(false);
             setOrderFormOpen(true);
           }}

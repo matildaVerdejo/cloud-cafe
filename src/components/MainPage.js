@@ -1,5 +1,6 @@
 import React from 'react';
 import './MainPage.css';
+import { playButtonClick } from '../gameloop/sfx';
 
 const MainPage = ({ onPlayClick }) => {
   return (
@@ -24,7 +25,10 @@ const MainPage = ({ onPlayClick }) => {
           className="play-button"
           data-focusable
           autoFocus
-          onClick={onPlayClick}
+          onClick={() => {
+            playButtonClick();
+            onPlayClick?.();
+          }}
         >
           Start
         </button>

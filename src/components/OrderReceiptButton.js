@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import './OrderReceiptButton.css';
+import { playButtonClick } from '../gameloop/sfx';
 
 // Label lookups for the raw values CustomerOrdering.js stores in its order
 // object (see the option lists at the top of that file) -- kept as small
@@ -66,6 +67,7 @@ const OrderReceiptButton = ({ order, highlight = false, hintText = null, hintTex
   // to it; the highlight/hint intentionally keep going regardless, see the
   // hintText/hintTextOpen swap below, rather than retiring on first use).
   const handleClick = () => {
+    playButtonClick();
     setOpen((prev) => {
       const next = !prev;
       onToggle?.(next);

@@ -1,5 +1,6 @@
 import React from 'react';
 import './SettingsPanel.css';
+import { playButtonClick } from '../gameloop/sfx';
 
 // Small circle button, upper-left corner. Opens a lightweight popover with
 // the one thing this panel has for now: music volume up/down. (MainPage
@@ -23,7 +24,10 @@ const SettingsPanel = ({ containerRef, open, onToggleOpen, volume, onVolumeDown,
         type="button"
         className="settings-toggle-button"
         data-focusable
-        onClick={onToggleOpen}
+        onClick={() => {
+          playButtonClick();
+          onToggleOpen?.();
+        }}
         aria-label={open ? 'Close settings' : 'Open settings'}
         aria-expanded={open}
       >
