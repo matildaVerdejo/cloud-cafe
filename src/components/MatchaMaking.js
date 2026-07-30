@@ -382,9 +382,19 @@ export const MOVABLE_ITEMS = [
   // same spot -- also where the whisk glides back to once whisking
   // finishes, see MOVABLE_START.whisk -- put its tall 47.29%-height box low
   // enough to overlap the ProgressBar (whose top edge sits at roughly 84%
-  // down the container). Bottom edge is now 28.05 + 47.29 = 75.34%, clear
-  // of the bar by ~9 points.
-  { key: 'whisk', src: './whisk.png', alt: 'Bamboo whisk', left: 62.37, top: 28.05, width: 13.26, height: 47.29 },
+  // down the container). Then nudged back down further (top 28.05 -> 33.05
+  // -> 35.00) across two rounds of feedback that it should sit a bit lower
+  // on the table both before whisking (its resting spot) and after
+  // (MOVABLE_START.whisk, where it glides back to once whiskStage reaches
+  // 'done' -- see the mixing physics effect further down) -- doesn't touch
+  // its position *during* whisking itself, which is driven separately by
+  // WHISK_BOWL_OFFSET/getWhiskMixPos below. Bottom edge is now
+  // 35.00 + 47.29 = 82.29%, still clear of the bar by ~1.7 points -- and
+  // even where it does brush the bar, ProgressBar now renders on its own
+  // explicit z-index (25, see ProgressBar.css) well above any in-station
+  // item, so an overlap here can't visually cover it the way it used to be
+  // able to.
+  { key: 'whisk', src: './whisk.png', alt: 'Bamboo whisk', left: 62.37, top: 35.0, width: 13.26, height: 47.29 },
 ];
 
 const MOVABLE_START = MOVABLE_ITEMS.reduce((acc, item) => {
@@ -1072,10 +1082,18 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
   // should stay up through the whole glide-to-the-bowl beat and only clear
   // once the water's actually landed.
   const showKettleHint = !tempBarVisible && !bowlWater;
-  // Bumped once per pour and used as bowlWater's React `key` -- same
-  // force-a-fresh-mount reasoning as pourCount for the matcha mound, so
-  // .bowl-water's grow animation reliably replays every time.
-  const [waterPourCount, setWaterPourCount] = useState(0);
+  // This used to also be bumped once per pour and used as bowl-water's React
+  // `key`, so a repeat pour got a fresh mount and the grow animation reliably
+  // replayed. Dropped entirely -- confirmed (via a live DOM count during
+  // troubleshooting) that repeating the tin -> scoop -> dump -> heat -> pour
+  // flow more than once in a session was leaving old key={waterPourCount}
+  // instances mounted instead of being cleaned up, silently piling up
+  // .bowl-water/.bowl-powder ghosts on the counter (only visible for the
+  // matcha mound, since the water pool's own whiskStage !== 'done' gate
+  // happened to hide all of them at once regardless of count). bowl-water
+  // is now a single stable (unkeyed) element -- it always exists at most
+  // once, by construction, at the cost of not replaying its grow-in
+  // animation if the player redoes the pour within the same session.
 
   // ---- Whisking sequence: same "hover/settle, then act" shape as the
   // kettle's above, but the whisk settles *into* the bowl rather than
@@ -1438,18 +1456,6 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
   // "flash until acted on" shape as every earlier beat.
   const showWhiskHint = Boolean(bowlPowder) && Boolean(bowlWater) && kettleStage === 'idle' && whiskStage === 'idle';
 
-  // Bumped once per dump (see beginDump below) and used as the mound's
-  // React `key` in the JSX -- forces a fresh mount of the mound element on
-  // every pour, rather than reusing/restyling whatever div was already
-  // there from a previous pour. That's what makes .bowl-powder's grow
-  // animation (see MatchaMaking.css) reliably restart from empty each time:
-  // a *newly mounted* element always plays its CSS animation from the
-  // first keyframe, whereas trying to replay/re-trigger an animation (or a
-  // width/height transition) on an *already-mounted* element is finicky --
-  // it can silently no-op if the element's already sitting at the
-  // "finished" state from last time, which is exactly the failure mode a
-  // second scoop hit before this.
-  const [pourCount, setPourCount] = useState(0);
   const bigSpoonDragStartRef = useRef({ pointerX: 0, pointerY: 0, left: 0, top: 0 });
   // Sends focus to the big spoon itself (see the effect below) the moment
   // it appears -- same "make the newly-revealed thing the next stop" idea
@@ -1554,21 +1560,15 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
     if (bigSpoonStage !== 'idle') return;
     setBigSpoonPos(getSpoonHoverPos(bowlPos, bowlItem));
     setBigSpoonStage('moving');
-    // Bumped here (once per dump attempt, not once per pour-stage-enter) so
-    // it's already a fresh value by the time 'pouring' mounts the mound
-    // below -- see the pourCount comment above for why this key-based
-    // remount is what makes the grow animation replay reliably.
-    setPourCount((c) => c + 1);
   };
 
   // Advances the dump sequence's later stages on a timer -- 'moving' holds
   // just long enough for the glide-to-hover-spot CSS transition to finish
-  // (see BIG_SPOON_MOVE_MS), then 'pouring' mounts the bowl's mound (keyed
-  // by pourCount, so it's always a fresh element -- see the JSX below,
-  // which is what lets .bowl-powder's CSS grow animation play reliably
-  // every time instead of only the first), timed to finish exactly when
-  // BIG_SPOON_POUR_MS's falling-powder effect does, then finally puts the
-  // spoon away. Re-running this effect (e.g. selectedTin resetting
+  // (see BIG_SPOON_MOVE_MS), then 'pouring' mounts the bowl's mound (see the
+  // JSX below -- no longer separately keyed, see that div's own comment for
+  // why), timed to finish exactly when BIG_SPOON_POUR_MS's falling-powder
+  // effect does, then finally puts the spoon away. Re-running this effect
+  // (e.g. selectedTin resetting
   // bigSpoonStage back to 'idle' mid-sequence) cleans up whichever timer
   // was pending via the return below, so an abandoned sequence can't fire
   // late.
@@ -1718,7 +1718,6 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
     if (kettleStage !== 'idle' || !tempConfirmed) return;
     setItemPositions((prev) => ({ ...prev, kettle: getKettleHoverPos(bowlPos, bowlItem, kettleItem) }));
     setKettleStage('moving');
-    setWaterPourCount((c) => c + 1);
   };
 
   const bowlWaterLeft = bowlPos.left + BOWL_WATER_OFFSET.leftFrac * bowlItem.width;
@@ -2460,15 +2459,54 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
             <span className="kettle-steam-wisp kettle-steam-wisp-3" />
           </div>
         )}
-        {/* whiskStage !== 'done' -- once whisking finishes, .bowl-whisked-
-            liquid (further down) replaces this plain-color mound entirely
-            rather than painting over it, so it doesn't peek out from
-            behind/around the whisked-liquid image (which, since being
-            sized down to BOWL_INNER_RIM_WIDTH_FRAC/HEIGHT_FRAC, is smaller
-            than this mound's own box and no longer fully covers it). */}
-        {bowlPowder && whiskStage !== 'done' && (
+        {/* This used to also unmount once whiskStage reached 'done' (the
+            idea being .bowl-whisked-liquid, further down, replaces it
+            entirely), matching bowl-water's own whiskStage !== 'done' gate
+            right below. In practice that unmount wasn't reliably happening
+            for this mound specifically (confirmed still visible after
+            whisking) -- rather than keep chasing why, per feedback this now
+            just stays mounted (no whiskStage condition at all) for as long
+            as the bowl itself is still around to carry it -- see the
+            bowlStage !== 'sent' check below. Since left/top are already
+            recomputed from the bowl's own *current* bowlPos on every render
+            (same as bowlWater/bowl-whisked-liquid), it simply rides along
+            with the bowl for as long as it's visible, including through the
+            Make Drink carry -- it doesn't need its own tracking logic.
+
+            bowlStage !== 'sent' -- added after a follow-up report that the
+            mound was still sitting in the Make Drink corner on its own even
+            after the bowl (and .bowl-whisked-liquid, which already has this
+            same check) had fully faded away and stopped rendering -- with
+            nothing left to be "attached to" at that point, a lone mound
+            floating there read as its own orphaned leftover, not a bowl
+            still having matcha in it. Matches .bowl-whisked-liquid's own
+            gate exactly so the two always disappear together.
+
+            z-index: auto (unset) keeps it *behind* .bowl-whisked-liquid
+            (z-index: 1), same stacking as before, so the finished-drink
+            image still paints on top of it while both are visible.
+
+            No key here (there used to be one, key={pourCount}, to force a
+            fresh mount so the grow-in animation replayed on every pour) --
+            confirmed via a live DOM count while troubleshooting that
+            repeating the tin -> scoop -> dump flow more than once in a
+            single visit to this station left the OLD key={pourCount}
+            instances still mounted instead of being cleaned up, silently
+            piling up extra copies of this mound on the counter (only
+            visible here, not for bowl-water below, since water's own
+            whiskStage !== 'done' gate happened to hide all of its own
+            accumulated copies at once regardless of count). This is now a
+            single stable element -- it can only ever exist once, by
+            construction, at the cost of not replaying the grow-in animation
+            if the player redoes the dump within that same visit. This only
+            matters within one customer's own visit to this station, though
+            -- each new customer gets a fully fresh mount of this whole
+            component (see App.js's currentPage-based conditional rendering,
+            which unmounts/remounts the station between customers), so a
+            multi-order session (5-7 customers) never carries any of this
+            state, keyed or not, from one customer's drink into the next. */}
+        {bowlPowder && bowlStage !== 'sent' && (
           <div
-            key={pourCount}
             className="bowl-powder"
             aria-hidden="true"
             style={{
@@ -2486,15 +2524,11 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
             than WATER_COLOR, so the matcha mound shows through underneath --
             reads as water sitting over the powder rather than a solid pool
             covering or hiding it. Same grow-from-nothing mechanic as
-            bowl-powder (key={waterPourCount} forces a fresh mount each pour
-            so the animation always replays -- see the pourCount comment on
-            bowlPowder's state in this file for why). */}
-        {/* whiskStage !== 'done' -- same reasoning as bowl-powder above, so
-            this translucent pool doesn't linger visible around the edges
-            of the smaller whisked-liquid image once mixing's finished. */}
+            bowl-powder used to share (see that div's own comment above for
+            why this is no longer keyed either). whiskStage !== 'done' hides
+            this once whisking finishes, same as bowl-powder used to. */}
         {bowlWater && whiskStage !== 'done' && (
           <div
-            key={waterPourCount}
             className="bowl-water"
             aria-hidden="true"
             style={{
