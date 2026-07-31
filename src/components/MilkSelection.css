@@ -206,6 +206,46 @@
   cursor: default;
 }
 
+/* Bottle name label ("oat milk"/"dairy milk"/etc, see BOTTLE_LABELS/
+   focusedBottle in MilkSelection.js) -- shown above whichever bottle
+   currently has the white focus halo. Same dark-brown (#5c4a3a, matching
+   .order-receipt-button's own text color in OrderReceiptButton.css) with
+   the same two-layer white glow as MatchaMaking.js's own
+   .matcha-tin-label -- see that rule's own comment for exactly where the
+   halo values come from. translate(-50%, -100%) -- rather than just
+   translateX(-50%) -- is what lifts the whole label above its anchor point
+   (the bottle's own top edge minus a small gap, set inline in
+   MilkSelection.js) regardless of the label's own text height.
+   pointer-events: none plus aria-hidden (set in the JSX) since this is
+   purely a visual echo of a state (focus) already communicated to
+   assistive tech through the bottle's own focus/alt text. */
+.milk-bottle-label {
+  position: absolute;
+  transform: translate(-50%, -100%);
+  margin: 0;
+  font-family: 'Pixelify Sans', cursive;
+  font-weight: 700;
+  font-size: min(34px, 1.7vw);
+  color: #5c4a3a;
+  text-align: center;
+  letter-spacing: 0.02em;
+  text-shadow: 0 0 4px rgba(255, 255, 255, 0.95), 0 0 16px rgba(255, 255, 255, 0.6), 0 1px 2px rgba(0, 0, 0, 0.4);
+  pointer-events: none;
+  z-index: 5;
+  animation: milkBottleLabelIn 0.15s ease-out both;
+}
+
+@keyframes milkBottleLabelIn {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -100%) translateY(3px);
+  }
+  100% {
+    opacity: 1;
+    transform: translate(-50%, -100%) translateY(0);
+  }
+}
+
 /* The milk fill itself -- see the big comment on CUP_MILK_BOX_FRAC/cupMilk
    in MilkSelection.js for why this is a plain colored shape layered on top
    of the glass rather than something requiring a transparent cutout in

@@ -155,11 +155,16 @@
   }
 }
 
-/* Tin name label ("Cafe"/"Classic"/"Ceremonial", see TIN_LABELS/focusedTin
+/* Tin name label ("cafe"/"classic"/"ceremonial", see TIN_LABELS/focusedTin
    in MatchaMaking.js) -- shown under whichever tin currently has the white
-   focus halo. Baby-pink text, no glow/halo effect of its own -- just the
-   small dark drop-shadow for legibility against the counter art behind it
-   -- and no border/background/pill like .matcha-tin-hint above.
+   focus halo. Dark brown text (same #5c4a3a as .order-receipt-button's own
+   text color in OrderReceiptButton.css) with the same two-layer white glow
+   as the tin's own focus halo (button:focus-visible in App.css: a tighter
+   4px core plus a softer 16px spread, both rgba(255,255,255,...)) applied
+   as a text-shadow instead of that halo's box-shadow, so the label reads
+   as part of the same halo the tin itself is showing. The small dark
+   drop-shadow layer underneath is just for legibility against the counter
+   art behind it -- no border/background/pill like .matcha-tin-hint above.
    pointer-events: none plus aria-hidden (set in the JSX) since this is
    purely a visual echo of a state (focus) that's already communicated to
    assistive tech through the tin's own focus/alt text. */
@@ -170,10 +175,10 @@
   font-family: 'Pixelify Sans', cursive;
   font-weight: 700;
   font-size: min(34px, 1.7vw);
-  color: #ffd9e4;
+  color: #5c4a3a;
   text-align: center;
   letter-spacing: 0.02em;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+  text-shadow: 0 0 4px rgba(255, 255, 255, 0.95), 0 0 16px rgba(255, 255, 255, 0.6), 0 1px 2px rgba(0, 0, 0, 0.4);
   pointer-events: none;
   z-index: 5;
   animation: matchaTinLabelIn 0.15s ease-out both;

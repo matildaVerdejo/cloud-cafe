@@ -26,9 +26,9 @@ const STATIC_ITEMS = [
 // same distinction the selectedTin comment above already draws between
 // focus and confirm).
 const TIN_LABELS = {
-  'cafe-grade': 'Cafe',
-  'classic-grade': 'Classic',
-  'ceremonial-grade': 'Ceremonial',
+  'cafe-grade': 'cafe',
+  'classic-grade': 'classic',
+  'ceremonial-grade': 'ceremonial',
 };
 
 // Small gap between a tin's own bottom edge and its label below it.

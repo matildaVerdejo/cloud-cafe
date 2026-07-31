@@ -80,6 +80,22 @@ const BOTTLE_KEYS = [
   { key: 'coconut', src: './CoconutWater.png', alt: 'Coconut water', leftPad: 67 / 169, rightPad: (169 - 144) / 169 },
 ];
 
+// Display name per bottle, shown as a label beneath whichever one currently
+// has focus (see focusedBottle/.milk-bottle-label below) -- same
+// "selected" == "has the focus halo" idea, and same pastel-pink/no-glow
+// look, as MatchaMaking.js's own TIN_LABELS/.matcha-tin-label.
+const BOTTLE_LABELS = {
+  oat: 'oat milk',
+  dairy: 'dairy milk',
+  almond: 'almond milk',
+  coconut: 'coconut water',
+};
+
+// Small gap between a bottle's own top edge and its label above it --
+// negative on purpose, so the label overlaps down into the top of the
+// bottle's own art a little rather than floating clear above it.
+const BOTTLE_LABEL_GAP = -3.5;
+
 // Walk left-to-right so each bottle's visible content (box left + leftPad,
 // through box left + (1 - rightPad) * BOTTLE_WIDTH) sits exactly
 // BOTTLE_VISUAL_GAP past the previous bottle's, then shift the whole row
@@ -602,6 +618,13 @@ const MilkSelection = ({ activeStep, customerNumber, onNavigate, onAdvance, orde
   // Which bottle (if any) is being dragged right now, and its live position.
   const [bottleDrag, setBottleDrag] = useState(null); // { key, left, top } | null
   const bottleDragStartRef = useRef({ pointerX: 0, pointerY: 0, left: 0, top: 0 });
+  // Which bottle (if any) currently has the white focus halo -- drives the
+  // name label under it (BOTTLE_LABELS/.milk-bottle-label), same
+  // focus-not-confirm distinction as MatchaMaking.js's own focusedTin. The
+  // onBlur guard (only clear if this bottle is still the one recorded)
+  // avoids a stale clear if focus has already moved to a different bottle
+  // by the time this one's blur fires.
+  const [focusedBottle, setFocusedBottle] = useState(null);
 
   // ---- Pouring a bottle (or the matcha bowl) into the cup (see the big
   // comment on BOTTLE_HOVER_GAP/getBottleHoverPos above) -------------------
@@ -1113,7 +1136,35 @@ const MilkSelection = ({ activeStep, customerNumber, onNavigate, onAdvance, orde
               onPointerMove={handleBottlePointerMove(item)}
               onPointerUp={handleBottlePointerUp(item)}
               onKeyDown={handleBottleKeyDown(item)}
+              onFocus={() => setFocusedBottle(item.key)}
+              onBlur={() => setFocusedBottle((prev) => (prev === item.key ? null : prev))}
             />
+          );
+        })}
+        {/* Name label above whichever bottle currently has the white focus
+            halo (see focusedBottle above) -- e.g. "Oat Milk", "Dairy Milk".
+            Tracks the bottle's own live position (pos, same as the image
+            above) rather than its home spot, so it follows along correctly
+            while the bottle's mid-drag. top is anchored at the bottle's own
+            top edge minus the gap; .milk-bottle-label's own
+            translate(-50%, -100%) is what actually lifts the label fully
+            above that anchor line regardless of the label's own text
+            height. */}
+        {BOTTLE_ITEMS.filter((item) => item.key === focusedBottle).map((item) => {
+          const dragging = bottleDrag?.key === item.key;
+          const pos = dragging ? bottleDrag : bottlePositions[item.key];
+          return (
+            <p
+              key={item.key}
+              className="milk-bottle-label"
+              aria-hidden="true"
+              style={{
+                left: `${pos.left + item.width / 2}%`,
+                top: `${pos.top - BOTTLE_LABEL_GAP}%`,
+              }}
+            >
+              {BOTTLE_LABELS[item.key]}
+            </p>
           );
         })}
         {/* Falling-liquid pour effect -- see the big comment on
