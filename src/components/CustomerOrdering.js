@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import './CustomerOrdering.css';
 import { useFlatFocusNav } from '../gameloop/useFlatFocusNav';
 import { getActionFromKeyEvent, shouldDebounceEnter } from '../gameloop/pal';
-import { playButtonClick } from '../gameloop/sfx';
+import { playButtonClick, playVoiceLine } from '../gameloop/sfx';
 import ProgressBar from './ProgressBar';
 
 // ---- Order-builder option lists ------------------------------------------
@@ -309,19 +309,19 @@ const CustomerOrdering = ({ activeStep, customerNumber, onNavigate, onAdvance, o
   // character (CUSTOMER_CHARACTER/CHARACTER_ORDERING_AUDIO above), not the
   // rolled spokenOrder text, so this stays "Annie's ordering line" no
   // matter what she orders -- and so later customer characters just need
-  // their own entry in that map, not a change here. Uses a plain
-  // `new Audio()` (a one-shot SFX/voice line) rather than App.js's looping
-  // <audio ref> element, which is reserved for background music. Autoplay
-  // can still be blocked the same way background music's can be (see
-  // App.js's own tryPlay/catch) if this is somehow the very first sound of
-  // the session with no prior user gesture; unlike background music there's
-  // no first-gesture retry for a one-shot line like this, it just silently
-  // doesn't play that round.
+  // their own entry in that map, not a change here. Routed through
+  // sfx.js's playVoiceLine (a one-shot clip, same "not App.js's looping
+  // <audio ref> element" distinction as before) so it's controlled by the
+  // Settings panel's "Sound" slider rather than always playing at full
+  // volume. Autoplay can still be blocked the same way background music's
+  // can be (see App.js's own tryPlay/catch) if this is somehow the very
+  // first sound of the session with no prior user gesture; unlike
+  // background music there's no first-gesture retry for a one-shot line
+  // like this, it just silently doesn't play that round.
   useEffect(() => {
     const src = CHARACTER_ORDERING_AUDIO[CUSTOMER_CHARACTER];
     if (!src) return undefined;
-    const audio = new Audio(src);
-    audio.play().catch(() => {});
+    const audio = playVoiceLine(src);
     return () => audio.pause();
   }, []);
 

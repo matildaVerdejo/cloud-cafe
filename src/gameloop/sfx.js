@@ -1,25 +1,43 @@
 // GameLoop shared one-shot SFX helper -- a tiny wrapper so every place that
-// needs to play a short, non-looping sound effect (button clicks, etc.)
-// does it the same way instead of each component hand-rolling its own
-// `new Audio(...).play()` call. Deliberately minimal: no volume control, no
-// music-ducking, no preloading strategy -- just "play this clip once, right
-// now." Background music stays exactly as-is (looping, volume-slider-aware,
-// via App.js's own <audio ref> element); this is only for short one-shot
-// clips layered on top of it, the same pattern CustomerOrdering.js's own
-// per-character ordering voice line already uses.
+// needs to play a short, non-looping sound effect (button clicks, character
+// voice lines, etc.) does it the same way instead of each component
+// hand-rolling its own `new Audio(...).play()` call. Background music
+// stays exactly as-is (looping, via App.js's own <audio ref> element,
+// controlled by the Settings panel's separate "Music" slider); everything
+// here is one-shot clips layered on top of it, controlled by that same
+// panel's "Sound" slider instead.
 
 const BUTTON_CLICK_ON_SRC = './ButtonClickOn.mp3';
 const BUTTON_CLICK_OFF_SRC = './ButtonClickOff.mp3';
 
+// Current "Sound" volume (0-1) -- covers every clip played through this
+// module (button clicks, character ordering voice lines, and whatever else
+// gets added later), separately from musicVolume in App.js. Lives here as
+// plain module state (rather than being threaded through props/context to
+// every button) since nothing here is React state itself -- setSfxVolume
+// is just called from App.js's own effect whenever the Settings panel's
+// Sound slider changes, mirroring how that effect already keeps the
+// background-music <audio> element's own .volume in sync with musicVolume.
+// Default matches musicVolume's own default (0.5) so a first-time player
+// hears both at the same level before ever opening Settings.
+let sfxVolume = 0.5;
+
+export function setSfxVolume(v) {
+  sfxVolume = v;
+}
+
 // Fresh `new Audio()` per call (rather than one shared/reused instance) so
 // rapid repeat clicks each get their own full playback instead of cutting
 // each other off mid-clip. .catch(() => {}) swallows the same
-// autoplay-block possibility every other one-shot Audio() call in this
-// project already guards against -- if it's blocked, that one click just
-// plays silently.
+// autoplay-block possibility every one-shot Audio() call in this project
+// already guards against -- if it's blocked, that one clip just plays
+// silently. Returns the Audio instance so callers that need to hang onto
+// it (e.g. to pause a longer voice line on unmount) can.
 function playClip(src) {
   const audio = new Audio(src);
+  audio.volume = sfxVolume;
   audio.play().catch(() => {});
+  return audio;
 }
 
 // The general-purpose click used for most buttons (Start, the ordering
@@ -35,4 +53,14 @@ export function playButtonClick() {
 // picking playButtonClick (opening) vs this (closing) accordingly.
 export function playButtonClickOff() {
   playClip(BUTTON_CLICK_OFF_SRC);
+}
+
+// For one-off clips elsewhere that need this same shared "Sound" volume
+// but also need the Audio instance itself (e.g. CustomerOrdering's
+// per-character ordering voice line pauses it on unmount). Same clip/
+// volume/autoplay-catch behavior as playButtonClick/playButtonClickOff
+// above, just parameterized on src and returning the instance instead of
+// firing-and-forgetting.
+export function playVoiceLine(src) {
+  return playClip(src);
 }

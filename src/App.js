@@ -14,6 +14,7 @@ import { PROGRESS_STEPS } from './components/ProgressBar';
 // fail the Vercel build. Uncomment both together to bring it back.
 // import GameLoopAPIDebugOverlay from './gameloop/GameLoopAPIDebugOverlay';
 import { getActionFromKeyEvent } from './gameloop/pal';
+import { setSfxVolume } from './gameloop/sfx';
 import { useFlatFocusNav } from './gameloop/useFlatFocusNav';
 import {
   initGameLoopBridge,
@@ -89,6 +90,15 @@ function App() {
   // buttons (VOLUME_STEP, in SettingsPanel.js) -- default matches the value
   // this used to be hardcoded to directly on the <audio> element.
   const [musicVolume, setMusicVolume] = useState(0.5);
+  // Sound volume (0-1) -- covers every one-shot SFX/voice clip played
+  // through gameloop/sfx.js (button clicks today; the character ordering
+  // voice line; whatever else gets added there later), as a control
+  // separate from musicVolume above so a player can turn one down without
+  // the other. Same default/step/rounding treatment as musicVolume. Not an
+  // <audio> element's own .volume like music is -- sfx.js has no
+  // persistent element to set, so this is synced out to it imperatively
+  // (see the effect below) any time it changes instead.
+  const [soundVolume, setSoundVolume] = useState(0.5);
   // Settings popover open/closed -- lifted up here (rather than local state
   // inside SettingsPanel) for the same reason showExitConfirm is: the
   // central Back-key handler below needs to know about it, to close the
@@ -153,6 +163,17 @@ function App() {
     audio.volume = musicVolume;
   }, [musicVolume]);
 
+  // Keeps gameloop/sfx.js's own module-level sfxVolume in sync with
+  // soundVolume -- same idea as the effect just above, just imperative
+  // (setSfxVolume(...) rather than an <audio> ref's .volume) since sfx.js's
+  // one-shot clips don't have a single persistent element to set volume on
+  // the way background music does. Runs on mount too, so the very first
+  // button click/voice line already uses the right volume instead of
+  // sfx.js's own default.
+  useEffect(() => {
+    setSfxVolume(soundVolume);
+  }, [soundVolume]);
+
   // ---- Background music: autoplay + first-gesture fallback ---------------
   // Most browsers block audio with sound until the user has interacted with
   // the page at least once. We try to start it immediately on mount (works
@@ -191,6 +212,11 @@ function App() {
   };
   const decreaseMusicVolume = () => stepMusicVolume(-VOLUME_STEP);
   const increaseMusicVolume = () => stepMusicVolume(VOLUME_STEP);
+  const stepSoundVolume = (delta) => {
+    setSoundVolume((v) => Math.round(Math.min(1, Math.max(0, v + delta)) * 10) / 10);
+  };
+  const decreaseSoundVolume = () => stepSoundVolume(-VOLUME_STEP);
+  const increaseSoundVolume = () => stepSoundVolume(VOLUME_STEP);
   const toggleSettings = () => setShowSettings((open) => !open);
 
   // ---- Lifecycle: suspend on hidden/backgrounded, resume on visible ------
@@ -405,6 +431,9 @@ function App() {
           volume={musicVolume}
           onVolumeDown={decreaseMusicVolume}
           onVolumeUp={increaseMusicVolume}
+          soundVolume={soundVolume}
+          onSoundVolumeDown={decreaseSoundVolume}
+          onSoundVolumeUp={increaseSoundVolume}
         />
       </div>
 

@@ -77,6 +77,16 @@
   }
 }
 
+/* One of these per volume control (Music, Sound -- see VolumeRow in
+   SettingsPanel.js) stacked inside the popover. The gap between sections
+   lives here (margin-top on every section after the first) rather than on
+   .settings-popover itself (e.g. a flex `gap`) so this still reads fine if
+   a third section gets added later without touching the popover's own
+   rule. */
+.settings-volume-section + .settings-volume-section {
+  margin-top: min(14px, 0.8vw);
+}
+
 .settings-popover-label {
   margin: 0 0 min(10px, 0.6vw) 0;
   font-family: 'Pixelify Sans', cursive;
