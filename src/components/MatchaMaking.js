@@ -19,6 +19,21 @@ const STATIC_ITEMS = [
   { key: 'ceremonial-grade', src: './CeremonialGrade.png', alt: 'Ceremonial grade matcha tin', left: 79.45, top: 25.50, width: 6.9, height: 19.50 },
 ];
 
+// Display name per tin, keyed the same way as STATIC_ITEMS/SCOOP_FILL_COLORS
+// above -- shown as a label beneath whichever tin currently has focus (see
+// focusedTin/.matcha-tin-label below), not tied to selectedTin (a tin reads
+// as "selected" to the player the moment it gets its white focus halo,
+// same distinction the selectedTin comment above already draws between
+// focus and confirm).
+const TIN_LABELS = {
+  'cafe-grade': 'Cafe',
+  'classic-grade': 'Classic',
+  'ceremonial-grade': 'Ceremonial',
+};
+
+// Small gap between a tin's own bottom edge and its label below it.
+const TIN_LABEL_GAP = 2;
+
 // Anchor for the tin-picking hint label (see showTinHint further down) --
 // 75 is the middle (classic-grade) tin's own horizontal center
 // (71.55 + 6.9 / 2), which also happens to land exactly on the midpoint
@@ -1369,6 +1384,16 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
   // different tin swaps straight to that one instead.
   const [selectedTin, setSelectedTin] = useState(null);
 
+  // Which tin (if any) currently has the white focus halo -- driven by
+  // plain onFocus/onBlur on each tin (see the JSX below), separate from
+  // selectedTin above since the halo shows up just from being
+  // focused/clicked, before Enter ever confirms anything. Powers the
+  // name label under whichever tin is currently focused (see TIN_LABELS/
+  // .matcha-tin-label). The onBlur guard (only clear if this tin is still
+  // the one recorded) avoids a stale clear if focus has already moved to a
+  // different tin by the time this one's blur fires.
+  const [focusedTin, setFocusedTin] = useState(null);
+
   // Fifth highlight beat: picks up the instant showOrderHint retires (see
   // its comment above) -- the three tins themselves flash and a hint
   // points out arrow keys + Enter, same "the highlighted thing becomes the
@@ -2099,7 +2124,26 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
               height: `${item.height}%`,
             }}
             onKeyDown={handleTinKeyDown(item)}
+            onFocus={() => setFocusedTin(item.key)}
+            onBlur={() => setFocusedTin((prev) => (prev === item.key ? null : prev))}
           />
+        ))}
+        {/* Name label under whichever tin currently has the white focus
+            halo (see focusedTin above) -- e.g. "Cafe", "Classic",
+            "Ceremonial". Centered under that tin specifically (left +
+            half its own width), just below its bottom edge. */}
+        {STATIC_ITEMS.filter((item) => item.key === focusedTin).map((item) => (
+          <p
+            key={item.key}
+            className="matcha-tin-label"
+            aria-hidden="true"
+            style={{
+              left: `${item.left + item.width / 2}%`,
+              top: `${item.top + item.height + TIN_LABEL_GAP}%`,
+            }}
+          >
+            {TIN_LABELS[item.key]}
+          </p>
         ))}
         {showTinHint && (
           <p

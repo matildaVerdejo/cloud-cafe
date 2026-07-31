@@ -155,6 +155,41 @@
   }
 }
 
+/* Tin name label ("Cafe"/"Classic"/"Ceremonial", see TIN_LABELS/focusedTin
+   in MatchaMaking.js) -- shown under whichever tin currently has the white
+   focus halo. Baby-pink text, no glow/halo effect of its own -- just the
+   small dark drop-shadow for legibility against the counter art behind it
+   -- and no border/background/pill like .matcha-tin-hint above.
+   pointer-events: none plus aria-hidden (set in the JSX) since this is
+   purely a visual echo of a state (focus) that's already communicated to
+   assistive tech through the tin's own focus/alt text. */
+.matcha-tin-label {
+  position: absolute;
+  transform: translateX(-50%);
+  margin: 0;
+  font-family: 'Pixelify Sans', cursive;
+  font-weight: 700;
+  font-size: min(34px, 1.7vw);
+  color: #ffd9e4;
+  text-align: center;
+  letter-spacing: 0.02em;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+  pointer-events: none;
+  z-index: 5;
+  animation: matchaTinLabelIn 0.15s ease-out both;
+}
+
+@keyframes matchaTinLabelIn {
+  0% {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-3px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}
+
 @keyframes matchaTinHintPulse {
   0%,
   100% {
