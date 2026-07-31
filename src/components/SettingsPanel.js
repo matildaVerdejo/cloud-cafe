@@ -1,19 +1,25 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import './SettingsPanel.css';
 import { playButtonClick, playButtonClickOff } from '../gameloop/sfx';
+import { getActionFromKeyEvent } from '../gameloop/pal';
 
 // One label + -/+ stepper + bar/percent readout row -- both Music and
 // Sound below are the exact same layout, just pointed at different props,
 // so this is factored out rather than duplicated. label/volume/onDown/onUp
 // are all owned by whichever App.js state this particular row is showing
 // (musicVolume/soundVolume) -- this component has no state of its own.
-function VolumeRow({ label, volume, onDown, onUp }) {
+// minusRef/plusRef are forwarded onto the two buttons so the parent's own
+// keydown handler (see the big comment above SettingsPanel below) can
+// address each one directly by identity, rather than trying to re-derive
+// "which button is this" from the DOM.
+function VolumeRow({ label, volume, onDown, onUp, minusRef, plusRef }) {
   const volumePercent = Math.round(volume * 100);
   return (
     <div className="settings-volume-section">
       <p className="settings-popover-label">{label}</p>
       <div className="settings-volume-row">
         <button
+          ref={minusRef}
           type="button"
           className="settings-volume-button"
           data-focusable
@@ -34,6 +40,7 @@ function VolumeRow({ label, volume, onDown, onUp }) {
           </span>
         </div>
         <button
+          ref={plusRef}
           type="button"
           className="settings-volume-button"
           data-focusable
@@ -81,9 +88,95 @@ const SettingsPanel = ({
   onSoundVolumeDown,
   onSoundVolumeUp,
 }) => {
+  const gearRef = useRef(null);
+  const musicMinusRef = useRef(null);
+  const musicPlusRef = useRef(null);
+  const soundMinusRef = useRef(null);
+  const soundPlusRef = useRef(null);
+
+  // Exact button-to-button keyboard graph for this widget, per request --
+  // deliberately its own fixed path rather than the generic spatial
+  // useFlatFocusNav nearest-neighbor matching every screen's own container
+  // uses (which used to also govern this widget via App.js's old
+  // settingsRef hook, now removed): Down from the gear (while open) always
+  // goes to music minus; Right from music minus goes to music plus, Left
+  // from music plus goes back to music minus; Down from EITHER music
+  // button always goes to sound minus (not whichever sound button happens
+  // to sit closest, which is what spatial matching would do); Right from
+  // sound minus goes to sound plus, Left from sound plus goes back to
+  // sound minus; Up from EITHER sound button always goes back to music
+  // minus; Up from music minus goes back to the gear. Enter activating
+  // whichever button currently has focus (volume buttons' own onClick, or
+  // the gear's own open/close toggle) is unaffected -- that's native
+  // <button> behavior, nothing here needs to handle it.
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      const action = getActionFromKeyEvent(e);
+      if (!action) return;
+      const active = document.activeElement;
+
+      if (active === gearRef.current) {
+        if (open && action === 'Down') {
+          e.preventDefault();
+          musicMinusRef.current?.focus();
+        }
+        return;
+      }
+
+      if (active === musicMinusRef.current) {
+        if (action === 'Right') {
+          e.preventDefault();
+          musicPlusRef.current?.focus();
+        } else if (action === 'Down') {
+          e.preventDefault();
+          soundMinusRef.current?.focus();
+        } else if (action === 'Up') {
+          e.preventDefault();
+          gearRef.current?.focus();
+        }
+        return;
+      }
+
+      if (active === musicPlusRef.current) {
+        if (action === 'Left') {
+          e.preventDefault();
+          musicMinusRef.current?.focus();
+        } else if (action === 'Down') {
+          e.preventDefault();
+          soundMinusRef.current?.focus();
+        }
+        return;
+      }
+
+      if (active === soundMinusRef.current) {
+        if (action === 'Right') {
+          e.preventDefault();
+          soundPlusRef.current?.focus();
+        } else if (action === 'Up') {
+          e.preventDefault();
+          musicMinusRef.current?.focus();
+        }
+        return;
+      }
+
+      if (active === soundPlusRef.current) {
+        if (action === 'Left') {
+          e.preventDefault();
+          soundMinusRef.current?.focus();
+        } else if (action === 'Up') {
+          e.preventDefault();
+          musicMinusRef.current?.focus();
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [open]);
+
   return (
     <div className="settings-panel-anchor" ref={containerRef}>
       <button
+        ref={gearRef}
         type="button"
         className="settings-toggle-button"
         data-focusable
@@ -126,12 +219,21 @@ const SettingsPanel = ({
       </button>
       {open && (
         <div className="settings-popover" role="group" aria-label="Settings">
-          <VolumeRow label="Music Volume" volume={volume} onDown={onVolumeDown} onUp={onVolumeUp} />
+          <VolumeRow
+            label="Music Volume"
+            volume={volume}
+            onDown={onVolumeDown}
+            onUp={onVolumeUp}
+            minusRef={musicMinusRef}
+            plusRef={musicPlusRef}
+          />
           <VolumeRow
             label="Sound Volume"
             volume={soundVolume}
             onDown={onSoundVolumeDown}
             onUp={onSoundVolumeUp}
+            minusRef={soundMinusRef}
+            plusRef={soundPlusRef}
           />
         </div>
       )}

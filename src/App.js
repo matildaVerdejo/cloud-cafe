@@ -121,13 +121,17 @@ function App() {
   const exitDialogRef = useRef(null);
   useFlatFocusNav(exitDialogRef);
   // Settings panel is rendered once here (see the big comment on it further
-  // down) rather than duplicated into every screen, so it needs this same
-  // "own spatial-nav scope, safe to call unconditionally" treatment as the
-  // exit dialog -- the circle button and its popover live outside every
-  // screen's own container, so none of those screens' own useFlatFocusNav
-  // hooks would otherwise let the D-pad move between them.
+  // down) rather than duplicated into every screen. Its own internal
+  // keyboard navigation (gear <-> the two volume rows) is handled by a
+  // dedicated, exact button-to-button keydown handler inside
+  // SettingsPanel.js itself now, rather than the generic spatial
+  // useFlatFocusNav hook every screen's own container uses -- the
+  // requested nav graph (e.g. "Down from either music button always lands
+  // on sound minus, never sound plus") isn't what nearest-neighbor spatial
+  // matching would produce on its own, so this needed its own precise
+  // logic instead. settingsRef here is just a plain DOM ref for
+  // SettingsPanel's outer anchor div now (no hook attached to it).
   const settingsRef = useRef(null);
-  useFlatFocusNav(settingsRef);
 
   // ---- GameLoop V1 bridge setup -------------------------------------------
   useEffect(() => {
@@ -423,18 +427,26 @@ function App() {
             positioned against), so anchoring this here with the same
             percentage convention every screen already uses for its own
             corner UI puts it in the upper-left corner of every frame for
-            free, including the splash screen. */}
-        <SettingsPanel
-          containerRef={settingsRef}
-          open={showSettings}
-          onToggleOpen={toggleSettings}
-          volume={musicVolume}
-          onVolumeDown={decreaseMusicVolume}
-          onVolumeUp={increaseMusicVolume}
-          soundVolume={soundVolume}
-          onSoundVolumeDown={decreaseSoundVolume}
-          onSoundVolumeUp={increaseSoundVolume}
-        />
+            free. Skipped during the splash screen specifically (per
+            request) -- there's nothing to configure yet at that beat, and
+            SplashScreen's own Back-to-skip/auto-dismiss timer is the only
+            input that screen needs. (currentPage never transitions back to
+            'splash' once left -- see currentPage's own useState above and
+            every place that sets it -- so there's no case where a
+            previously-opened popover would need to be force-closed here.) */}
+        {currentPage !== 'splash' && (
+          <SettingsPanel
+            containerRef={settingsRef}
+            open={showSettings}
+            onToggleOpen={toggleSettings}
+            volume={musicVolume}
+            onVolumeDown={decreaseMusicVolume}
+            onVolumeUp={increaseMusicVolume}
+            soundVolume={soundVolume}
+            onSoundVolumeDown={decreaseSoundVolume}
+            onSoundVolumeUp={increaseSoundVolume}
+          />
+        )}
       </div>
 
       {showExitConfirm && (
