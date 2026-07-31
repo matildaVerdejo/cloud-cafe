@@ -102,7 +102,27 @@ const SettingsPanel = ({
         aria-label={open ? 'Close settings' : 'Open settings'}
         aria-expanded={open}
       >
-        <span aria-hidden="true">⚙</span>
+        {/* Hand-built gear shape (8 teeth, single polygon) rather than a
+            font character, so sizing/centering is exact and independent of
+            whatever font the ⚙ (U+2699) glyph it replaces would've fallen
+            back to. Drawn as an outline (fill="none" + stroke) rather than
+            solid per request -- hollow in the middle, but still no small
+            center hole/dot the way the original glyph had, since there's
+            no separate inner shape being cut out, just one open ring. */}
+        <svg
+          className="settings-gear-icon"
+          viewBox="0 0 100 100"
+          aria-hidden="true"
+          focusable="false"
+        >
+          <polygon
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="7"
+            strokeLinejoin="round"
+            points="41.42,17.10 43.70,4.43 56.30,4.43 58.58,17.10 67.19,20.67 77.76,13.32 86.68,22.24 79.33,32.81 82.90,41.42 95.57,43.70 95.57,56.30 82.90,58.58 79.33,67.19 86.68,77.76 77.76,86.68 67.19,79.33 58.58,82.90 56.30,95.57 43.70,95.57 41.42,82.90 32.81,79.33 22.24,86.68 13.32,77.76 20.67,67.19 17.10,58.58 4.43,56.30 4.43,43.70 17.10,41.42 20.67,32.81 13.32,22.24 22.24,13.32 32.81,20.67"
+          />
+        </svg>
       </button>
       {open && (
         <div className="settings-popover" role="group" aria-label="Settings">

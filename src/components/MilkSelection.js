@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import './MilkSelection.css';
 import { useFlatFocusNav } from '../gameloop/useFlatFocusNav';
 import { getActionFromKeyEvent, shouldDebounceEnter } from '../gameloop/pal';
@@ -508,11 +508,23 @@ const MilkSelection = ({ activeStep, customerNumber, onNavigate, onAdvance, orde
   // module constant) since it depends on incomingBowlRestHeight just above
   // and on ICE_BOX_BOUNDS/BOTTLE_BOTTOM, both only safely referenceable
   // from inside a function body given where they're defined in this file.
+  // Wrapped in useMemo (rather than a plain const, recomputed every render)
+  // so it's referentially stable across renders -- its own inputs
+  // (incomingBowlRestHeight and the module constants above) never actually
+  // change after mount, but without useMemo it'd still be a brand-new
+  // object identity every render, which would've either had to be left out
+  // of the pour-effect's dependency array below (an exhaustive-deps lint
+  // warning that Vercel's production build treats as a hard error, since
+  // CI sets process.env.CI=true) or, if added in as-is, would re-run that
+  // effect on every render for no reason.
   const INCOMING_BOWL_LIFT = 5;
-  const INCOMING_BOWL_SPOT = {
-    left: ICE_BOX_BOUNDS.right + 5,
-    top: BOTTLE_BOTTOM - incomingBowlRestHeight - INCOMING_BOWL_LIFT,
-  };
+  const INCOMING_BOWL_SPOT = useMemo(
+    () => ({
+      left: ICE_BOX_BOUNDS.right + 5,
+      top: BOTTLE_BOTTOM - incomingBowlRestHeight - INCOMING_BOWL_LIFT,
+    }),
+    [incomingBowlRestHeight]
+  );
 
   // The bowl's own live position -- starts (and always snaps back to)
   // INCOMING_BOWL_SPOT, but shifts to the hover-over-cup spot while it's
@@ -985,7 +997,7 @@ const MilkSelection = ({ activeStep, customerNumber, onNavigate, onAdvance, orde
       return () => clearTimeout(t);
     }
     return undefined;
-  }, [pourStage, pouringKey, incomingBowl]);
+  }, [pourStage, pouringKey, incomingBowl, INCOMING_BOWL_SPOT]);
 
   // Snapshotting cupMilk/cupMatcha here (rather than letting ToppingsStation
   // read this screen's own state, which won't exist anymore once the player

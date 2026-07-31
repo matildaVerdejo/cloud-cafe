@@ -115,9 +115,14 @@
      (.ordering-back-button in CustomerOrdering.css) -- same fill, border,
      text color, font, and pill shape. Keep these two in sync. */
   background: rgba(255, 255, 255, 0.85);
-  border: 2px solid #8a7a6a;
+  /* Border thickness and font weight matched to the station screens' own
+     "Order" button (.order-receipt-button in OrderReceiptButton.css --
+     border: 4px solid #8a7a6a; font-weight: 600) per request, so this
+     button reads with the same chunkiness/boldness as that one. */
+  border: 4px solid #8a7a6a;
   color: #5c4a3a;
   font-family: 'Pixelify Sans', cursive;
+  font-weight: 600;
   /* Scales with the game card (width: 1920px; max-width: 92vw on
      .main-container) instead of a fixed px size, so button text stays
      proportional to the button itself as the window is resized/zoomed. */
