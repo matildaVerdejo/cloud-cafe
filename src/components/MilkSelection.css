@@ -63,19 +63,32 @@
   }
 }
 
-/* Glass cup: starts sitting on the leftmost cabinet slot on the wall
-   (image x 990-1080, y 202-298 of 1392x768) and can be dragged down to the
-   table, where it renders 3x bigger (as if set down closer to camera).
-   Table left/top in MilkSelection.js are picked so the enlarged box's
-   bottom edge lands at y=605 -- the same level the milk bottles' bases sit
-   at (measured y 601-610 across the four bottles) -- and is horizontally
-   centered on the table (x=696, half of the 1392-wide art). Enter/Select on
-   the focused cup toggles shelf <-> table as the D-pad equivalent of
-   dragging (see handleCupKeyDown in MilkSelection.js). left/top/width/
-   height are set inline per-render since they're state-driven, not fixed --
-   only the static visual properties live here. */
+/* Cup: glass starts sitting on the leftmost cabinet slot on the wall
+   (image x 990-1080, y 202-298 of 1392x768) and plastic sits in the slot
+   next to it (see PLASTIC_CUP_SPOTS in MilkSelection.js) -- either can be
+   dragged down to the table, where it renders bigger (as if set down
+   closer to camera). Table left/top in MilkSelection.js are picked so each
+   cup's enlarged box's bottom edge lands at y=605 -- the same level the
+   milk bottles' bases sit at (measured y 601-610 across the four
+   bottles) -- and is horizontally centered on the table (x=696, half of
+   the 1392-wide art). Enter/Select on the focused cup toggles shelf <->
+   table (or switches which cup is active, if it's the inactive one) as
+   the D-pad equivalent of dragging (see handleCupKeyDown/
+   handleCupSwitchKeyDown in MilkSelection.js). left/top/width/height are
+   set inline per-render since they're state-driven, not fixed -- only the
+   static visual properties live here.
+
+   object-fit: contain (rather than the default stretch-to-fill) is what
+   keeps the plastic cup from being squished -- its own canvas aspect ratio
+   doesn't match the glass cup's, since it's a differently-shaped cup (see
+   the big comment on PLASTIC_CUP_CANVAS_ASPECT in MilkSelection.js). Added
+   here rather than a plastic-only modifier since it's a no-op for the
+   glass cup: GlassCup.png's own canvas aspect already closely matches its
+   own SHELF_SIZE/TABLE_SIZE box, so there's nothing for contain to
+   letterbox. */
 .glass-cup {
   position: absolute;
+  object-fit: contain;
   cursor: grab;
   touch-action: none;
   -webkit-user-select: none;
@@ -236,6 +249,42 @@
 }
 
 @keyframes milkBottleLabelIn {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -100%) translateY(3px);
+  }
+  100% {
+    opacity: 1;
+    transform: translate(-50%, -100%) translateY(0);
+  }
+}
+
+/* Cup name label ("glass cup"/"plastic cup", see CUP_LABELS/focusedCupType
+   in MilkSelection.js) -- shown above whichever cup currently has the
+   white focus halo (see .glass-cup:focus-visible above, already shared by
+   both cup types since they both use that same class). Same dark-brown,
+   no-glow-of-its-own look as this file's own .milk-bottle-label and
+   MatchaMaking.js's .matcha-tin-label. pointer-events: none plus
+   aria-hidden (set in the JSX) since this is purely a visual echo of a
+   state (focus) already communicated to assistive tech through the cup's
+   own focus/alt text. */
+.cup-label {
+  position: absolute;
+  transform: translate(-50%, -100%);
+  margin: 0;
+  font-family: 'Pixelify Sans', cursive;
+  font-weight: 700;
+  font-size: min(34px, 1.7vw);
+  color: #5c4a3a;
+  text-align: center;
+  letter-spacing: 0.02em;
+  text-shadow: 0 0 4px rgba(255, 255, 255, 0.95), 0 0 16px rgba(255, 255, 255, 0.6), 0 1px 2px rgba(0, 0, 0, 0.4);
+  pointer-events: none;
+  z-index: 5;
+  animation: cupLabelIn 0.15s ease-out both;
+}
+
+@keyframes cupLabelIn {
   0% {
     opacity: 0;
     transform: translate(-50%, -100%) translateY(3px);

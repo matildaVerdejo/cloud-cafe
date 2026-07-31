@@ -4,7 +4,7 @@ import { useFlatFocusNav } from '../gameloop/useFlatFocusNav';
 import { getActionFromKeyEvent, shouldDebounceEnter } from '../gameloop/pal';
 import ProgressBar from './ProgressBar';
 import OrderReceiptButton from './OrderReceiptButton';
-import { getMilkBoxFor, getMatchaBoxFor, TABLE_SIZE } from './MilkSelection';
+import { getMilkBoxFor, getMatchaBoxFor, TABLE_SIZE, CUP_TYPES } from './MilkSelection';
 import { WHISK_FLIP_DEG } from './MatchaMaking';
 
 // Where the finished cup (see incomingDrink below) sent over from Milk
@@ -13,13 +13,25 @@ import { WHISK_FLIP_DEG } from './MatchaMaking';
 // finished drink can be carried on to the Serving screen -- see
 // SEND_TO_FINAL_ZONE/canSendToFinal below -- same "arrives here, becomes
 // interactive, carries on to the next screen" shape the bowl and cup
-// themselves already go through one screen earlier). Same size it
-// displayed at over there (TABLE_SIZE, imported directly rather than
-// guessing a scaled-down copy), centered in the middle of the frame --
-// left/top are just 50% minus half the box's own width/height, which works
-// out independently on each axis even though the container itself isn't
-// square (percentages here are already relative to the container's own
-// width/height respectively, same as every other box in this file).
+// themselves already go through one screen earlier). Centered in the
+// middle of the frame -- left/top are just 50% minus half the box's own
+// width/height, which works out independently on each axis even though the
+// container itself isn't square (percentages here are already relative to
+// the container's own width/height respectively, same as every other box
+// in this file).
+//
+// This module-level pair (TABLE_SIZE-based, i.e. the GLASS cup's own size)
+// is only actually used as an approximation for the syrup/foam/powder
+// items' own hover-while-pouring position and isOverIncomingCup's hit-test
+// box below -- both of those are already loose/eyeballed (no measured
+// spout position, a few percentage points of margin) regardless of which
+// cup is in play, so aiming/dropping against the glass cup's own box is
+// close enough even when the actual incoming cup is the (narrower)
+// plastic one. The cup that's actually RENDERED, and the box its own milk/
+// matcha fills are computed against, use the real per-cup-type size
+// instead -- see incomingDrinkSize/incomingDrinkHomeSpot in the component
+// below, which read incomingDrink.cupType (set by Milk Selection's own
+// beginSendDrink) via the CUP_TYPES map imported from MilkSelection.js.
 const INCOMING_DRINK_SIZE = TABLE_SIZE;
 const INCOMING_DRINK_SPOT = {
   left: 50 - INCOMING_DRINK_SIZE.width / 2,
@@ -505,7 +517,7 @@ const ToppingsStation = ({
   // MatchaMaking's bowlStage/beginBowlCarry) -- see SEND_TO_FINAL_ZONE above
   // for the zone box, and canSendToFinal/beginSendToFinal further down (they
   // have to come after pourStage/foamPourStage/powderPourStage exist).
-  //   'idle'      -- normal, drink sits at INCOMING_DRINK_SPOT, freely
+  //   'idle'      -- normal, drink sits at incomingDrinkHomeSpot, freely
   //                  draggable.
   //   'carrying'  -- confirmed (dropped on the zone, or Enter/Space once
   //                  canSendToFinal) -- gliding to the zone's own center.
@@ -519,18 +531,36 @@ const ToppingsStation = ({
   const drinkDragStartRef = useRef({ pointerX: 0, pointerY: 0, left: 0, top: 0 });
   const [drinkSendStage, setDrinkSendStage] = useState('idle');
   const [drinkSendPos, setDrinkSendPos] = useState(null);
+
+  // Which cup type this actually is (Milk Selection's own beginSendDrink
+  // sets cupType on the object it hands off) -- defaults to 'glass' if
+  // it's ever missing (incomingDrink is null before the player's first
+  // order this round, and defensively in case an older/partial incomingDrink
+  // shape ever shows up without it). CUP_TYPES (imported from
+  // MilkSelection.js) is the same lookup that screen's own cup rendering
+  // uses, so this cup renders with the exact same art/size it had there.
+  const incomingCupType = incomingDrink?.cupType ?? 'glass';
+  const incomingDrinkSize = CUP_TYPES[incomingCupType].tableSize;
+  // Same centering formula INCOMING_DRINK_SPOT above uses, just against
+  // this particular cup's own (possibly narrower, if plastic) size instead
+  // of always TABLE_SIZE, so it's still centered in the frame regardless of
+  // which cup type arrived.
+  const incomingDrinkHomeSpot = {
+    left: 50 - incomingDrinkSize.width / 2,
+    top: 50 - incomingDrinkSize.height / 2,
+  };
   // The drink's own live render position. Unlike the individual toppings
   // above (which only ever move a bottle/tin around, never the drink
   // itself), every fill/fleck layered onto this drink is computed off this
   // one shared position (see incomingMilkBox just below, and everything
-  // derived from it) rather than off the fixed INCOMING_DRINK_SPOT constant
+  // derived from it) rather than off the fixed incomingDrinkHomeSpot
   // directly -- so the whole assembled drink (glass, milk, matcha, foam,
   // foam cap, syrup, powder flecks, all of it) visually travels together
   // as one piece while it's being dragged or carried to the zone, rather
   // than only the glass image moving while its contents stay behind at the
   // old spot (which is what would happen if these boxes stayed anchored to
-  // the INCOMING_DRINK_SPOT constant during a drag/carry).
-  const incomingDrinkRenderPos = drinkDragPos || drinkSendPos || INCOMING_DRINK_SPOT;
+  // the home spot constant during a drag/carry).
+  const incomingDrinkRenderPos = drinkDragPos || drinkSendPos || incomingDrinkHomeSpot;
 
   // ---- Carried-over cup from Milk Selection (see incomingDrink above) ----
   // The finished cup (glass + milk/water fill + optional matcha fill),
@@ -542,12 +572,14 @@ const ToppingsStation = ({
   // rather than re-deriving the glass's own taper shape a third time.
   // getMilkBoxFor/getMatchaBoxFor (imported from MilkSelection.js) are the
   // same box math that screen uses for its own cup, just computed against
-  // this screen's own incomingDrinkRenderPos/INCOMING_DRINK_SIZE instead of
+  // this screen's own incomingDrinkRenderPos/incomingDrinkSize instead of
   // CUP_SPOTS.table/TABLE_SIZE -- incomingDrinkRenderPos (not the fixed
-  // INCOMING_DRINK_SPOT) so this box, and everything derived from it below,
-  // moves along with the glass while it's being dragged/carried to the
-  // Serving zone (see the big comment on incomingDrinkRenderPos above).
-  const incomingMilkBox = incomingDrink?.milk ? getMilkBoxFor(incomingDrinkRenderPos, INCOMING_DRINK_SIZE) : null;
+  // home spot) so this box, and everything derived from it below, moves
+  // along with the cup while it's being dragged/carried to the Serving
+  // zone (see the big comment on incomingDrinkRenderPos above), and
+  // incomingDrinkSize (not always TABLE_SIZE) so it fits whichever cup
+  // type actually arrived, glass or plastic.
+  const incomingMilkBox = incomingDrink?.milk ? getMilkBoxFor(incomingDrinkRenderPos, incomingDrinkSize) : null;
   const incomingMatchaBox = incomingDrink?.matcha && incomingMilkBox ? getMatchaBoxFor(incomingMilkBox) : null;
   const incomingSyrupBox = incomingMilkBox ? getSyrupBoxFor(incomingMilkBox) : null;
   // Foam always lands on whatever the drink's current top layer is -- the
@@ -1033,7 +1065,7 @@ const ToppingsStation = ({
   // same shape as Milk Selection's own handleCupPointerDown/Move/Up/
   // KeyDown + beginSendDrink, just without that screen's extra shelf<->
   // table toggle (the drink here only ever has the one resting spot,
-  // INCOMING_DRINK_SPOT, so a drop that doesn't land on the zone always
+  // incomingDrinkHomeSpot, so a drop that doesn't land on the zone always
   // just snaps back there instead of choosing between two spots).
   const beginSendToFinal = () => {
     if (!canSendToFinal) return;
@@ -1049,10 +1081,15 @@ const ToppingsStation = ({
       foam: cupFoam,
       syrup: cupSyrup,
       powder: cupPowder,
+      // Forwarded on so FinalCombination.js renders the same cup art/size
+      // this screen (and Milk Selection before it) actually used -- same
+      // "known simplification, now fixed" reasoning as this screen's own
+      // incomingCupType above.
+      cupType: incomingCupType,
     });
     setDrinkSendPos({
-      left: SEND_TO_FINAL_ZONE.left + SEND_TO_FINAL_ZONE.width / 2 - INCOMING_DRINK_SIZE.width / 2,
-      top: SEND_TO_FINAL_ZONE.top + SEND_TO_FINAL_ZONE.height / 2 - INCOMING_DRINK_SIZE.height / 2,
+      left: SEND_TO_FINAL_ZONE.left + SEND_TO_FINAL_ZONE.width / 2 - incomingDrinkSize.width / 2,
+      top: SEND_TO_FINAL_ZONE.top + SEND_TO_FINAL_ZONE.height / 2 - incomingDrinkSize.height / 2,
     });
     setDrinkSendStage('carrying');
   };
@@ -1075,10 +1112,10 @@ const ToppingsStation = ({
     drinkDragStartRef.current = {
       pointerX: e.clientX,
       pointerY: e.clientY,
-      left: INCOMING_DRINK_SPOT.left,
-      top: INCOMING_DRINK_SPOT.top,
+      left: incomingDrinkHomeSpot.left,
+      top: incomingDrinkHomeSpot.top,
     };
-    setDrinkDragPos({ left: INCOMING_DRINK_SPOT.left, top: INCOMING_DRINK_SPOT.top });
+    setDrinkDragPos({ left: incomingDrinkHomeSpot.left, top: incomingDrinkHomeSpot.top });
   };
 
   const handleDrinkPointerMove = (e) => {
@@ -1103,7 +1140,7 @@ const ToppingsStation = ({
     }
     // No second resting spot to choose between here (unlike Milk
     // Selection's shelf/table cup) -- any drop that isn't the Serving zone
-    // just snaps back to INCOMING_DRINK_SPOT, the only spot there is to
+    // just snaps back to incomingDrinkHomeSpot, the only spot there is to
     // land on.
     setDrinkDragPos(null);
   };
@@ -1343,19 +1380,24 @@ const ToppingsStation = ({
             on. Every fill/fleck below is positioned off incomingMilkBox/
             incomingMatchaBox/etc., which are themselves computed off
             incomingDrinkRenderPos (see the big comment on that above) --
-            not the fixed INCOMING_DRINK_SPOT -- so the whole assembled
-            drink glides/vanishes together as one piece instead of just the
-            glass image moving while its contents stay behind. Stops
-            rendering entirely once drinkSendStage reaches 'sent' (same
-            "gone once sent" treatment the bowl/cup get). While 'carrying'/
-            'vanishing' the glass is still rendered but pointer-events: none
-            (inline) so it can't be grabbed mid-transit, and everything
-            here picks up .bowl-vanishing (reused from MatchaMaking.css,
-            already loaded globally) once 'vanishing' starts. */}
+            not the fixed home spot -- so the whole assembled drink
+            glides/vanishes together as one piece instead of just the cup
+            image moving while its contents stay behind. src/width/height
+            come from CUP_TYPES[incomingCupType] (see the big comment on
+            incomingCupType above) rather than always GlassCup.png/
+            INCOMING_DRINK_SIZE, so this actually renders the same cup type
+            (glass or plastic) the player used on Milk Selection instead of
+            always showing the glass one. Stops rendering entirely once
+            drinkSendStage reaches 'sent' (same "gone once sent" treatment
+            the bowl/cup get). While 'carrying'/'vanishing' the cup is still
+            rendered but pointer-events: none (inline) so it can't be
+            grabbed mid-transit, and everything here picks up
+            .bowl-vanishing (reused from MatchaMaking.css, already loaded
+            globally) once 'vanishing' starts. */}
         {incomingDrink && drinkSendStage !== 'sent' && (
           <>
             <img
-              src="./GlassCup.png"
+              src={CUP_TYPES[incomingCupType].src}
               alt={
                 canSendToFinal
                   ? 'Finished drink. Drag onto the Send to Serving zone to send it out, or select it and press Enter.'
@@ -1370,8 +1412,8 @@ const ToppingsStation = ({
               style={{
                 left: `${incomingDrinkRenderPos.left}%`,
                 top: `${incomingDrinkRenderPos.top}%`,
-                width: `${INCOMING_DRINK_SIZE.width}%`,
-                height: `${INCOMING_DRINK_SIZE.height}%`,
+                width: `${incomingDrinkSize.width}%`,
+                height: `${incomingDrinkSize.height}%`,
                 ...(drinkSendStage !== 'idle' ? { pointerEvents: 'none' } : {}),
               }}
               onPointerDown={handleDrinkPointerDown}

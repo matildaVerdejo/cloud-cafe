@@ -41,6 +41,103 @@ const SHELF_SIZE = { width: 6.47, height: 12.39 };
 // size rather than guessing a scaled-down one.
 export const TABLE_SIZE = { width: 19.40, height: 37.16 }; // same aspect ratio, 3x
 
+// ---- Plastic cup: second cup option in the cubby -------------------------
+// A second slot in the same shelf cubby as the glass cup, with the exact
+// same shelf<->table drag/Enter-toggle, milk/matcha pour targeting, ice
+// placement, and send-to-Toppings mechanics -- see activeCup in the
+// component below for how one shared set of cup logic (unchanged from
+// before this was added) now just applies to whichever cup type is
+// currently "in play" instead of always the glass one.
+//
+// PlasticCup.png was re-saved pre-cropped to its own alpha bounding box
+// (292x369), same "trimmed tight to the actual drawing, like GlassCup.png
+// already is" treatment -- the original file the user added had roughly
+// 58% of its width as transparent side padding (the cup art centered in a
+// much wider canvas), which would have both squished the cup (its aspect
+// ratio wouldn't have matched the box) and made it read much smaller than
+// the glass cup if used as-is, since most of that box would have been
+// invisible padding rather than actual cup.
+//
+// Sized to match the glass cup's own HEIGHT at each spot (the more
+// noticeable size cue when the two sit side by side on the shelf), with
+// width following from the plastic cup's own (narrower) canvas aspect
+// ratio instead of being forced to match glass's -- same "match height,
+// derive width from the source art's own proportions" formula the milk
+// bottles use (BOTTLE_WIDTH above), so the cup isn't stretched or squished
+// to fit glass's own width.
+const PLASTIC_CUP_CANVAS_ASPECT = 292 / 369; // width/height of the (cropped) PlasticCup.png
+const PLASTIC_SHELF_SIZE = {
+  width: SHELF_SIZE.height * PLASTIC_CUP_CANVAS_ASPECT * (9 / 16),
+  height: SHELF_SIZE.height,
+};
+const PLASTIC_TABLE_SIZE = {
+  width: TABLE_SIZE.height * PLASTIC_CUP_CANVAS_ASPECT * (9 / 16),
+  height: TABLE_SIZE.height,
+};
+
+// Slot 2 of the cubby -- the cabinet's middle compartment in
+// MilkMixingStation.png (the glass cup's own shelf spot sits in slot 1).
+// Measured off that art's own divider-line pixel positions the same way
+// BOTTLE_KEYS' leftPad/rightPad above were measured off each bottle PNG,
+// then centered the plastic cup's own (narrower) shelf width on that
+// slot's center. Same top as the glass cup's own shelf spot (both sit on
+// the same shelf row). Table spot is centered on the exact same table
+// centerline CUP_SPOTS.table uses, just recentered for the plastic cup's
+// own narrower width -- and needs no separate top adjustment, since
+// PLASTIC_TABLE_SIZE shares the glass table box's own height, so both
+// cups' bottoms already land on the same baseline.
+const PLASTIC_CUP_SPOTS = {
+  shelf: { left: 80.24, top: CUP_SPOTS.shelf.top },
+  table: {
+    left: CUP_SPOTS.table.left + (TABLE_SIZE.width - PLASTIC_TABLE_SIZE.width) / 2,
+    top: CUP_SPOTS.table.top,
+  },
+};
+
+// One entry per cup type -- both sit in the cubby, but only one is ever
+// "the" cup actually in play (see activeCup in the component below).
+// Bundling each type's own art/positions/sizes here is what lets the
+// shelf<->table drag, milk/matcha pour targeting, ice placement, and
+// send-to-Toppings logic stay written once, generically, keyed off
+// whichever type is currently active, rather than duplicated per cup.
+// Exported so ToppingsStation.js/FinalCombination.js can look up the right
+// cup art/size for whichever type was actually used here (see cupType on
+// the object beginSendDrink below hands off to onSendToToppings), instead
+// of always assuming glass for the carried-over cup on those screens.
+export const CUP_TYPES = {
+  glass: {
+    src: './GlassCup.png',
+    alt: 'Glass cup',
+    shelfSpot: CUP_SPOTS.shelf,
+    shelfSize: SHELF_SIZE,
+    tableSpot: CUP_SPOTS.table,
+    tableSize: TABLE_SIZE,
+  },
+  plastic: {
+    src: './PlasticCup.png',
+    alt: 'Plastic cup',
+    shelfSpot: PLASTIC_CUP_SPOTS.shelf,
+    shelfSize: PLASTIC_SHELF_SIZE,
+    tableSpot: PLASTIC_CUP_SPOTS.table,
+    tableSize: PLASTIC_TABLE_SIZE,
+  },
+};
+
+// Display name per cup type, shown as a label above whichever cup currently
+// has focus (see focusedCupType/.cup-label below) -- same "selected" ==
+// "has the focus halo" idea, same dark-brown/no-glow-of-its-own look, as
+// MatchaMaking.js's own TIN_LABELS/.matcha-tin-label and this file's own
+// BOTTLE_LABELS/.milk-bottle-label.
+const CUP_LABELS = {
+  glass: 'glass cup',
+  plastic: 'plastic cup',
+};
+
+// Gap between a cup's own top edge and its label above it -- same
+// "translate(-50%, -100%) lifts the label fully above this anchor line"
+// convention as BOTTLE_LABEL_GAP.
+const CUP_LABEL_GAP = 4;
+
 // The four milk/water bottles, standing in a tight row on the counter to
 // the right of the sink, roughly where they used to be baked directly into
 // MilkMixingStation.png before that art was swapped for a bottle-free
@@ -293,17 +390,21 @@ const ICE_CUP_SLOT_FRACTIONS = [
   { x: 0.70, y: 0.756 },
 ];
 
-// Takes the cup's own *current* position (cupRenderPos, passed in by both
-// call sites below) rather than hardcoding CUP_SPOTS.table like this used
-// to -- same fix as getMilkBoxFor/getMatchaBoxFor above, needed for the same
-// reason: placed ice cubes were staying behind on the table once the cup
-// was dragged or carried off to the Send Drink zone instead of riding along
-// with it. Size still always uses TABLE_SIZE since ice can only ever be
-// placed while cupSpot === 'table' in the first place (see isOverCup).
-function getIceCupSlotPos(index, cupPos) {
+// Takes the cup's own *current* position AND size (cupPos/cupSize, passed
+// in by both call sites below) rather than hardcoding CUP_SPOTS.table/
+// TABLE_SIZE like this used to -- same fix as getMilkBoxFor/getMatchaBoxFor
+// above, needed for the same reason: placed ice cubes were staying behind
+// on the table once the cup was dragged or carried off to the Send Drink
+// zone instead of riding along with it. cupSize is now also required
+// (rather than always TABLE_SIZE) so this places cubes correctly against
+// whichever cup type is active -- see CUP_TYPES/activeCup in the component.
+// ICE_CUP_SLOT_FRACTIONS themselves were only ever tuned against
+// GlassCup.png's own taper, so this is a reasonable approximation rather
+// than a pixel-perfect trace when the plastic cup is the active one.
+function getIceCupSlotPos(index, cupPos, cupSize) {
   const frac = ICE_CUP_SLOT_FRACTIONS[index % ICE_CUP_SLOT_FRACTIONS.length];
-  const centerX = cupPos.left + frac.x * TABLE_SIZE.width;
-  const centerY = cupPos.top + frac.y * TABLE_SIZE.height;
+  const centerX = cupPos.left + frac.x * cupSize.width;
+  const centerY = cupPos.top + frac.y * cupSize.height;
   return {
     left: centerX - ICE_CUP_SIZE.width / 2,
     top: centerY - ICE_CUP_SIZE.height / 2,
@@ -312,16 +413,18 @@ function getIceCupSlotPos(index, cupPos) {
 
 // Generous hit-test box for "is this drop point inside the cup" -- the cup
 // itself only counts as a valid target while it's on the table (there's
-// nothing to drop ice into while it's still up on the shelf).
-function isOverCup(leftPct, topPct, cupSpot) {
+// nothing to drop ice into while it's still up on the shelf). tableSpot/
+// tableSize are now passed in (rather than always CUP_SPOTS.table/
+// TABLE_SIZE) so this tests against whichever cup type is currently active
+// -- see CUP_TYPES/activeCup in the component.
+function isOverCup(leftPct, topPct, cupSpot, tableSpot, tableSize) {
   if (cupSpot !== 'table') return false;
-  const cup = CUP_SPOTS.table;
   const margin = 3; // percentage points of extra forgiveness on each side
   return (
-    leftPct >= cup.left - margin &&
-    leftPct <= cup.left + TABLE_SIZE.width + margin &&
-    topPct >= cup.top - margin &&
-    topPct <= cup.top + TABLE_SIZE.height + margin
+    leftPct >= tableSpot.left - margin &&
+    leftPct <= tableSpot.left + tableSize.width + margin &&
+    topPct >= tableSpot.top - margin &&
+    topPct <= tableSpot.top + tableSize.height + margin
   );
 }
 
@@ -411,10 +514,30 @@ const MilkSelection = ({ activeStep, customerNumber, onNavigate, onAdvance, orde
   const incomingRimWidth = BOWL_INNER_RIM_WIDTH_FRAC * incomingBowlWidth;
   const incomingRimHeight = BOWL_INNER_RIM_HEIGHT_FRAC * incomingBowlHeight;
 
-  // ---- Glass cup: shelf <-> table --------------------------------------
+  // ---- Cup: shelf <-> table, glass or plastic ----------------------------
+  // Two cup graphics now sit in the cubby (see CUP_TYPES/PLASTIC_CUP_SPOTS
+  // above), but only one is ever "the" cup actually in play at a time --
+  // activeCup is which one. Everything below (cupSpot, dragging, milk/
+  // matcha, ice, sending) is the exact same single set of cup mechanics
+  // this screen always had; it just now looks up CUP_TYPES[activeCup] for
+  // positions/sizes instead of the old glass-only constants directly.
+  // Whichever cup ISN'T active renders separately (see the render loop
+  // below) as a plain "parked at its own shelf spot" item -- grabbing or
+  // Enter-confirming it is what makes IT the active one (see
+  // handleCupSwitchPointerDown/handleCupSwitchKeyDown further down).
+  const [activeCup, setActiveCup] = useState('glass');
   const [cupSpot, setCupSpot] = useState('shelf');
   const [cupDragPos, setCupDragPos] = useState(null);
   const cupDragStartRef = useRef({ pointerX: 0, pointerY: 0, cupLeft: 0, cupTop: 0 });
+  // Which cup type (if any) currently has the white focus halo -- drives
+  // the name label above it (CUP_LABELS/.cup-label), same focus-not-active
+  // distinction as focusedBottle/focusedTopping elsewhere: this is about
+  // which cup the player's D-pad/pointer is currently on, independent of
+  // activeCup (which one is actually in play). The onBlur guard (only
+  // clear if this cup type is still the one recorded) avoids a stale clear
+  // if focus has already moved to the other cup by the time this one's
+  // blur fires.
+  const [focusedCupType, setFocusedCupType] = useState(null);
 
   // ---- Sending the finished cup on to Toppings (see SEND_DRINK_ZONE
   // above) -- same "carry to a corner zone, then shrink/fade away" shape as
@@ -449,7 +572,7 @@ const MilkSelection = ({ activeStep, customerNumber, onNavigate, onAdvance, orde
     // the JSX below, is the other half of this -- this guard is a backstop
     // in case something still calls the handler directly).
     if (cupSendStage !== 'idle') return;
-    const base = CUP_SPOTS[cupSpot];
+    const base = cupSpot === 'shelf' ? CUP_TYPES[activeCup].shelfSpot : CUP_TYPES[activeCup].tableSpot;
     e.currentTarget.setPointerCapture(e.pointerId);
     cupDragStartRef.current = {
       pointerX: e.clientX,
@@ -484,7 +607,7 @@ const MilkSelection = ({ activeStep, customerNumber, onNavigate, onAdvance, orde
       beginSendDrink();
       return;
     }
-    const midpoint = (CUP_SPOTS.shelf.top + CUP_SPOTS.table.top) / 2;
+    const midpoint = (CUP_TYPES[activeCup].shelfSpot.top + CUP_TYPES[activeCup].tableSpot.top) / 2;
     setCupSpot(cupDragPos.top > midpoint ? 'table' : 'shelf');
     setCupDragPos(null);
   };
@@ -506,14 +629,64 @@ const MilkSelection = ({ activeStep, customerNumber, onNavigate, onAdvance, orde
     setCupSpot((prev) => (prev === 'shelf' ? 'table' : 'shelf'));
   };
 
-  const cupRenderPos = cupDragPos || cupSendPos || CUP_SPOTS[cupSpot];
+  // ---- Switching which cup type is active --------------------------------
+  // Grabbing (or Enter-confirming) whichever cup ISN'T currently active is
+  // what makes IT the active one instead -- see the big comment above. Since
+  // there's only ever one drink being made at a time, switching always
+  // resets whatever's currently in progress (fresh milk/matcha/ice, cup back
+  // at its own shelf spot) rather than trying to preserve it -- the cup that
+  // was active until just now just becomes the new inactive one, parked at
+  // its own shelf spot (see the render loop below).
+  const resetCupContents = () => {
+    setCupMilk(null);
+    setCupMatcha(null);
+    setIcePlaced(new Array(ICE_BOX_SPOTS.length).fill(false));
+    setCupSendStage('idle');
+    setCupSendPos(null);
+    setCupDragPos(null);
+  };
+
+  const handleCupSwitchPointerDown = (type) => (e) => {
+    // Same "can't touch anything mid-carry/vanishing" backstop as
+    // handleCupPointerDown -- switching away from the active cup while it's
+    // mid-send would be a confusing thing to allow.
+    if (cupSendStage !== 'idle') return;
+    resetCupContents();
+    setActiveCup(type);
+    setCupSpot('shelf');
+    const base = CUP_TYPES[type].shelfSpot;
+    e.currentTarget.setPointerCapture(e.pointerId);
+    cupDragStartRef.current = {
+      pointerX: e.clientX,
+      pointerY: e.clientY,
+      cupLeft: base.left,
+      cupTop: base.top,
+    };
+    setCupDragPos({ left: base.left, top: base.top });
+  };
+
+  // D-pad/keyboard equivalent -- switches to this cup and moves it straight
+  // to the table, same "Enter is the select+move-to-table gesture" meaning
+  // handleCupKeyDown already gives Enter on a shelved cup.
+  const handleCupSwitchKeyDown = (type) => (e) => {
+    const action = getActionFromKeyEvent(e);
+    if (action !== 'Enter') return;
+    if (shouldDebounceEnter(e)) return;
+    if (cupSendStage !== 'idle') return;
+    e.preventDefault();
+    resetCupContents();
+    setActiveCup(type);
+    setCupSpot('table');
+  };
+
+  const cupRenderPos = cupDragPos || cupSendPos || (cupSpot === 'shelf' ? CUP_TYPES[activeCup].shelfSpot : CUP_TYPES[activeCup].tableSpot);
   // Sized by the cup's current spot the whole time -- cupSpot only flips on
   // drop (see handleCupPointerUp/handleCupKeyDown), so grabbing it off the
-  // table keeps it at TABLE_SIZE for the full drag instead of snapping down
-  // to SHELF_SIZE the instant you pick it up (which used to yank it out
-  // from under the cursor and made it impossible to drag back to the
+  // table keeps it at the table size for the full drag instead of snapping
+  // down to the shelf size the instant you pick it up (which used to yank
+  // it out from under the cursor and made it impossible to drag back to the
   // shelf). It shrinks/grows only at the moment cupSpot actually changes.
-  const cupRenderSize = cupSpot === 'table' ? TABLE_SIZE : SHELF_SIZE;
+  const cupRenderSize = cupSpot === 'table' ? CUP_TYPES[activeCup].tableSize : CUP_TYPES[activeCup].shelfSize;
   // Box the milk fill renders into once poured -- see getMilkBoxFor/
   // CUP_MILK_BOX_FRAC above. Recomputed off the cup's own *current*
   // cupRenderPos/cupRenderSize every render (same as bowlPowderLeft/Top in
@@ -538,7 +711,7 @@ const MilkSelection = ({ activeStep, customerNumber, onNavigate, onAdvance, orde
     // if it hasn't been placed yet, or its cup slot if it has, so grabbing
     // a placed cube picks it up from the cup instead of jumping back to
     // the box.
-    const base = icePlaced[index] ? getIceCupSlotPos(index, cupRenderPos) : ICE_BOX_SPOTS[index];
+    const base = icePlaced[index] ? getIceCupSlotPos(index, cupRenderPos, cupRenderSize) : ICE_BOX_SPOTS[index];
     e.currentTarget.setPointerCapture(e.pointerId);
     iceDragStartRef.current = {
       pointerX: e.clientX,
@@ -573,7 +746,7 @@ const MilkSelection = ({ activeStep, customerNumber, onNavigate, onAdvance, orde
         next[iceDrag.index] = false;
         return next;
       });
-    } else if (isOverCup(iceDrag.left, iceDrag.top, cupSpot)) {
+    } else if (isOverCup(iceDrag.left, iceDrag.top, cupSpot, CUP_TYPES[activeCup].tableSpot, CUP_TYPES[activeCup].tableSize)) {
       setIcePlaced((prev) => {
         const next = [...prev];
         next[iceDrag.index] = true;
@@ -718,15 +891,21 @@ const MilkSelection = ({ activeStep, customerNumber, onNavigate, onAdvance, orde
       : MILK_STREAM_COLORS[pouringKey] ?? MILK_STREAM_COLORS.oat;
 
   const beginPour = (key) => {
+    // Hovers over whichever cup is actually active's own table spot/size
+    // (CUP_TYPES[activeCup]) rather than always the glass cup's -- both
+    // milk and matcha need to land in whichever cup the player is actually
+    // using.
+    const activeTableSpot = CUP_TYPES[activeCup].tableSpot;
+    const activeTableSize = CUP_TYPES[activeCup].tableSize;
     if (key === 'bowl') {
       if (!canPourMatcha) return;
-      setBowlPos(getBottleHoverPos(CUP_SPOTS.table, TABLE_SIZE, { width: incomingBowlWidth, height: incomingBowlHeight }));
+      setBowlPos(getBottleHoverPos(activeTableSpot, activeTableSize, { width: incomingBowlWidth, height: incomingBowlHeight }));
     } else {
       if (!canPourMilk) return;
       const item = BOTTLE_ITEMS.find((b) => b.key === key);
       setBottlePositions((prev) => ({
         ...prev,
-        [key]: getBottleHoverPos(CUP_SPOTS.table, TABLE_SIZE, item),
+        [key]: getBottleHoverPos(activeTableSpot, activeTableSize, item),
       }));
     }
     setPouringKey(key);
@@ -768,10 +947,17 @@ const MilkSelection = ({ activeStep, customerNumber, onNavigate, onAdvance, orde
   // MatchaMaking's own beginBowlCarry.
   const beginSendDrink = () => {
     if (!canSendDrink) return;
-    onSendToToppings?.({ milk: cupMilk, matcha: cupMatcha });
+    // cupType is included mainly for forward-compatibility (e.g. a future
+    // Toppings/Serving screen that renders the actual cup type carried
+    // over) -- ToppingsStation.js's own carried-over cup rendering doesn't
+    // read it yet and still always shows the glass cup art, a known,
+    // deliberately out-of-scope-for-now simplification (this screen's own
+    // shelf<->table/pour/send mechanics are what needed to work correctly
+    // for both cup types, not what the next screen visually shows).
+    onSendToToppings?.({ milk: cupMilk, matcha: cupMatcha, cupType: activeCup });
     setCupSendPos({
-      left: SEND_DRINK_ZONE.left + SEND_DRINK_ZONE.width / 2 - TABLE_SIZE.width / 2,
-      top: SEND_DRINK_ZONE.top + SEND_DRINK_ZONE.height / 2 - TABLE_SIZE.height / 2,
+      left: SEND_DRINK_ZONE.left + SEND_DRINK_ZONE.width / 2 - CUP_TYPES[activeCup].tableSize.width / 2,
+      top: SEND_DRINK_ZONE.top + SEND_DRINK_ZONE.height / 2 - CUP_TYPES[activeCup].tableSize.height / 2,
     });
     setCupSendStage('carrying');
   };
@@ -821,7 +1007,7 @@ const MilkSelection = ({ activeStep, customerNumber, onNavigate, onAdvance, orde
     // instead of the ordinary placement below -- same "special-cased drop
     // target" pattern as MatchaMaking's kettle-onto-bowl/whisk-onto-bowl
     // branches.
-    if (canPourMilk && isOverCup(bottleDrag.left, bottleDrag.top, cupSpot)) {
+    if (canPourMilk && isOverCup(bottleDrag.left, bottleDrag.top, cupSpot, CUP_TYPES[activeCup].tableSpot, CUP_TYPES[activeCup].tableSize)) {
       setBottleDrag(null);
       beginPour(item.key);
       return;
@@ -891,7 +1077,7 @@ const MilkSelection = ({ activeStep, customerNumber, onNavigate, onAdvance, orde
   const handleBowlPointerUp = (e) => {
     if (!bowlDrag) return;
     e.currentTarget.releasePointerCapture?.(e.pointerId);
-    if (canPourMatcha && isOverCup(bowlDrag.left, bowlDrag.top, cupSpot)) {
+    if (canPourMatcha && isOverCup(bowlDrag.left, bowlDrag.top, cupSpot, CUP_TYPES[activeCup].tableSpot, CUP_TYPES[activeCup].tableSize)) {
       setBowlDrag(null);
       beginPour('bowl');
       return;
@@ -977,52 +1163,109 @@ const MilkSelection = ({ activeStep, customerNumber, onNavigate, onAdvance, orde
             />
           </>
         )}
-        {/* Single flat GlassCup.png in both spots -- the back/front
-            transparent-sandwich experiment (GlassCupBack.png/
-            GlassCupFront.png) is parked for now in favor of a cheaper trick:
-            the milk fill (right below) paints UNDERNEATH this image in DOM
-            order and is kept fairly translucent, so the glass's own
-            outline/highlight linework still reads on top and the liquid
-            looks like it's sitting behind/inside the glass rather than
-            painted over it, without needing real alpha-channel art.
-            Stops rendering entirely once cupSendStage reaches 'sent' (see
-            the big comment on that state above) -- same "gone once sent"
-            treatment MatchaMaking's own bowl gets. While 'carrying'/
-            'vanishing' it's still rendered but pointer-events: none (inline
-            -- there's no .glass-cup.settling variant, so this is simpler
-            than adding one) so it can't be grabbed mid-transit, and picks
-            up .bowl-vanishing (reused from MatchaMaking.css, already
-            loaded globally) for the actual shrink/fade once 'vanishing'
-            starts. */}
-        {cupSendStage !== 'sent' && (
-          <img
-            src="./GlassCup.png"
-            alt={
-              cupSpot === 'shelf'
-                ? 'Glass cup. Drag from the shelf to the table, or select it and press Enter.'
-                : canSendDrink
-                ? 'Glass cup with the finished drink. Drag onto the Send Drink zone to send it to Toppings, or select it and press Enter.'
-                : 'Glass cup. Drag it back up to the shelf, or select it and press Enter.'
-            }
-            className={`glass-cup${cupDragPos ? ' dragging' : ''}${
-              cupSendStage === 'vanishing' ? ' bowl-vanishing' : ''
-            }`}
-            data-focusable
-            tabIndex={0}
-            draggable={false}
-            style={{
-              left: `${cupRenderPos.left}%`,
-              top: `${cupRenderPos.top}%`,
-              width: `${cupRenderSize.width}%`,
-              height: `${cupRenderSize.height}%`,
-              ...(cupSendStage !== 'idle' ? { pointerEvents: 'none' } : {}),
-            }}
-            onPointerDown={handleCupPointerDown}
-            onPointerMove={handleCupPointerMove}
-            onPointerUp={handleCupPointerUp}
-            onKeyDown={handleCupKeyDown}
-          />
-        )}
+        {/* Two cup graphics -- glass (slot 1) and plastic (slot 2) of the
+            same shelf cubby, see CUP_TYPES above -- but only one <img> per
+            type ever renders, and only one of them is ever the fully
+            interactive "cup in play" at a time (isActive, from activeCup).
+            Keying on the cup type itself (key={type}), not on active/
+            inactive role, means grabbing the inactive one and switching to
+            it reuses the SAME DOM node across that switch (its props just
+            change), rather than unmounting one <img> and mounting another
+            -- which matters for keyboard/D-pad users specifically: without
+            that, focus would drop back to document.body the instant a
+            keyboard-driven switch (handleCupSwitchKeyDown) happened,
+            same "why key matters for focus" reasoning documented at
+            length in this project's own key-removal fix history.
+
+            The ACTIVE cup keeps every behavior this single cup always had
+            (the back/front transparent-sandwich experiment -- GlassCupBack.
+            png/GlassCupFront.png -- is still parked in favor of a cheaper
+            trick: the milk fill, rendered right below, paints UNDERNEATH
+            this image in DOM order and is kept fairly translucent, so the
+            cup's own outline/highlight linework still reads on top and the
+            liquid looks like it's sitting behind/inside the cup rather than
+            painted over it, without needing real alpha-channel art; stops
+            rendering entirely once cupSendStage reaches 'sent', same
+            "gone once sent" treatment MatchaMaking's own bowl gets; while
+            'carrying'/'vanishing' it's still rendered but pointer-events:
+            none -- inline, there's no .glass-cup.settling variant -- so it
+            can't be grabbed mid-transit, and picks up .bowl-vanishing,
+            reused from MatchaMaking.css already loaded globally, for the
+            actual shrink/fade once 'vanishing' starts).
+
+            The INACTIVE cup just sits, always fully interactive, at its
+            own shelf spot -- grabbing/dragging or Enter-confirming it runs
+            handleCupSwitchPointerDown/handleCupSwitchKeyDown instead of the
+            normal handleCupPointerDown/handleCupKeyDown, which is what
+            actually performs the switch (see the big comment on activeCup
+            above). */}
+        {['glass', 'plastic'].map((type) => {
+          const cfg = CUP_TYPES[type];
+          const isActive = activeCup === type;
+          if (isActive && cupSendStage === 'sent') return null;
+          const pos = isActive ? cupRenderPos : cfg.shelfSpot;
+          const size = isActive ? cupRenderSize : cfg.shelfSize;
+          const alt = !isActive
+            ? `${cfg.alt}. Select it and press Enter, or drag it to the table, to use this cup instead.`
+            : cupSpot === 'shelf'
+            ? `${cfg.alt}. Drag from the shelf to the table, or select it and press Enter.`
+            : canSendDrink
+            ? `${cfg.alt} with the finished drink. Drag onto the Send Drink zone to send it to Toppings, or select it and press Enter.`
+            : `${cfg.alt}. Drag it back up to the shelf, or select it and press Enter.`;
+          return (
+            <img
+              key={type}
+              src={cfg.src}
+              alt={alt}
+              className={`glass-cup${isActive && cupDragPos ? ' dragging' : ''}${
+                isActive && cupSendStage === 'vanishing' ? ' bowl-vanishing' : ''
+              }`}
+              data-focusable
+              tabIndex={0}
+              draggable={false}
+              style={{
+                left: `${pos.left}%`,
+                top: `${pos.top}%`,
+                width: `${size.width}%`,
+                height: `${size.height}%`,
+                ...(isActive && cupSendStage !== 'idle' ? { pointerEvents: 'none' } : {}),
+              }}
+              onPointerDown={isActive ? handleCupPointerDown : handleCupSwitchPointerDown(type)}
+              onPointerMove={isActive ? handleCupPointerMove : undefined}
+              onPointerUp={isActive ? handleCupPointerUp : undefined}
+              onKeyDown={isActive ? handleCupKeyDown : handleCupSwitchKeyDown(type)}
+              onFocus={() => setFocusedCupType(type)}
+              onBlur={() => setFocusedCupType((prev) => (prev === type ? null : prev))}
+            />
+          );
+        })}
+        {/* Name label above whichever cup currently has the white focus
+            halo (see focusedCupType above) -- "glass cup"/"plastic cup".
+            Uses that same cup's own live pos/size (recomputed the same way
+            the loop above works them out) so it tracks correctly whether
+            the focused cup is sitting on the shelf, on the table, or
+            mid-drag. */}
+        {['glass', 'plastic']
+          .filter((type) => type === focusedCupType)
+          .map((type) => {
+            const cfg = CUP_TYPES[type];
+            const isActive = activeCup === type;
+            const pos = isActive ? cupRenderPos : cfg.shelfSpot;
+            const size = isActive ? cupRenderSize : cfg.shelfSize;
+            return (
+              <p
+                key={type}
+                className="cup-label"
+                aria-hidden="true"
+                style={{
+                  left: `${pos.left + size.width / 2}%`,
+                  top: `${pos.top - CUP_LABEL_GAP}%`,
+                }}
+              >
+                {CUP_LABELS[type]}
+              </p>
+            );
+          })}
         {ICE_BOX_SPOTS.map((boxSpot, index) => {
           const placed = icePlaced[index];
           // Once the finished drink's fully sent (cupSendStage 'sent'),
@@ -1030,7 +1273,7 @@ const MilkSelection = ({ activeStep, customerNumber, onNavigate, onAdvance, orde
           // an unplaced cube still sitting in the box is unaffected.
           if (placed && cupSendStage === 'sent') return null;
           const dragging = iceDrag?.index === index;
-          const pos = dragging ? iceDrag : placed ? getIceCupSlotPos(index, cupRenderPos) : boxSpot;
+          const pos = dragging ? iceDrag : placed ? getIceCupSlotPos(index, cupRenderPos, cupRenderSize) : boxSpot;
           const size = placed ? ICE_CUP_SIZE : ICE_BOX_SIZE;
           const leaving = placed && cupSendStage === 'vanishing';
           return (
@@ -1069,7 +1312,8 @@ const MilkSelection = ({ activeStep, customerNumber, onNavigate, onAdvance, orde
             hasn't fully vanished yet -- cupMilk itself doesn't get cleared
             when the cup goes back to the shelf, but there'd be nothing
             sensible to anchor the fill to up there (CUP_MILK_BOX_FRAC is
-            only ever computed off CUP_SPOTS.table). Picks up
+            only ever computed off the active cup's own table spot, via
+            cupRenderPos/cupRenderSize). Picks up
             .bowl-vanishing the same as the cup image itself while
             cupSendStage is 'vanishing', so the whole drink shrinks/fades as
             one unit rather than the cup disappearing out from under a
