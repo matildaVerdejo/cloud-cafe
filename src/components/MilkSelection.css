@@ -437,3 +437,25 @@
     transform: scaleY(1);
   }
 }
+
+/* Carried-over matcha bowl (see incomingBowl/bowlIsBig in MilkSelection.js)
+   -- sits small on the counter (about one milk bottle's own width) but
+   grows to its full original MatchaMaking size the moment it's picked up
+   or sent gliding into a pour. Reuses .station-item.movable's own left/top/
+   filter/transform transition (that class is defined in MatchaMaking.css,
+   already loaded globally -- see the big comment above this element in
+   MilkSelection.js), just adding width/height here so that size change
+   reads as a smooth grow instead of an instant snap. Scoped to this one
+   extra class (rather than editing .station-item.movable itself) so
+   MatchaMaking's own bowl, which never resizes, is unaffected. The
+   .dragging variant is repeated with the extra class so it wins over the
+   rule above regardless of the two files' own load order (both are
+   otherwise tied on specificity). */
+.station-item.movable.incoming-bowl {
+  transition: left 0.2s ease, top 0.2s ease, width 0.2s ease, height 0.2s ease,
+    filter 0.15s ease, transform 0.15s ease;
+}
+
+.station-item.movable.incoming-bowl.dragging {
+  transition: none;
+}

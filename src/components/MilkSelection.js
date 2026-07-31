@@ -15,13 +15,14 @@ import {
 
 // Where the bowl (whisked matcha, no whisk -- see incomingBowl below) sent
 // over from MatchaMaking's "Make Drink" drop-zone comes to rest on this
-// screen. Open patch of counter to the left of the cup's table spot
-// (CUP_SPOTS.table, left 40.30) and clear above the ice box (ICE_BOX_SPOTS,
-// top 73.30+) so it doesn't overlap either. Purely decorative here (not
-// draggable/focusable) -- there's no "pour the matcha into the cup"
-// mechanic yet, this is just carrying the previous station's result over
-// so it doesn't just vanish.
-const INCOMING_BOWL_SPOT = { left: 8, top: 22 };
+// screen -- computed inside the component itself now (see
+// incomingBowlRestWidth/INCOMING_BOWL_SPOT there) rather than as a fixed
+// module constant here, since its position depends on ICE_BOX_BOUNDS
+// (derived further down from ICE_BOX_SPOTS/ICE_BOX_SIZE) and its own
+// resting size depends on BOTTLE_WIDTH -- both module-level values that
+// are only safe to reference from inside a function body given where
+// they're textually defined relative to this comment's old spot, not from
+// another plain module-level const sitting above them.
 
 // Container-relative percentage boxes for the two places the glass cup can
 // sit (see the pixel math in MilkSelection.css above .glass-cup). The cup
@@ -480,18 +481,38 @@ const MilkSelection = ({ activeStep, customerNumber, onNavigate, onAdvance, orde
   // whisked-liquid image, just anchored to this screen's own
   // INCOMING_BOWL_SPOT instead of wherever the bowl happened to be dragged
   // on that screen, so the whisked matcha lines up with the bowl's rim
-  // here the same way it does there. incomingBowlItem.width/height are
-  // MOVABLE_ITEMS' sizing for MatchaMaking's own counter, which read too
-  // big once the bowl "arrives" here on a screen with a different sense of
-  // scale -- INCOMING_BOWL_SCALE shrinks just this carried-over copy
-  // (MatchaMaking's own bowl is untouched). The BOWL_INNER_RIM_* fractions
-  // are applied against the scaled width/height below rather than the
-  // original, so the whisked-liquid overlay still lines up with the
-  // shrunk bowl's own rim.
-  const INCOMING_BOWL_SCALE = 0.6;
+  // here the same way it does there. incomingBowlItem.width/height
+  // (incomingBowlFullWidth/Height below) are MOVABLE_ITEMS' own sizing for
+  // MatchaMaking's counter -- the bowl's true, full size, used while it's
+  // actually being handled (see bowlIsBig further down). At rest on this
+  // screen's counter it instead renders at incomingBowlRestWidth/Height,
+  // shrunk to about one milk bottle's own width (BOTTLE_WIDTH) so it reads
+  // as "roughly the size of one of the bottles" sitting alongside them,
+  // rather than its old flat 0.6x scale (which read too big and sat up
+  // against the back wall/cabinet instead of on the counter).
   const incomingBowlItem = MOVABLE_ITEMS.find((item) => item.key === 'bowl');
-  const incomingBowlWidth = incomingBowlItem.width * INCOMING_BOWL_SCALE;
-  const incomingBowlHeight = incomingBowlItem.height * INCOMING_BOWL_SCALE;
+  const incomingBowlFullWidth = incomingBowlItem.width;
+  const incomingBowlFullHeight = incomingBowlItem.height;
+  const incomingBowlRestWidth = BOTTLE_WIDTH;
+  const incomingBowlRestHeight = incomingBowlItem.height * (BOTTLE_WIDTH / incomingBowlItem.width);
+
+  // Resting spot: open counter to the right of the ice chest (ICE_BOX_
+  // BOUNDS, a module-level constant -- safe to reference here regardless of
+  // its own textual position further down in this file, since it's fully
+  // evaluated before any component function ever runs), left edge just past
+  // the chest's own right edge. Top is based on the bottles' own baseline
+  // (BOTTLE_BOTTOM, the fixed line every bottle's base sits on -- see the
+  // comment on BOTTLE_BOTTOM near BOTTLE_ITEMS above), then lifted further
+  // up by INCOMING_BOWL_LIFT so the bowl sits above that line rather than
+  // flush with it, per request. Computed here (rather than as a plain
+  // module constant) since it depends on incomingBowlRestHeight just above
+  // and on ICE_BOX_BOUNDS/BOTTLE_BOTTOM, both only safely referenceable
+  // from inside a function body given where they're defined in this file.
+  const INCOMING_BOWL_LIFT = 5;
+  const INCOMING_BOWL_SPOT = {
+    left: ICE_BOX_BOUNDS.right + 5,
+    top: BOTTLE_BOTTOM - incomingBowlRestHeight - INCOMING_BOWL_LIFT,
+  };
 
   // The bowl's own live position -- starts (and always snaps back to)
   // INCOMING_BOWL_SPOT, but shifts to the hover-over-cup spot while it's
@@ -502,17 +523,6 @@ const MilkSelection = ({ activeStep, customerNumber, onNavigate, onAdvance, orde
   const [bowlPos, setBowlPos] = useState(INCOMING_BOWL_SPOT);
   const [bowlDrag, setBowlDrag] = useState(null); // { left, top } | null
   const bowlDragStartRef = useRef({ pointerX: 0, pointerY: 0, left: 0, top: 0 });
-
-  // Rim math now follows the bowl's own live position -- bowlDrag while
-  // it's actively being pointer-dragged, otherwise bowlPos (its resting or
-  // gliding-to-pour spot) -- instead of the fixed spot, so the
-  // whisked-matcha overlay travels and tilts together with the bowl
-  // through both a manual drag and the automated pour glide.
-  const incomingBowlRenderPos = bowlDrag || bowlPos;
-  const incomingRimLeft = incomingBowlRenderPos.left + BOWL_INNER_RIM_CENTER.leftFrac * incomingBowlWidth;
-  const incomingRimTop = incomingBowlRenderPos.top + BOWL_INNER_RIM_CENTER.topFrac * incomingBowlHeight;
-  const incomingRimWidth = BOWL_INNER_RIM_WIDTH_FRAC * incomingBowlWidth;
-  const incomingRimHeight = BOWL_INNER_RIM_HEIGHT_FRAC * incomingBowlHeight;
 
   // ---- Cup: shelf <-> table, glass or plastic ----------------------------
   // Two cup graphics now sit in the cubby (see CUP_TYPES/PLASTIC_CUP_SPOTS
@@ -816,6 +826,34 @@ const MilkSelection = ({ activeStep, customerNumber, onNavigate, onAdvance, orde
   // carried-over matcha), alongside the shared pourStage above.
   const [pourStage, setPourStage] = useState('idle');
   const [pouringKey, setPouringKey] = useState(null); // 'oat' | 'dairy' | 'almond' | 'coconut' | 'bowl' | null
+
+  // The bowl grows to its true, full MatchaMaking size (incomingBowlFull
+  // Width/Height) the moment it's actually being handled -- either mid
+  // manual drag (bowlDrag set) or partway through the automated glide-to-
+  // cup/pour sequence (pouringKey === 'bowl', true across both the
+  // 'moving' and 'pouring' beats above, only clearing once the whole cycle
+  // finishes and it's back home) -- and shrinks back down to its small
+  // counter-resting size (incomingBowlRestWidth/Height) otherwise.
+  // incomingBowlWidth/Height (used below for the rim overlay, and further
+  // down in the JSX for the bowl's own rendered size) always reflect
+  // whichever of the two currently applies. Placed here, after pouringKey/
+  // pourStage are declared, rather than back up alongside bowlPos, since
+  // this depends on both.
+  const bowlIsBig = !!bowlDrag || pouringKey === 'bowl';
+  const incomingBowlWidth = bowlIsBig ? incomingBowlFullWidth : incomingBowlRestWidth;
+  const incomingBowlHeight = bowlIsBig ? incomingBowlFullHeight : incomingBowlRestHeight;
+
+  // Rim math follows the bowl's own live position -- bowlDrag while it's
+  // actively being pointer-dragged, otherwise bowlPos (its resting or
+  // gliding-to-pour spot) -- and its own current (possibly grown) size, so
+  // the whisked-matcha overlay travels, tilts, and resizes together with
+  // the bowl through both a manual drag and the automated pour glide.
+  const incomingBowlRenderPos = bowlDrag || bowlPos;
+  const incomingRimLeft = incomingBowlRenderPos.left + BOWL_INNER_RIM_CENTER.leftFrac * incomingBowlWidth;
+  const incomingRimTop = incomingBowlRenderPos.top + BOWL_INNER_RIM_CENTER.topFrac * incomingBowlHeight;
+  const incomingRimWidth = BOWL_INNER_RIM_WIDTH_FRAC * incomingBowlWidth;
+  const incomingRimHeight = BOWL_INNER_RIM_HEIGHT_FRAC * incomingBowlHeight;
+
   // The cup's own persistent "has milk been poured in" state -- doesn't
   // reset on its own (only a fresh pour re-sets it), same "second pour just
   // restarts this rather than accumulating a bigger fill" caveat as the
@@ -899,7 +937,19 @@ const MilkSelection = ({ activeStep, customerNumber, onNavigate, onAdvance, orde
     const activeTableSize = CUP_TYPES[activeCup].tableSize;
     if (key === 'bowl') {
       if (!canPourMatcha) return;
-      setBowlPos(getBottleHoverPos(activeTableSpot, activeTableSize, { width: incomingBowlWidth, height: incomingBowlHeight }));
+      // Uses the bowl's true full size (incomingBowlFullWidth/Height)
+      // explicitly here, not the current incomingBowlWidth/Height (which
+      // may still reflect the small counter-resting size at this exact
+      // moment) -- the bowl is about to grow to full size the instant
+      // pouringKey becomes 'bowl' just below, so the hover position needs
+      // to already be computed for that final, grown size to land
+      // correctly over the cup instead of being off by the size delta.
+      setBowlPos(
+        getBottleHoverPos(activeTableSpot, activeTableSize, {
+          width: incomingBowlFullWidth,
+          height: incomingBowlFullHeight,
+        })
+      );
     } else {
       if (!canPourMilk) return;
       const item = BOTTLE_ITEMS.find((b) => b.key === key);
@@ -1134,7 +1184,7 @@ const MilkSelection = ({ activeStep, customerNumber, onNavigate, onAdvance, orde
               draggable={false}
               data-focusable
               tabIndex={0}
-              className={`station-item movable${bowlDrag ? ' dragging' : ''}${pouringKey === 'bowl' ? ' settling' : ''}`}
+              className={`station-item movable incoming-bowl${bowlDrag ? ' dragging' : ''}${pouringKey === 'bowl' ? ' settling' : ''}`}
               style={{
                 left: `${(bowlDrag || bowlPos).left}%`,
                 top: `${(bowlDrag || bowlPos).top}%`,
