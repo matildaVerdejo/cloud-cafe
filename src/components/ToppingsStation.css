@@ -237,3 +237,45 @@
   }
 }
 
+/* Topping name label ("guava syrup"/"matcha foam"/etc, see TOPPING_LABELS/
+   focusedTopping in ToppingsStation.js) -- shown above whichever topping
+   currently has the white focus halo. Same dark-brown-with-white-halo look
+   as MatchaMaking.js's own .matcha-tin-label/MilkSelection.js's own
+   .milk-bottle-label -- see .matcha-tin-label's own comment in
+   MatchaMaking.css for exactly where the halo values come from.
+   translate(-50%, -100%) lifts the whole label above its anchor point (the
+   item's own top edge minus TOPPING_LABEL_GAP, set inline in
+   ToppingsStation.js) regardless of the label's own text height; that gap
+   is negative on purpose here (see TOPPING_LABEL_GAP's own comment) so the
+   label overlaps down onto the item's own art instead of needing clear
+   space the tightly-stacked syrup/foam pairs don't have. pointer-events:
+   none plus aria-hidden (set in the JSX) since this is purely a visual
+   echo of a state (focus) already communicated to assistive tech through
+   the item's own focus/alt text. */
+.topping-label {
+  position: absolute;
+  transform: translate(-50%, -100%);
+  margin: 0;
+  font-family: 'Pixelify Sans', cursive;
+  font-weight: 700;
+  font-size: min(34px, 1.7vw);
+  color: #5c4a3a;
+  text-align: center;
+  letter-spacing: 0.02em;
+  text-shadow: 0 0 4px rgba(255, 255, 255, 0.95), 0 0 16px rgba(255, 255, 255, 0.6), 0 1px 2px rgba(0, 0, 0, 0.4);
+  pointer-events: none;
+  z-index: 5;
+  animation: toppingLabelIn 0.15s ease-out both;
+}
+
+@keyframes toppingLabelIn {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -100%) translateY(3px);
+  }
+  100% {
+    opacity: 1;
+    transform: translate(-50%, -100%) translateY(0);
+  }
+}
+

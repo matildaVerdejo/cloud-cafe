@@ -184,6 +184,30 @@ const TOPPING_ITEMS = [
   }),
 ];
 
+// Display name per topping, shown as a label above whichever one currently
+// has focus (see focusedTopping/.topping-label below) -- same "selected" ==
+// "has the focus halo" idea, same pastel-brown-with-white-halo look, as
+// MatchaMaking.js's own TIN_LABELS/.matcha-tin-label and MilkSelection.js's
+// own BOTTLE_LABELS/.milk-bottle-label. Keyed the same way TOPPING_ITEMS
+// itself is (matcha-cold-foam/reg-cold-foam, not CustomerOrdering.js's own
+// differently-keyed matcha-foam/reg-foam speech names).
+const TOPPING_LABELS = {
+  'guava-syrup': 'guava syrup',
+  'mint-syrup': 'mint syrup',
+  'matcha-cold-foam': 'matcha foam',
+  'reg-cold-foam': 'regular foam',
+  'matcha-powder': 'matcha powder',
+  'guava-powder': 'guava powder',
+};
+
+// Gap between a topping's own top edge and its label -- negative, same as
+// MilkSelection.js's own BOTTLE_LABEL_GAP, so the label overlaps down onto
+// the item's own art rather than needing clear space above it. That's
+// deliberate here in particular: the syrup pair and foam pair are stacked
+// only STACK_GAP (3%) apart, so a label that required its own free space
+// above/below an item would collide with its neighboring pair.
+const TOPPING_LABEL_GAP = -0.5;
+
 // ---- Pouring a syrup onto the carried-over drink -------------------------
 // Same overall shape as Milk Selection's bottle-pour sequence (glide to a
 // hover spot above the cup, "pour", glide back home), with two differences
@@ -621,6 +645,17 @@ const ToppingsStation = ({
   const [powderPouringKey, setPowderPouringKey] = useState(null); // 'matcha-powder' | 'guava-powder' | null
   const [powderPourOffset, setPowderPourOffset] = useState(0);
   const [cupPowder, setCupPowder] = useState(null); // { key } | null
+
+  // Which topping (if any, across all three pairs) currently has the white
+  // focus halo -- drives the name label above it (TOPPING_LABELS/
+  // .topping-label), same focus-not-confirm distinction as MatchaMaking.js's
+  // own focusedTin/MilkSelection.js's own focusedBottle. A single piece of
+  // state covers all six items (rather than one per pair) since only one
+  // item can ever be focused at a time regardless of which pair it's in.
+  // The onBlur guard (only clear if this item is still the one recorded)
+  // avoids a stale clear if focus has already moved to a different item by
+  // the time this one's blur fires.
+  const [focusedTopping, setFocusedTopping] = useState(null);
 
   // Only needs an actual drink to pour onto and nothing else already
   // mid-pour -- unlike Milk Selection's own bottles/bowl there's no ice/
@@ -1187,6 +1222,8 @@ const ToppingsStation = ({
               onPointerMove={handleSyrupPointerMove(item)}
               onPointerUp={handleSyrupPointerUp(item)}
               onKeyDown={handleSyrupKeyDown(item)}
+              onFocus={() => setFocusedTopping(item.key)}
+              onBlur={() => setFocusedTopping((prev) => (prev === item.key ? null : prev))}
             />
           );
         })}
@@ -1221,6 +1258,8 @@ const ToppingsStation = ({
                 onPointerMove={handleFoamPointerMove(item)}
                 onPointerUp={handleFoamPointerUp(item)}
                 onKeyDown={handleFoamKeyDown(item)}
+                onFocus={() => setFocusedTopping(item.key)}
+                onBlur={() => setFocusedTopping((prev) => (prev === item.key ? null : prev))}
               />
             );
           }
@@ -1256,7 +1295,46 @@ const ToppingsStation = ({
               onPointerMove={handlePowderPointerMove(item)}
               onPointerUp={handlePowderPointerUp(item)}
               onKeyDown={handlePowderKeyDown(item)}
+              onFocus={() => setFocusedTopping(item.key)}
+              onBlur={() => setFocusedTopping((prev) => (prev === item.key ? null : prev))}
             />
+          );
+        })}
+        {/* Name label above whichever topping currently has the white focus
+            halo (see focusedTopping above) -- e.g. "guava syrup", "matcha
+            foam". A single block covering all six items (rather than one
+            per pair) since exactly one of them can be focused at a time;
+            pos is worked out the same way each pair's own .map() above
+            works it out (drag position if mid-drag, else its resting
+            position, shifted by that pair's own pourOffset while it's
+            actually pouring). */}
+        {TOPPING_ITEMS.filter((item) => item.key === focusedTopping).map((item) => {
+          let pos;
+          if (item.key === 'guava-syrup' || item.key === 'mint-syrup') {
+            const dragging = syrupDrag?.key === item.key;
+            const basePos = dragging ? syrupDrag : syrupPositions[item.key];
+            pos = pouringKey === item.key ? { left: basePos.left + pourOffset, top: basePos.top } : basePos;
+          } else if (item.key === 'matcha-cold-foam' || item.key === 'reg-cold-foam') {
+            const dragging = foamDrag?.key === item.key;
+            const basePos = dragging ? foamDrag : foamPositions[item.key];
+            pos = foamPouringKey === item.key ? { left: basePos.left + foamPourOffset, top: basePos.top } : basePos;
+          } else {
+            const dragging = powderDrag?.key === item.key;
+            const basePos = dragging ? powderDrag : powderPositions[item.key];
+            pos = powderPouringKey === item.key ? { left: basePos.left + powderPourOffset, top: basePos.top } : basePos;
+          }
+          return (
+            <p
+              key={item.key}
+              className="topping-label"
+              aria-hidden="true"
+              style={{
+                left: `${pos.left + item.width / 2}%`,
+                top: `${pos.top - TOPPING_LABEL_GAP}%`,
+              }}
+            >
+              {TOPPING_LABELS[item.key]}
+            </p>
           );
         })}
         {/* Carried-over drink -- now interactive (drag onto the Send to
