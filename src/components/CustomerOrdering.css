@@ -625,7 +625,19 @@
    opened -- wraps onto as many rows as needed (rather than one option per
    line) so longer lists like the 7 ice-cube counts or 7 toppings don't
    push the form too tall. z-index keeps it above whatever's below it in
-   the form (later sections, ProgressBar, etc). */
+   the form (later sections, ProgressBar, etc).
+   max-width used to be a flat min(310px, 16vw) -- narrow enough that
+   longer labels (the toppings list especially -- "Matcha cold foam",
+   "Guava powder", etc) only ever fit one per row despite flex-wrap being
+   set, so it *looked* like a plain vertical list even though it wasn't
+   one. Widened per request to roughly match the order panel's own
+   available width (.order-modal is min(880px, 68%) wide, minus its own
+   min(34px, 1.8vw) padding on each side) so items actually sit side by
+   side until a row genuinely runs out of room, wrapping to a new one only
+   at that point -- this is a no-op for the shorter option lists (Grade/
+   Teaspoon/Cup/Base), which already fit well within the old cap anyway,
+   since width: max-content below means this only ever grows to whatever a
+   row's content actually needs, up to this new, much roomier ceiling. */
 .order-dropdown-list {
   position: absolute;
   top: calc(100% + min(4px, 0.22vw));
@@ -635,7 +647,7 @@
   flex-wrap: wrap;
   gap: min(4px, 0.22vw);
   width: max-content;
-  max-width: min(310px, 16vw);
+  max-width: min(800px, 64vw);
   padding: min(7px, 0.4vw);
   border-radius: min(10px, 0.52vw);
   border: min(2px, 0.1vw) solid rgba(197, 225, 208, 0.9);
@@ -737,7 +749,7 @@
   cursor: pointer;
   box-shadow: 0 6px 14px rgba(255, 158, 178, 0.45);
   transition: filter 0.15s ease, transform 0.15s ease, background 0.15s ease;
-  animation: orderPlaceButtonIn 0.2s ease-out both, orderPlaceButtonHaloBlink 1.1s ease-in-out infinite;
+  animation: orderPlaceButtonIn 0.2s ease-out both;
 }
 
 @keyframes orderPlaceButtonIn {
@@ -748,27 +760,6 @@
   100% {
     opacity: 1;
     transform: translateY(0) scale(1);
-  }
-}
-
-/* Flashes the moment "Place Order" appears (i.e. once every required
-   section has a selection -- see isOrderComplete in CustomerOrdering.js),
-   same light-green (rgb(130, 190, 110)) soft glow used everywhere else in
-   this file's highlight beats (.ordering-speech-bubble.pending-ack,
-   .ordering-play-button.tablet-highlight, .order-modal.receipt-highlight),
-   with this button's own resting shadow (0 6px 14px rgba(255,158,178,0.45))
-   kept as the constant layer so its normal pink glow doesn't disappear
-   between flashes. Runs continuously for as long as the button is
-   rendered -- no separate Enter-to-dismiss gate this time, since clicking
-   it is itself what makes it go away. */
-@keyframes orderPlaceButtonHaloBlink {
-  0%,
-  100% {
-    box-shadow: 0 6px 14px rgba(255, 158, 178, 0.45), 0 0 30px 12px rgba(130, 190, 110, 0.9),
-      0 0 65px 26px rgba(130, 190, 110, 0.55);
-  }
-  50% {
-    box-shadow: 0 6px 14px rgba(255, 158, 178, 0.45), 0 0 0 0 rgba(130, 190, 110, 0), 0 0 0 0 rgba(130, 190, 110, 0);
   }
 }
 

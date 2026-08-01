@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import './CustomerOrdering.css';
 import { useFlatFocusNav } from '../gameloop/useFlatFocusNav';
-import { getActionFromKeyEvent, shouldDebounceEnter } from '../gameloop/pal';
+import { getActionFromKeyEvent } from '../gameloop/pal';
 import { playButtonClick, playVoiceLine } from '../gameloop/sfx';
 import ProgressBar from './ProgressBar';
 
@@ -221,10 +221,26 @@ function sliceSegments(segments, n) {
 // isOpen/onToggle are owned by the parent (CustomerOrdering below) rather
 // than local state here, so only one dropdown across the whole order form
 // can be open at a time -- keeps the small modal from ever showing two
-// option rows stacked on each other.
-function Dropdown({ placeholder, options, value, onSelect, isOpen, onToggle }) {
-  const toggleRef = useRef(null);
+// option rows stacked on each other. toggleRef is also owned by the parent
+// now (rather than a local useRef here) -- CustomerOrdering's own explicit
+// order-form keyboard graph (see the big comment above it) needs to
+// address each dropdown's toggle button directly by identity, the same
+// reason SettingsPanel's VolumeRow takes minusRef/plusRef props instead of
+// creating its own internal refs.
+function Dropdown({ placeholder, options, value, onSelect, isOpen, onToggle, toggleRef }) {
   const selected = options.find((opt) => opt.value === value);
+  const firstOptionRef = useRef(null);
+
+  // The first option (leftmost, matching the row's own visual/DOM order)
+  // gets focus automatically the instant the dropdown opens, per request
+  // -- previously, opening it via Enter left focus sitting on the toggle
+  // button itself, with nothing to show a D-pad user that a row of
+  // options had even appeared below it.
+  useEffect(() => {
+    if (isOpen) {
+      firstOptionRef.current?.focus();
+    }
+  }, [isOpen]);
 
   return (
     <div className="order-dropdown">
@@ -242,15 +258,25 @@ function Dropdown({ placeholder, options, value, onSelect, isOpen, onToggle }) {
       </button>
       {isOpen && (
         <div className="order-dropdown-list">
-          {options.map((opt) => (
+          {options.map((opt, index) => (
             <button
               key={opt.value}
+              ref={index === 0 ? firstOptionRef : undefined}
               type="button"
               className={`order-dropdown-option${opt.value === value ? ' selected' : ''}`}
               data-focusable
               onClick={() => {
                 playButtonClick();
                 onSelect(opt.value);
+                // Closes the dropdown -- onToggle flips isOpen back to
+                // false for this control the same way clicking the toggle
+                // button itself does (see toggleControl in
+                // CustomerOrdering, which un-sets openControl when it's
+                // already this key). Previously missing here, so picking
+                // an option filled it in but left the row of options open
+                // instead of closing like every other "activate and
+                // close" control in this form.
+                onToggle();
                 // Refocuses the toggle button once an option's picked --
                 // without this, focus would vanish along with the (now
                 // unmounted) option button, dropping the player back to
@@ -270,6 +296,216 @@ function Dropdown({ placeholder, options, value, onSelect, isOpen, onToggle }) {
 
 const CustomerOrdering = ({ activeStep, customerNumber, onNavigate, onAdvance, onPlaceOrder }) => {
   const containerRef = useRef(null);
+  // Declared up here (rather than down by orderFormOpen/the order-builder
+  // state, where the rest of these would naturally sit) purely so the two
+  // bridge effects right below -- which need these refs -- can be
+  // registered before useFlatFocusNav(containerRef) further down is. See
+  // those effects' own comments for why the registration order matters.
+  const playButtonRef = useRef(null);
+  const gradeRef = useRef(null);
+  const teaspoonRef = useRef(null);
+  const cupRef = useRef(null);
+  const iceRef = useRef(null);
+  const baseRef = useRef(null);
+  const toppingsAddRef = useRef(null);
+  const placeOrderRef = useRef(null);
+
+  // Bridges between this screen's own containerRef scope and the two
+  // things outside it that keyboard nav needs to reach: the Settings gear
+  // (rendered once in App.js) and, going the other way, back down to the
+  // ProgressBar's current-station dot at the very bottom of the screen.
+  // Four legs, each a mirror of another: play button Up -> gear; gear Down
+  // (only while its popover is closed -- while open, SettingsPanel's own
+  // handler owns Down, moving into the popover's own controls instead) ->
+  // play button; play button Down -> station dot. (Station dot Up -> play
+  // button is NOT handled here -- that one's already covered for free by
+  // the generic useFlatFocusNav(containerRef) hook below, since the dot
+  // and the play button are both within this screen's own container and
+  // spatially the play button is the nearest qualifying candidate above
+  // the dot.) Reaches for .settings-toggle-button/.settings-popover/
+  // .progress-step.current by class/DOM query rather than a ref/prop,
+  // since none of the three components involved (SettingsPanel, ProgressBar)
+  // have a prop path to this one.
+  //
+  // Registered here, BEFORE useFlatFocusNav(containerRef) below, so its
+  // window keydown listener attaches (and therefore runs) first -- this
+  // matters: useFlatFocusNav's own Up/Down handling calls focus()
+  // synchronously, which updates document.activeElement immediately,
+  // still within the same event dispatch. With this effect registered
+  // AFTER useFlatFocusNav's (as the play-button-Up leg originally was), a
+  // single Up press from the station's dot would let useFlatFocusNav move
+  // focus dot -> play button first, and then this handler -- seeing the
+  // *already-updated* activeElement now equal to playButtonRef.current --
+  // would immediately fire too and jump straight on to the gear, all
+  // within that one press (station -> gear in one jump, skipping the play
+  // button stop entirely -- the exact bug this ordering already fixed
+  // once). Registering this one first instead means it only ever sees the
+  // focus state as it was *before* any handler for this keypress has run,
+  // so each leg below only ever acts on a genuinely separate, later
+  // keypress where the relevant element already had focus coming in --
+  // and stopImmediatePropagation on every acted-on leg keeps
+  // useFlatFocusNav from ever getting a second, redundant say on the same
+  // press once one of these has already decided what to do with it.
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      const action = getActionFromKeyEvent(e);
+      if (action !== 'Up' && action !== 'Down') return;
+      const active = document.activeElement;
+
+      if (active === playButtonRef.current) {
+        if (action === 'Up') {
+          const gearButton = document.querySelector('.settings-toggle-button');
+          if (!gearButton) return;
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          gearButton.focus();
+        } else {
+          const stationDot = document.querySelector('.progress-step.current');
+          if (!stationDot) return;
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          stationDot.focus();
+        }
+        return;
+      }
+
+      if (action === 'Down' && active === document.querySelector('.settings-toggle-button')) {
+        const popoverOpen = !!document.querySelector('.settings-popover');
+        if (popoverOpen) return;
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        playButtonRef.current?.focus();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
+  // Order-form's own internal keyboard graph -- exact button-to-button
+  // path requested, same "explicit fixed graph, not generic spatial
+  // nearest-neighbor matching" approach as the Settings popover's own nav
+  // (see SettingsPanel.js's own handler for the same reasoning): grade
+  // Right -> teaspoons, Down -> cup; teaspoons Down -> cup; cup Right ->
+  // ice, Down -> base; ice Up -> grade, Down -> base; base Down ->
+  // toppings' own "+ Add topping" toggle; toppings Down -> Place Order,
+  // once it actually exists (see isOrderComplete further down --
+  // placeOrderRef.current is null until then, so that leg is simply a
+  // no-op before that).
+  //
+  // Every direction is swallowed (preventDefault + stopImmediatePropagation)
+  // whenever any of these seven elements has focus, whether or not it maps
+  // to one of the named legs above -- not just the ones with somewhere to
+  // go. This is what actually keeps the D-pad contained to the order form
+  // while it's open: without it, an unhandled direction (e.g. Down from
+  // Place Order, or Up from Grade) would fall through to the generic
+  // useFlatFocusNav(containerRef) hook below, which doesn't know this
+  // modal is supposed to be a closed loop and would happily walk focus
+  // out to whatever's spatially nearest elsewhere on the screen -- the
+  // reported bug, where enough Down presses eventually reached the
+  // ProgressBar's own station dot underneath the modal. (This trap
+  // originally only covered these seven named toggles; an open dropdown's
+  // own option list is now trapped too, right below -- see that block's
+  // own comment. Topping chips still aren't covered, so their existing
+  // nav is untouched.)
+  //
+  // Registered here, before useFlatFocusNav(containerRef) below, for the
+  // same reason (and avoiding the same possible cascade) as the
+  // play-button/gear/station bridge above -- these toggles all live
+  // within this screen's own container too.
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      const action = getActionFromKeyEvent(e);
+      if (action !== 'Right' && action !== 'Down' && action !== 'Up' && action !== 'Left') return;
+      const active = document.activeElement;
+
+      // Trap + Left/Right movement while focus is on one of an OPEN
+      // dropdown's own option buttons (Grade/Teaspoon/Cup/Ice/Base's
+      // revealed choice row) -- per request, none of these four
+      // directions should be able to escape out to the rest of the order
+      // form while a dropdown is open; they should only ever move between
+      // this SAME dropdown's own sibling options (or do nothing, at the
+      // first/last one, or for Up/Down, which nothing here maps since
+      // these lists are single rows) until Enter picks one (which now
+      // also closes the dropdown -- see Dropdown's own onClick above) or
+      // it's otherwise closed. Plain DOM queries rather than refs, since
+      // the option buttons themselves are dynamically many and belong to
+      // a child component (Dropdown) that doesn't expose a ref for each
+      // one -- .closest('.order-dropdown-list') finds the specific list
+      // the focused option belongs to, regardless of which of the five
+      // dropdowns it is.
+      const optionList = active?.closest?.('.order-dropdown-list');
+      if (optionList) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        if (action === 'Left' || action === 'Right') {
+          const optionButtons = Array.from(optionList.querySelectorAll('.order-dropdown-option'));
+          const currentIndex = optionButtons.indexOf(active);
+          if (currentIndex === -1) return;
+          const nextIndex = action === 'Right' ? currentIndex + 1 : currentIndex - 1;
+          optionButtons[nextIndex]?.focus();
+        }
+        return;
+      }
+
+      if (active === gradeRef.current) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        if (action === 'Right') teaspoonRef.current?.focus();
+        else if (action === 'Down') cupRef.current?.focus();
+        return;
+      }
+
+      if (active === teaspoonRef.current) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        if (action === 'Down') cupRef.current?.focus();
+        else if (action === 'Left') gradeRef.current?.focus();
+        return;
+      }
+
+      if (active === cupRef.current) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        if (action === 'Right') iceRef.current?.focus();
+        else if (action === 'Down') baseRef.current?.focus();
+        else if (action === 'Up') gradeRef.current?.focus();
+        return;
+      }
+
+      if (active === iceRef.current) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        if (action === 'Up') gradeRef.current?.focus();
+        else if (action === 'Down') baseRef.current?.focus();
+        return;
+      }
+
+      if (active === baseRef.current) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        if (action === 'Down') toppingsAddRef.current?.focus();
+        else if (action === 'Up') cupRef.current?.focus();
+        return;
+      }
+
+      if (active === toppingsAddRef.current) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        if (action === 'Down' && placeOrderRef.current) placeOrderRef.current.focus();
+        else if (action === 'Up') baseRef.current?.focus();
+        return;
+      }
+
+      if (active === placeOrderRef.current) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        if (action === 'Up') toppingsAddRef.current?.focus();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
   useFlatFocusNav(containerRef);
 
   // Rolled once per mount (i.e. once per customer -- see the big comment
@@ -325,34 +561,6 @@ const CustomerOrdering = ({ activeStep, customerNumber, onNavigate, onAdvance, o
     return () => audio.pause();
   }, []);
 
-  // Read-acknowledgment gate: right after landing on this screen, the
-  // speech bubble flashes the same white "halo" every focusable element
-  // gets on focus (see .ordering-speech-bubble.pending-ack in
-  // CustomerOrdering.css) -- concurrently with the typewriter above, not
-  // blocking it. No dimming/tint over the rest of the frame anymore (that
-  // idea got dropped) -- just the bubble's own flashing outline. The player
-  // presses Enter to confirm they've read (or are done reading) the order,
-  // which stops the halo. Resets automatically every round since this
-  // whole component remounts per customer. A dedicated window listener
-  // (rather than a per-button onKeyDown) is used because Enter should work
-  // regardless of what, if anything, happens to be focused -- the play
-  // button is also explicitly disabled below while this is pending, so a
-  // keyboard/D-pad user can't route around the gate and open the order
-  // form early. shouldDebounceEnter guards against a held key/remote
-  // repeat firing this more than once.
-  const [orderAcknowledged, setOrderAcknowledged] = useState(false);
-  useEffect(() => {
-    if (orderAcknowledged) return undefined;
-    const handleKeyDown = (e) => {
-      if (getActionFromKeyEvent(e) !== 'Enter') return;
-      if (shouldDebounceEnter(e)) return;
-      e.preventDefault();
-      setOrderAcknowledged(true);
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [orderAcknowledged]);
-
   // ---- Order-builder state -----------------------------------------------
   // Four sections (matcha, cup & ice, base, toppings) -- now shown inside a
   // modal rectangle (see orderFormOpen below) opened via the play button on
@@ -379,7 +587,20 @@ const CustomerOrdering = ({ activeStep, customerNumber, onNavigate, onAdvance, o
   const [openControl, setOpenControl] = useState(null);
   const toggleControl = (key) => setOpenControl((prev) => (prev === key ? null : key));
 
-  const toppingsAddRef = useRef(null);
+  // First topping option gets focus automatically the instant this list
+  // opens, same as every other dropdown's own first-option autofocus (see
+  // Dropdown's own effect above) -- toppings' own reveal list isn't built
+  // from the shared Dropdown component (it needs its own add-without-
+  // closing-the-form / removable-chips behavior instead of a single
+  // select), so it needs this same behavior wired up separately here
+  // rather than getting it for free from that component.
+  const toppingsFirstOptionRef = useRef(null);
+  useEffect(() => {
+    if (openControl === 'toppings') {
+      toppingsFirstOptionRef.current?.focus();
+    }
+  }, [openControl]);
+
   const addTopping = (value) => {
     playButtonClick();
     setToppings((prev) => [...prev, { id: toppingIdRef.current++, value }]);
@@ -398,7 +619,6 @@ const CustomerOrdering = ({ activeStep, customerNumber, onNavigate, onAdvance, o
   // always starts from a clean, fully-closed state rather than resuming
   // wherever a dropdown happened to be left.
   const [orderFormOpen, setOrderFormOpen] = useState(false);
-  const playButtonRef = useRef(null);
 
   const closeOrderForm = () => {
     setOrderFormOpen(false);
@@ -406,72 +626,45 @@ const CustomerOrdering = ({ activeStep, customerNumber, onNavigate, onAdvance, o
     playButtonRef.current?.focus();
   };
 
-  // Second highlight beat, half a second after the first (orderAcknowledged
-  // above) clears -- the play button itself starts flashing the same green
-  // halo, plus a nearby "click enter to take the customer's order" label
-  // (see .ordering-tablet-* in CustomerOrdering.css). Pressing Enter here
-  // both stops the flashing and actually opens the order form -- i.e. it's
-  // not just an acknowledgment like the first Enter press, it's the
-  // equivalent of clicking the play button, matching what the label says
-  // it'll do.
+  // First thing selected the instant the order form opens is the Grade
+  // toggle, per request -- same "rising edge only" pattern as
+  // ProgressBar.js's own highlightCurrentStep focus-effect (keyed on
+  // orderFormOpen itself, not e.g. openControl, so this only steals focus
+  // when the modal actually opens, not on every re-render while it's up).
+  useEffect(() => {
+    if (orderFormOpen) {
+      gradeRef.current?.focus();
+    }
+  }, [orderFormOpen]);
+
+  // Highlight beat -- half a second after landing on this screen, the play
+  // button starts flashing the same green halo, plus a nearby "click enter
+  // to take the customer's order" label (see .ordering-tablet-* in
+  // CustomerOrdering.css), and becomes enabled/focusable (see disabled=
+  // {!tabletPromptActive} below). Opening the order form itself is handled
+  // entirely by the button's own native onClick below now -- there used to
+  // also be a separate window-level keydown listener here that opened the
+  // form on Enter regardless of what was focused, which is exactly what
+  // broke Settings: with Up/Down keyboard nav now wired between this
+  // button and the Settings gear, pressing Enter while the *gear* was
+  // focused was still being hijacked by this listener and opening the
+  // order form instead of toggling Settings. Removed -- once the button is
+  // actually focused (reached via Up from the station dot, per the nav
+  // chain above), Enter already "just works" via ordinary <button>
+  // behavior and fires the exact same onClick, including the click sound
+  // it plays (a bonus the old hijacked path skipped).
   const [tabletPromptActive, setTabletPromptActive] = useState(false);
   useEffect(() => {
-    if (!orderAcknowledged) return undefined;
     const timeoutId = setTimeout(() => setTabletPromptActive(true), 500);
     return () => clearTimeout(timeoutId);
-  }, [orderAcknowledged]);
-
-  useEffect(() => {
-    if (!tabletPromptActive) return undefined;
-    const handleKeyDown = (e) => {
-      if (getActionFromKeyEvent(e) !== 'Enter') return;
-      if (shouldDebounceEnter(e)) return;
-      e.preventDefault();
-      setTabletPromptActive(false);
-      setOrderFormOpen(true);
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [tabletPromptActive]);
+  }, []);
 
   // "Place Order" only appears once every required section has a selection
   // -- toppings is the one section left out of this check since it's an
   // optional adder (a drink with no extra toppings is still a complete
-  // order), not a required dropdown like the other four. Computed up here
-  // (rather than down by placeOrder/the JSX, where this used to live)
-  // since the third highlight beat right below needs it too.
+  // order), not a required dropdown like the other four.
   const isOrderComplete =
     matchaGrade !== null && teaspoons !== null && cupType !== null && iceCubes !== null && baseMilk !== null;
-
-  // Third highlight beat -- once the order form/receipt modal is actually
-  // up (orderFormOpen), the modal itself flashes the same green halo, with
-  // a "this is your customer's receipt..." label next to it (see
-  // .order-modal.receipt-highlight / .ordering-receipt-hint in
-  // CustomerOrdering.css). Enter here is just an acknowledgment (like the
-  // very first one) -- it doesn't do anything to the form itself. Also
-  // auto-dismisses once isOrderComplete flips true -- at that point
-  // "Place Order" itself becomes the thing to look at (see its autoFocus
-  // below), so this callout's job is done whether or not Enter was ever
-  // pressed. receiptDismissed folds both ways of clearing it into one
-  // flag; the effect below stops listening once either one applies, so a
-  // later Enter (e.g. to activate the now-focused Place Order button)
-  // isn't swallowed by this instead. Once dismissed it stays that way even
-  // if the player closes and reopens the modal again this round -- this is
-  // a one-time "here's what this is" callout, not something that should
-  // re-flash every time the modal toggles.
-  const [receiptAcknowledged, setReceiptAcknowledged] = useState(false);
-  const receiptDismissed = receiptAcknowledged || isOrderComplete;
-  useEffect(() => {
-    if (!orderFormOpen || receiptDismissed) return undefined;
-    const handleKeyDown = (e) => {
-      if (getActionFromKeyEvent(e) !== 'Enter') return;
-      if (shouldDebounceEnter(e)) return;
-      e.preventDefault();
-      setReceiptAcknowledged(true);
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [orderFormOpen, receiptDismissed]);
 
   // Fourth highlight beat -- once the order's actually been placed (not
   // just the modal closed via the X/backdrop), the progress bar's current
@@ -540,7 +733,11 @@ const CustomerOrdering = ({ activeStep, customerNumber, onNavigate, onAdvance, o
             content makes it grow, instead of needing its own separately
             guessed percentage position. */}
         <div className="ordering-speech-wrap">
-          <div className={`ordering-speech-bubble${orderAcknowledged ? '' : ' pending-ack'}`}>
+          {/* No longer gated behind an Enter-to-acknowledge step (see the
+              removed orderAcknowledged state above) -- the bubble just
+              shows the order as it types out, with no flashing halo or
+              "click Enter to continue" prompt to clear first. */}
+          <div className="ordering-speech-bubble">
             <p className="ordering-speech-bubble-text">
               {sliceSegments(speechSegments, visibleChars).map((seg, i) =>
                 seg.highlight ? (
@@ -561,15 +758,6 @@ const CustomerOrdering = ({ activeStep, customerNumber, onNavigate, onAdvance, o
               <polygon points="2,0 28,0 15,19" />
             </svg>
           </div>
-
-          {/* Read-acknowledgment hint -- see orderAcknowledged above.
-              Disappears (along with the bubble's flash) the moment the
-              player presses Enter. */}
-          {!orderAcknowledged && (
-            <p className="ordering-order-hint">
-              This is your customer&apos;s order &mdash; once you&apos;re done reading, click Enter.
-            </p>
-          )}
         </div>
 
         {/* Play button on the ordering computer's screen -- opens the
@@ -617,7 +805,7 @@ const CustomerOrdering = ({ activeStep, customerNumber, onNavigate, onAdvance, o
                 button redundant). */}
             <div className="order-modal-backdrop" onClick={closeOrderForm} />
             <div
-              className={`order-modal${!receiptDismissed ? ' receipt-highlight' : ''}`}
+              className="order-modal"
               role="dialog"
               aria-label="Order form"
             >
@@ -636,6 +824,7 @@ const CustomerOrdering = ({ activeStep, customerNumber, onNavigate, onAdvance, o
                       onSelect={setMatchaGrade}
                       isOpen={openControl === 'grade'}
                       onToggle={() => toggleControl('grade')}
+                      toggleRef={gradeRef}
                     />
                     <Dropdown
                       placeholder="Tsp"
@@ -644,6 +833,7 @@ const CustomerOrdering = ({ activeStep, customerNumber, onNavigate, onAdvance, o
                       onSelect={setTeaspoons}
                       isOpen={openControl === 'teaspoons'}
                       onToggle={() => toggleControl('teaspoons')}
+                      toggleRef={teaspoonRef}
                     />
                   </div>
                 </div>
@@ -658,6 +848,7 @@ const CustomerOrdering = ({ activeStep, customerNumber, onNavigate, onAdvance, o
                       onSelect={setCupType}
                       isOpen={openControl === 'cup'}
                       onToggle={() => toggleControl('cup')}
+                      toggleRef={cupRef}
                     />
                     <Dropdown
                       placeholder="Ice"
@@ -666,6 +857,7 @@ const CustomerOrdering = ({ activeStep, customerNumber, onNavigate, onAdvance, o
                       onSelect={setIceCubes}
                       isOpen={openControl === 'ice'}
                       onToggle={() => toggleControl('ice')}
+                      toggleRef={iceRef}
                     />
                   </div>
                 </div>
@@ -679,6 +871,7 @@ const CustomerOrdering = ({ activeStep, customerNumber, onNavigate, onAdvance, o
                     onSelect={setBaseMilk}
                     isOpen={openControl === 'base'}
                     onToggle={() => toggleControl('base')}
+                    toggleRef={baseRef}
                   />
                 </div>
 
@@ -699,9 +892,10 @@ const CustomerOrdering = ({ activeStep, customerNumber, onNavigate, onAdvance, o
                     </button>
                     {openControl === 'toppings' && (
                       <div className="order-dropdown-list">
-                        {TOPPING_OPTIONS.map((opt) => (
+                        {TOPPING_OPTIONS.map((opt, index) => (
                           <button
                             key={opt.value}
+                            ref={index === 0 ? toppingsFirstOptionRef : undefined}
                             type="button"
                             className="order-dropdown-option"
                             data-focusable
@@ -741,15 +935,21 @@ const CustomerOrdering = ({ activeStep, customerNumber, onNavigate, onAdvance, o
                     hardcoded receipt image) and closes the modal. */}
                 {isOrderComplete && (
                   <button
+                    ref={placeOrderRef}
                     type="button"
                     className="order-place-button"
                     data-focusable
-                    // Becomes the "next thing selected" the instant it
-                    // appears -- autoFocus fires on mount, and this button
-                    // only mounts once isOrderComplete flips true, so focus
-                    // moves here automatically instead of staying wherever
-                    // it was on the last-filled dropdown.
-                    autoFocus
+                    // No autoFocus (removed per request) -- this mounts as
+                    // soon as Base is filled in (toppings isn't required
+                    // for isOrderComplete), and stealing focus the instant
+                    // it appears used to yank the player away from Base
+                    // right after picking it, before they'd had any chance
+                    // to decide whether to visit Toppings first. Leaving
+                    // this unfocused means focus simply stays on Base
+                    // after selecting it, and the player reaches this
+                    // button on their own terms via the order-form nav
+                    // graph's Down-from-base -> toppings -> Down-from-
+                    // toppings -> here chain above.
                     onClick={placeOrder}
                   >
                     Place Order
@@ -757,16 +957,6 @@ const CustomerOrdering = ({ activeStep, customerNumber, onNavigate, onAdvance, o
                 )}
               </div>
             </div>
-
-            {/* Third highlight beat's label -- see receiptDismissed above.
-                Sits in the open margin beside the modal (the modal itself
-                is centered and min(880px, 68%) wide, so ~16% of the card
-                is free on either side). */}
-            {!receiptDismissed && (
-              <p className="ordering-receipt-hint">
-                This is your customer&apos;s receipt -- fill it out according to their order, then click Enter.
-              </p>
-            )}
           </>
         )}
 
