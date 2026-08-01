@@ -852,6 +852,212 @@ function getCurrentScaleX(el) {
 
 const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order, onSendToMilk }) => {
   const containerRef = useRef(null);
+  // Declared up here (rather than scattered near where each one used to
+  // live -- heaterButtonRef/kettleRef/whiskRef were each declared right
+  // before the effect that hands them focus mid-gameplay; bowlRef is new)
+  // purely so the keyboard-nav bridge effect right below -- which needs
+  // all four -- can be registered before useFlatFocusNav(containerRef)
+  // further down is. See that effect's own comment for why the
+  // registration order matters (same reasoning already worked out for
+  // Customer Ordering's own version of this).
+  const heaterButtonRef = useRef(null);
+  const kettleRef = useRef(null);
+  const whiskRef = useRef(null);
+  const bowlRef = useRef(null);
+
+  // Backspace (mapped to the 'Back' action, see pal.js) is repurposed
+  // within this station: it never steps back to the previous station from
+  // here -- instead it's the key that stops the two timed challenges (the
+  // scoop gauge and the heater's temp gauge, see handleScoopKeyDown/
+  // handleBarKeyDown further down, both of which check for 'Back' and
+  // stopPropagation once they act on it). This effect is the blanket half
+  // of that: for every OTHER case (nothing focused that owns a challenge,
+  // e.g. a tin, the whisk, the order button), Backspace still shouldn't
+  // fall through to App.js's global Back handler and step back out of this
+  // station, so it's swallowed here. Deliberately left NOT swallowed while
+  // the Settings popover is open (checked live via the DOM, same idiom
+  // used elsewhere in this file for the gear/popover) -- that's a
+  // different Back behavior entirely (closing an overlay, not navigating
+  // stations) and should keep working exactly as it does on every other
+  // screen. Being a child of App.js, this always attaches its own window
+  // listener before App.js's own Back effect does (React commits child
+  // effects before parent effects), so it gets first crack at the keypress
+  // whenever it does swallow it.
+  useEffect(() => {
+    const handleBackDown = (e) => {
+      if (getActionFromKeyEvent(e) !== 'Back') return;
+      if (document.querySelector('.settings-popover')) return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+    };
+    window.addEventListener('keydown', handleBackDown);
+    return () => window.removeEventListener('keydown', handleBackDown);
+  }, []);
+
+  // This station's own explicit keyboard nav graph, per request -- same
+  // "exact fixed graph, not generic spatial nearest-neighbor matching"
+  // approach as Customer Ordering's order-form nav and Settings' own
+  // popover nav: station dot Up -> whisk; whisk Up -> first (cafe-grade)
+  // tin; tins Left/Right cycle among the three (DOM order, via the
+  // '.selectable' class shared by all three -- see STATIC_ITEMS' JSX
+  // below); any tin Up -> Order button (top-right), Down -> first tin
+  // (from the Order button) or back to whisk (from any tin); Order button
+  // Left -> Settings gear, Settings Right -> back to Order button; whisk
+  // Left -> bowl, bowl Left -> heater/"kettle" button, and back via Right;
+  // heater button Up -> kettle, kettle Up -> Settings gear; Settings Down
+  // (while its popover is closed -- while open, SettingsPanel's own
+  // handler owns Down, moving into the popover instead) -> kettle, kettle
+  // Down -> heater button; whisk/bowl/heater button Down -> station dot.
+  //
+  // Registered here, before useFlatFocusNav(containerRef) below, for the
+  // same reason (and avoiding the same possible cascade) worked out for
+  // Customer Ordering's own bridges: useFlatFocusNav's own spatial Up/Down/
+  // Left/Right handling calls focus() synchronously, updating
+  // document.activeElement immediately within the same event dispatch --
+  // if this effect were registered after useFlatFocusNav's own, a single
+  // press could let that generic hook move focus first and then have this
+  // handler immediately act again on the same press, skipping a step.
+  // Registering this one first means it only ever sees focus as it was
+  // *before* any handler for this keypress has run.
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      const action = getActionFromKeyEvent(e);
+      if (action !== 'Up' && action !== 'Down' && action !== 'Left' && action !== 'Right') return;
+      const active = document.activeElement;
+
+      const orderButton = document.querySelector('.order-receipt-button');
+      const gearButton = document.querySelector('.settings-toggle-button');
+      const tins = containerRef.current
+        ? Array.from(containerRef.current.querySelectorAll('.selectable'))
+        : [];
+      const firstTin = tins[0] ?? null;
+
+      // Station dot -> whisk.
+      if (active === document.querySelector('.progress-step.current')) {
+        if (action === 'Up') {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          whiskRef.current?.focus();
+        }
+        return;
+      }
+
+      // Any matcha tin: Left/Right cycles siblings, Up -> Order button,
+      // Down -> whisk.
+      const tinIndex = tins.indexOf(active);
+      if (tinIndex !== -1) {
+        if (action === 'Left' || action === 'Right') {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          const nextIndex = action === 'Right' ? tinIndex + 1 : tinIndex - 1;
+          tins[nextIndex]?.focus();
+        } else if (action === 'Up') {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          orderButton?.focus();
+        } else if (action === 'Down') {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          whiskRef.current?.focus();
+        }
+        return;
+      }
+
+      if (active === orderButton) {
+        if (action === 'Left') {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          gearButton?.focus();
+        } else if (action === 'Down') {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          firstTin?.focus();
+        }
+        return;
+      }
+
+      if (active === gearButton) {
+        if (action === 'Right') {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          orderButton?.focus();
+        } else if (action === 'Down') {
+          const popoverOpen = !!document.querySelector('.settings-popover');
+          if (popoverOpen) return;
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          kettleRef.current?.focus();
+        }
+        return;
+      }
+
+      if (active === whiskRef.current) {
+        if (action === 'Left') {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          bowlRef.current?.focus();
+        } else if (action === 'Up') {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          firstTin?.focus();
+        } else if (action === 'Down') {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          document.querySelector('.progress-step.current')?.focus();
+        }
+        return;
+      }
+
+      if (active === bowlRef.current) {
+        if (action === 'Left') {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          heaterButtonRef.current?.focus();
+        } else if (action === 'Right') {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          whiskRef.current?.focus();
+        } else if (action === 'Down') {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          document.querySelector('.progress-step.current')?.focus();
+        }
+        return;
+      }
+
+      if (active === heaterButtonRef.current) {
+        if (action === 'Right') {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          bowlRef.current?.focus();
+        } else if (action === 'Up') {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          kettleRef.current?.focus();
+        } else if (action === 'Down') {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          document.querySelector('.progress-step.current')?.focus();
+        }
+        return;
+      }
+
+      if (active === kettleRef.current) {
+        if (action === 'Up') {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          gearButton?.focus();
+        } else if (action === 'Down') {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          heaterButtonRef.current?.focus();
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
   useFlatFocusNav(containerRef);
 
   // First-visit highlight on the Order receipt button (top-right, see
@@ -866,27 +1072,13 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
   // down, by selectedTin).
   const [showOrderHint, setShowOrderHint] = useState(true);
 
-  // Sends focus to the first matcha tin the moment this station mounts --
-  // otherwise, ProgressBar's own autoFocus={isCurrent} (see ProgressBar.js)
-  // would land focus on the bottom nav's "Matcha" step button instead, which
-  // works fine as a generic default across every station but isn't the most
-  // helpful *first* stop on a station a player hasn't used yet. Runs in a
-  // plain useEffect (fires after mount, once painted) so it reliably
-  // overrides that native autofocus rather than racing it -- .selectable is
-  // unique to the tins in this component (see STATIC_ITEMS' JSX below), so
-  // the query always grabs the first (cafe-grade) tin specifically.
-  //
-  // Skipped for as long as showOrderHint is up -- that highlight moves
-  // focus onto the Order button itself (see OrderReceiptButton.js), and
-  // this effect running right after (children's effects fire before the
-  // parent's own, so this one would otherwise run second and steal focus
-  // straight back) would undo that. Once showOrderHint retires (opened then
-  // closed once), this fires and hands focus to the first tin, right as the
-  // tin highlight (showTinHint below) turns on for it.
-  useEffect(() => {
-    if (showOrderHint) return;
-    containerRef.current?.querySelector('.selectable')?.focus();
-  }, [showOrderHint]);
+  // Used to send focus to the first matcha tin once showOrderHint retired
+  // -- removed per request, now that this station has its own explicit,
+  // deterministic keyboard nav graph (see the big keydown effect below)
+  // starting from ProgressBar's own current-step dot on mount, same as
+  // Customer Ordering. That graph is what gets a player from the station
+  // dot to the tins now (Up, Up again), rather than this effect
+  // auto-stealing focus there once a separate hint dismissed.
 
   // ---- Heater power button: on/off toggle, plus a green/red "temp zone"
   // light keyed to how far the temp bar fill has progressed (see
@@ -936,10 +1128,6 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
   const rafIdsRef = useRef([]);
   const barRef = useRef(null);
   const fillRef = useRef(null);
-  // Focus target for the "matcha's poured, heat the water next" handoff --
-  // see the bigSpoonStage effect further down that focuses this the moment
-  // the big spoon's dump sequence finishes.
-  const heaterButtonRef = useRef(null);
 
   useEffect(() => {
     zoneTimersRef.current.forEach(clearTimeout);
@@ -965,6 +1153,17 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
     if (heaterOn) {
       setBarRunning(true);
       setFillActive(false);
+      // Focuses the gauge itself the moment it's revealed -- this is
+      // different from the "advance to the next already-existing/reachable
+      // control" guidance jumps removed elsewhere in this file (those
+      // stayed removed): the heater button's own four arrow directions are
+      // already fully spoken for (Right/Up/Down per the explicit nav graph
+      // near the top of this component), so there's no spare direction
+      // left to reach this brand-new gauge with. Same idea as Dropdown's
+      // firstOptionRef auto-focus in CustomerOrdering.js -- opening a new
+      // widget focuses *into* it, it just never got removed there. Without
+      // this, Enter/Space can never land on the gauge at all, so stopBar
+      // never fires and the fill/zone animations never play.
       barRef.current?.focus();
       // Two nested rAFs (one frame to let the just-mounted gauge paint at
       // its resting scaleX(0), a second to actually flip the class) --
@@ -1026,11 +1225,20 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
     tempBarHideTimerRef.current = setTimeout(() => setTempBarVisible(false), TEMP_BAR_LINGER_MS);
   };
 
+  // Stops the gauge on Backspace, not Enter -- Enter/Space stay reserved
+  // for *selecting* items (the heater button's own native onClick, the
+  // tin/whisk/order button handlers, etc.); Backspace is repurposed here
+  // (and on the scoop gauge below) specifically for these two "stop the
+  // running challenge" actions. Both keydown handlers also stopPropagation
+  // so this Backspace never reaches the blanket Back-swallowing listener
+  // near the top of this component, let alone App.js's global Back
+  // handler -- it should only ever stop the gauge, never navigate away.
   const handleBarKeyDown = (e) => {
     const action = getActionFromKeyEvent(e);
-    if (action !== 'Enter') return;
+    if (action !== 'Back') return;
     if (shouldDebounceEnter(e)) return;
     e.preventDefault();
+    e.stopPropagation();
     stopBar();
   };
 
@@ -1039,26 +1247,18 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
   // Which item (if any) is being dragged right now, and its live position.
   const [drag, setDrag] = useState(null); // { key, left, top } | null
   const dragStartRef = useRef({ pointerX: 0, pointerY: 0, left: 0, top: 0 });
-  // Focus target for the "temp bar's gone, carry the kettle over next"
-  // handoff -- see the effect right below that focuses this once the gauge
-  // finishes lingering and disappears.
-  const kettleRef = useRef(null);
-  // Focus target for the "kettle's done pouring, whisk it next" handoff --
-  // see the kettleStage effect further down (where kettleStage returns to
-  // 'idle' after actually pouring) that focuses this.
-  const whiskRef = useRef(null);
 
-  // Sends focus to the kettle the instant the temp bar disappears
-  // (tempBarVisible flips false only once, via the hide timer stopBar
-  // schedules -- see TEMP_BAR_LINGER_MS above -- so this can't misfire on,
-  // say, the heater being switched off instead). Continues the same guided
-  // "next thing to do" focus chain used everywhere else in this file (tin
-  // -> scoop gauge -> big spoon -> heater button -> now the kettle), so the
-  // player's steered straight into picking it up and carrying it to the
-  // bowl next.
+  // Sends focus back to the heater's power button ("kettle button") the
+  // instant the temp gauge disappears (tempBarVisible flipping false,
+  // TEMP_BAR_LINGER_MS after stopBar). Same "the control that was focused
+  // is unmounting, so it must hand focus off explicitly or it falls into
+  // the void" reasoning as the scoop-bar/big-spoon pair above -- the gauge
+  // (barRef) is what's been focused since it opened, and it's about to be
+  // removed from the DOM outright, so without this the halo would simply
+  // vanish instead of landing back on the button that opened it.
   useEffect(() => {
     if (!tempBarVisible) {
-      kettleRef.current?.focus();
+      heaterButtonRef.current?.focus();
     }
   }, [tempBarVisible]);
 
@@ -1482,11 +1682,6 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
   const showWhiskHint = Boolean(bowlPowder) && Boolean(bowlWater) && kettleStage === 'idle' && whiskStage === 'idle';
 
   const bigSpoonDragStartRef = useRef({ pointerX: 0, pointerY: 0, left: 0, top: 0 });
-  // Sends focus to the big spoon itself (see the effect below) the moment
-  // it appears -- same "make the newly-revealed thing the next stop" idea
-  // as the mount effect above that lands focus on the first tin, and the
-  // scoopBarRef.current?.focus() call further down that lands focus on the
-  // scoop gauge as soon as a tin's selected.
   const bigSpoonRef = useRef(null);
 
   useEffect(() => {
@@ -1501,6 +1696,15 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
         scoopSliderRef.current.style.top = '';
       }
       setScoopRunning(true);
+      // Focuses the gauge itself the moment it's revealed -- same
+      // "opening a new widget focuses into it" exception as the heater
+      // bar above (see its comment for the full reasoning): the tin's own
+      // four arrow directions are already fully spoken for (Left/Right to
+      // cycle tins, Up to the order button, Down to the whisk), so
+      // there's no spare direction to reach this brand-new gauge with.
+      // Without this, Enter/Space can never land on it, so stopScoop
+      // never fires and neither the fill nor the big-spoon animation that
+      // follows it ever plays.
       scoopBarRef.current?.focus();
     } else {
       setScoopRunning(false);
@@ -1509,12 +1713,16 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
   }, [selectedTin]);
 
   // Sends focus straight to the big spoon the instant it's revealed
-  // (scoopConfirmed flipping true is exactly what mounts it -- see the JSX
-  // below), so the very next Enter/Space press (or D-pad nudge) is already
-  // aimed at the thing that just appeared, same "focus follows the newly-
-  // revealed control" idea used everywhere else in this file. Guarded to
-  // only fire while scoopConfirmed is actually true, not on the reverse
-  // transition (e.g. a fresh tin selection resetting it back to false).
+  // (scoopConfirmed flipping true, which is also exactly when the gauge
+  // above unmounts -- see the JSX below). Same "opening a new widget
+  // focuses into it" exception as the gauge/heater-bar auto-focus above,
+  // not the "advance to the next already-existing control" guidance jumps
+  // that stayed removed elsewhere in this file: the spoon has no other
+  // reachable path to it (the tin that spawned it has all four arrow
+  // directions already spoken for), and the gauge it's replacing is about
+  // to disappear out from under whatever focus was on it, so without this
+  // focus would simply fall off into the void and Enter could never reach
+  // beginDump -- the spoon would sit there permanently inert.
   useEffect(() => {
     if (scoopConfirmed) {
       bigSpoonRef.current?.focus();
@@ -1563,11 +1771,17 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
     );
   };
 
+  // Stops the slider on Backspace, not Enter -- same split as the heater
+  // gauge's handleBarKeyDown above (see its comment): Enter/Space stay for
+  // *selecting* items, Backspace is reserved for stopping a running
+  // challenge. stopPropagation keeps this from also reaching the blanket
+  // Back-swallowing listener (and App.js's global Back handler) above.
   const handleScoopKeyDown = (e) => {
     const action = getActionFromKeyEvent(e);
-    if (action !== 'Enter') return;
+    if (action !== 'Back') return;
     if (shouldDebounceEnter(e)) return;
     e.preventDefault();
+    e.stopPropagation();
     stopScoop();
   };
 
@@ -1622,16 +1836,18 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
   // until acted on" shape as every earlier beat.
   const showHeaterHint = bigSpoonStage === 'done' && !heaterOn;
 
-  // Sends focus to the heater's power button once the matcha's fully
-  // poured -- bigSpoonStage flipping to 'done' is exactly the moment the
-  // big spoon itself unmounts (see the JSX below), so this continues the
-  // guided "next thing to do" focus chain (tin -> scoop gauge -> big spoon
-  // -> now the heater), steering the player straight into starting the
-  // water-heating step next rather than leaving focus on a now-vanished
-  // element.
+  // Sends focus to the bowl the moment the pour finishes (bigSpoonStage
+  // settling on 'done'). Not a "guided next step" nudge like the ones that
+  // stayed removed elsewhere -- the big spoon that was focused right up
+  // until this point actually unmounts the instant bigSpoonStage hits
+  // 'done' (see the JSX below), so without handing focus off explicitly it
+  // would just fall into the void (document.body) instead of landing
+  // somewhere a player can see and act on. The bowl is also exactly where
+  // play continues next (arrow over to the kettle to heat/pour water), so
+  // its white focus halo doubles as the cue for where to go.
   useEffect(() => {
     if (bigSpoonStage === 'done') {
-      heaterButtonRef.current?.focus();
+      bowlRef.current?.focus();
     }
   }, [bigSpoonStage]);
 
@@ -1787,13 +2003,10 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
       const t = setTimeout(() => {
         setItemPositions((prev) => ({ ...prev, kettle: MOVABLE_START.kettle }));
         setKettleStage('idle');
-        // Continues the guided "next thing to do" focus chain (tin -> scoop
-        // gauge -> big spoon -> heater button -> kettle -> now the whisk)
-        // right as the kettle finishes pouring and glides back to the
-        // counter -- this only ever runs from inside the 'pouring' branch,
-        // so it can't misfire at initial mount, when kettleStage also
-        // starts out 'idle' but nothing's actually been poured yet.
-        whiskRef.current?.focus();
+        // Sends the halo to the bowl once the water's actually landed --
+        // per request, the bowl is where play continues next (whisking)
+        // regardless of which item was just used to fill it.
+        bowlRef.current?.focus();
       }, KETTLE_POUR_MS);
       return () => clearTimeout(t);
     }
@@ -1985,6 +2198,11 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
         // just now visually put away instead of left sitting in the bowl.
         setItemPositions((prev) => ({ ...prev, whisk: MOVABLE_START.whisk }));
         setWhiskStage('done');
+        // Same as the kettle above -- once whisking's done, the halo goes
+        // back to the bowl (not the now-put-away whisk), since that's
+        // where the next action (carrying it to the Make Drink zone)
+        // happens.
+        bowlRef.current?.focus();
       }
     };
     rafId = requestAnimationFrame(tick);
@@ -2076,7 +2294,7 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
               data-focusable
               tabIndex={0}
               role="button"
-              aria-label="Temperature gauge. Press Enter to lock in the current temperature."
+              aria-label="Temperature gauge. Press Backspace to lock in the current temperature."
               onKeyDown={handleBarKeyDown}
               onClick={stopBar}
               style={{
@@ -2104,7 +2322,7 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
                 className="heater-temp-bar-hint"
                 style={{ left: `${TEMP_BAR_BOX.left}%`, top: `${TEMP_BAR_BOX.top + TEMP_BAR_BOX.height + 2}%` }}
               >
-                Use your space key to get the right temperature.
+                Use your backspace key to get the right temperature.
               </p>
             )}
           </>
@@ -2183,7 +2401,7 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
                   data-focusable
                   tabIndex={0}
                   role="button"
-                  aria-label="Scoop gauge. Press Enter to stop the slider at the current line."
+                  aria-label="Scoop gauge. Press Backspace to stop the slider at the current line."
                   onKeyDown={handleScoopKeyDown}
                   onClick={stopScoop}
                   style={{
@@ -2221,7 +2439,7 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
                 </div>
                 {scoopRunning && (
                   <p className="scoop-bar-hint">
-                    Use your space key to choose the right measurement, be as accurate as possible!
+                    Use your backspace key to choose the right measurement, be as accurate as possible!
                   </p>
                 )}
                 {SCOOP_SPOON_ITEMS.map((item) => (
@@ -2341,7 +2559,7 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
           return (
             <img
               key={item.key}
-              ref={isKettle ? kettleRef : isWhisk ? whiskRef : undefined}
+              ref={isKettle ? kettleRef : isWhisk ? whiskRef : isBowl ? bowlRef : undefined}
               src={item.src}
               alt={
                 isWhisk

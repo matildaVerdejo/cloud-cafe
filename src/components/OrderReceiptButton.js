@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useRef, useState } from 'react';
 import './OrderReceiptButton.css';
 import { playButtonClick, playButtonClickOff } from '../gameloop/sfx';
 
@@ -49,17 +49,19 @@ const OrderReceiptButton = ({ order, highlight = false, hintText = null, hintTex
   const [open, setOpen] = useState(false);
   const buttonRef = useRef(null);
 
-  // Moves focus onto this button the moment highlight turns on, same
-  // "the highlighted thing becomes the next thing selected" idea used
-  // elsewhere (.order-place-button/ProgressBar's current-step dot in
-  // CustomerOrdering.js) -- and what makes the accompanying hint's
-  // "use your Enter key" instruction actually true immediately, since
-  // Enter only opens this via its own native on-focused-button behavior.
-  useEffect(() => {
-    if (highlight) {
-      buttonRef.current?.focus();
-    }
-  }, [highlight]);
+  // Used to move focus onto this button the moment highlight turned on
+  // (same "the highlighted thing becomes the next thing selected" idea
+  // used elsewhere, e.g. .order-place-button/ProgressBar's current-step
+  // dot in CustomerOrdering.js) -- removed per request once the station
+  // screens got their own explicit, deterministic keyboard nav graphs
+  // (see the big keydown effect near the top of MatchaMaking.js, and
+  // eventually Milk Selection/Toppings too): those graphs all start from
+  // ProgressBar's own current-step dot on mount, and this effect used to
+  // steal focus away from that onto this button instead, the moment
+  // `highlight` was already true at mount (MatchaMaking's own
+  // showOrderHint starts as true). The visual flash/hint text themselves
+  // (highlight/hintText/hintTextOpen below) are untouched -- only the
+  // auto-focus was the problem.
 
   // onToggle fires for both a click AND a native Enter/Space activation
   // (both route through this one onClick) -- callers can use this to react
