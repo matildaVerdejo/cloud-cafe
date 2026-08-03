@@ -473,6 +473,213 @@ function isOverSendDrinkZone(leftPct, topPct) {
 
 const MilkSelection = ({ activeStep, customerNumber, onNavigate, onAdvance, order, incomingBowl, onSendToToppings }) => {
   const containerRef = useRef(null);
+
+  // This station's own explicit keyboard nav graph, per request -- same
+  // "exact fixed graph, not generic spatial nearest-neighbor matching"
+  // approach as Matcha Making/Customer Ordering's own graphs. Starting
+  // point: station dot Up -> oat milk (the first bottle, .milk-bottle in
+  // DOM order matches BOTTLE_ITEMS' oat/dairy/almond/coconut order) --
+  // more legs to be added here as the rest of this frame's nav gets
+  // worked out.
+  //
+  // Registered before useFlatFocusNav(containerRef) below for the same
+  // reason worked out for the other two frames: useFlatFocusNav's own
+  // spatial Up/Down/Left/Right handling calls focus() synchronously within
+  // the same event dispatch, so if this effect attached its listener after
+  // useFlatFocusNav's, a single keypress could let that generic hook move
+  // focus first and then have this handler act again immediately after,
+  // skipping a step. Registering this one first guarantees it only ever
+  // sees focus as it was *before* any handler for this keypress has run.
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      const action = getActionFromKeyEvent(e);
+      if (action !== 'Up' && action !== 'Down' && action !== 'Left' && action !== 'Right') return;
+      const active = document.activeElement;
+
+      const bottles = containerRef.current
+        ? Array.from(containerRef.current.querySelectorAll('.milk-bottle'))
+        : [];
+      const firstBottle = bottles[0] ?? null;
+      const bowl = document.querySelector('.incoming-bowl');
+      const iceCubes = containerRef.current
+        ? Array.from(containerRef.current.querySelectorAll('.ice-cube'))
+        : [];
+      const firstIceCube = iceCubes[0] ?? null;
+      const gearButton = document.querySelector('.settings-toggle-button');
+      // Both shelf cups (glass and plastic) share the .glass-cup class (see
+      // their shared JSX below) -- glass is always first in DOM order
+      // (['glass', 'plastic'].map), so index 0 is exactly "the glass cup".
+      const shelfCups = containerRef.current
+        ? Array.from(containerRef.current.querySelectorAll('.glass-cup'))
+        : [];
+      const firstCup = shelfCups[0] ?? null;
+      const orderButton = document.querySelector('.order-receipt-button');
+
+      // Station dot -> oat milk.
+      if (active === document.querySelector('.progress-step.current')) {
+        if (action === 'Up') {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          firstBottle?.focus();
+        }
+        return;
+      }
+
+      // Any bottle: Left/Right cycles siblings, same trap-at-the-ends shape
+      // as Matcha Making's tins -- swallows the keypress even when there's
+      // no sibling that way (nextIndex out of bounds, so bottles[nextIndex]
+      // is undefined and .focus() on it is a no-op), so a Right press on
+      // the last bottle just does nothing instead of falling through to
+      // useFlatFocusNav's generic spatial fallback, which was jumping out
+      // to the order button. The one exception is Left from the first
+      // bottle (oat) -- rather than trapping that one too, it continues on
+      // to the bowl. Up from any of them goes to the first (glass) cup up
+      // on the shelf, Down goes back to the station dot.
+      const bottleIndex = bottles.indexOf(active);
+      if (bottleIndex !== -1) {
+        if (action === 'Left' && bottleIndex === 0) {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          bowl?.focus();
+        } else if (action === 'Left' || action === 'Right') {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          const nextIndex = action === 'Right' ? bottleIndex + 1 : bottleIndex - 1;
+          bottles[nextIndex]?.focus();
+        } else if (action === 'Up') {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          firstCup?.focus();
+        } else if (action === 'Down') {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          document.querySelector('.progress-step.current')?.focus();
+        }
+        return;
+      }
+
+      // Bowl: Left -> first ice cube, Up -> settings, Down -> station dot.
+      if (active === bowl) {
+        if (action === 'Left') {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          firstIceCube?.focus();
+        } else if (action === 'Up') {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          gearButton?.focus();
+        } else if (action === 'Down') {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          document.querySelector('.progress-step.current')?.focus();
+        }
+        return;
+      }
+
+      // Any ice cube: Up -> settings, but only from the first row of the
+      // pile -- ICE_BOX_SPOTS stacks the cubes in two overlapping vertical
+      // columns (4 left, 3 right, see its own comment above), so the
+      // "first row" is the topmost/rearmost cube in each column: index 0
+      // (top of the 4-cube left column) and index 4 (top of the 3-cube
+      // right column). Down -> station dot, only from the last row --
+      // the frontmost/bottommost cube in each column: index 3 (bottom of
+      // the left column) and index 6 (bottom of the right column). Every
+      // other cube leaves both directions unhandled (falls through to
+      // whatever useFlatFocusNav's generic fallback already did before
+      // this).
+      const iceIndex = iceCubes.indexOf(active);
+      if (iceIndex !== -1) {
+        if (action === 'Up' && (iceIndex === 0 || iceIndex === 4)) {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          gearButton?.focus();
+        } else if (action === 'Down' && (iceIndex === 3 || iceIndex === 6)) {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          document.querySelector('.progress-step.current')?.focus();
+        }
+        return;
+      }
+
+      // The active cup, still up on the shelf: Left/Right only ever
+      // toggles between the two of them (trapped at both ends, same shape
+      // as the bottles above -- the "other" cup index is always
+      // 1 - thisIndex since there are only two). Up goes to the order
+      // button, Down goes to the first bottle.
+      //
+      // Once Enter's moved it down to the table (cupSpot, mirrored live
+      // into cupSpotRef -- see that ref's own comment above), it's a
+      // completely different, single-item context -- there's no sibling
+      // to toggle to any more, so Left instead continues the same
+      // right-to-left chain the bottles/bowl/ice cubes already form:
+      // straight to the bowl, and from there on to the ice cubes exactly
+      // like Left from the oat milk bottle already does. It deliberately
+      // does *not* fall through to the shelf's own Left/Right toggle
+      // behavior any more.
+      const cupIndex = shelfCups.indexOf(active);
+      if (cupIndex !== -1) {
+        if (cupSpotRef.current === 'table') {
+          if (action === 'Left') {
+            e.preventDefault();
+            e.stopImmediatePropagation();
+            bowl?.focus();
+          }
+          return;
+        }
+        if (action === 'Left' || action === 'Right') {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          shelfCups[1 - cupIndex]?.focus();
+        } else if (action === 'Down') {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          firstBottle?.focus();
+        } else if (action === 'Up') {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          orderButton?.focus();
+        }
+        return;
+      }
+
+      // Order button -> Left goes to settings, Down goes to the first
+      // (glass) cup, same reciprocal pair every other frame's own order
+      // button/gear share.
+      if (active === orderButton) {
+        if (action === 'Left') {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          gearButton?.focus();
+        } else if (action === 'Down') {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          firstCup?.focus();
+        }
+        return;
+      }
+
+      // Settings gear -> Down goes back to the bowl, Right goes back to
+      // the order button -- same "reciprocal pair" shape as the other
+      // frames' own gear legs. Down only while its popover is closed;
+      // while open, SettingsPanel's own handler owns Down (moving into the
+      // volume controls instead).
+      if (active === gearButton) {
+        if (action === 'Down' && !document.querySelector('.settings-popover')) {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          bowl?.focus();
+        } else if (action === 'Right') {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          orderButton?.focus();
+        }
+        return;
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
   useFlatFocusNav(containerRef);
 
   // ---- Carried-over bowl from Matcha Making (see incomingBowl above) -----
@@ -549,6 +756,20 @@ const MilkSelection = ({ activeStep, customerNumber, onNavigate, onAdvance, orde
   // handleCupSwitchPointerDown/handleCupSwitchKeyDown further down).
   const [activeCup, setActiveCup] = useState('glass');
   const [cupSpot, setCupSpot] = useState('shelf');
+  // Mirrors cupSpot into a ref so the big keyboard-nav effect declared up
+  // near the top of this component (which needs to run *before*
+  // useFlatFocusNav, see its own comment -- so it's registered with an
+  // empty dependency array and never re-subscribes) can still always read
+  // the *current* cupSpot instead of whatever it was on that first render.
+  // Re-running that effect on every cupSpot change instead would mean
+  // removing and re-adding its window listener each time, which would
+  // attach it *after* useFlatFocusNav's own already-attached one from then
+  // on -- reintroducing the exact double-hop cascade bug this whole nav
+  // system has been built around avoiding.
+  const cupSpotRef = useRef(cupSpot);
+  useEffect(() => {
+    cupSpotRef.current = cupSpot;
+  }, [cupSpot]);
   const [cupDragPos, setCupDragPos] = useState(null);
   const cupDragStartRef = useRef({ pointerX: 0, pointerY: 0, cupLeft: 0, cupTop: 0 });
   // Which cup type (if any) currently has the white focus halo -- drives
@@ -774,6 +995,20 @@ const MilkSelection = ({ activeStep, customerNumber, onNavigate, onAdvance, orde
         next[iceDrag.index] = true;
         return next;
       });
+      // Same focus handoff as the keyboard path in handleIceKeyDown below
+      // -- dragging normally focuses the cube via its own pointerdown, and
+      // this cube's about to lose tabIndex/data-focusable the instant it's
+      // marked placed, so without moving focus off it here first,
+      // document.activeElement would be left pointing at a now-unfocusable
+      // node, which useFlatFocusNav treats as "focus belongs to something
+      // else" and stops responding to arrow keys entirely.
+      if (document.activeElement?.classList.contains('ice-cube')) {
+        const cubes = containerRef.current
+          ? Array.from(containerRef.current.querySelectorAll('.ice-cube'))
+          : [];
+        const nextCube = cubes.find((el, i) => i !== iceDrag.index && !icePlaced[i]);
+        nextCube?.focus();
+      }
     }
     // Otherwise (dropped somewhere ambiguous) leave placement as it was --
     // the cube just snaps back to wherever it already was once the drag
@@ -806,6 +1041,16 @@ const MilkSelection = ({ activeStep, customerNumber, onNavigate, onAdvance, orde
       next[index] = true;
       return next;
     });
+    // Once this cube's placed in the cup, the halo shouldn't follow it
+    // there -- it stays in the ice box, on whichever cube is next in line
+    // (first remaining unplaced one, by index). icePlaced here is still
+    // the pre-update snapshot (the setter above hasn't re-rendered yet),
+    // so it correctly reflects "everyone except the one just placed".
+    const cubes = containerRef.current
+      ? Array.from(containerRef.current.querySelectorAll('.ice-cube'))
+      : [];
+    const nextCube = cubes.find((el, i) => i !== index && !icePlaced[i]);
+    nextCube?.focus();
   };
 
   // ---- Milk/water bottles: pick up, move anywhere, snap back home -------
@@ -1346,8 +1591,17 @@ const MilkSelection = ({ activeStep, customerNumber, onNavigate, onAdvance, orde
               className={`ice-cube${dragging ? ' dragging' : ''}${placed ? ' placed' : ''}${
                 leaving ? ' bowl-vanishing' : ''
               }`}
-              data-focusable
-              tabIndex={0}
+              // Once a cube's placed in the cup, it drops out of keyboard
+              // nav entirely -- both useFlatFocusNav's generic spatial
+              // fallback (which only ever looks at [data-focusable]
+              // elements) and native Tab order skip it, since it sits right
+              // on top of/next to the cup and kept "stealing" the landing
+              // spot on presses that weren't explicitly wired elsewhere.
+              // Mouse/pointer drag (to pull it back out of the cup) is
+              // untouched -- that's plain pointer events, not tabIndex-
+              // gated. Cubes still in the ice box are unaffected either way.
+              {...(placed ? {} : { 'data-focusable': true })}
+              tabIndex={placed ? -1 : 0}
               draggable={false}
               style={{
                 left: `${pos.left}%`,
