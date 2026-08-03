@@ -111,6 +111,25 @@ function App() {
   // without re-attaching the listener on every navigation.
   const currentPageRef = useRef(currentPage);
   currentPageRef.current = currentPage;
+  // Highest STEP_KEYS index reached so far *this round* -- once a station
+  // is left behind for a later one, per request it should be locked: no
+  // more going back to it, by any path (ProgressBar's own Left-arrow/dot
+  // navigation, or the Backspace/Back key below). -1 until the player
+  // actually reaches 'ordering' (STEP_KEYS' own index 0), so nothing is
+  // considered "locked" yet on the splash/main screens. Bumped up (never
+  // down) below on every render while currentPage is a real station --
+  // Math.max against its own previous value makes this safe to recompute
+  // on every render (including React.StrictMode's double-invocation)
+  // without any special-casing. Explicitly reset back to -1 in
+  // handlePlayClick and handleAdvance's "next customer" branch below,
+  // *before* the state update that starts a fresh round at 'ordering' --
+  // otherwise a new customer's stations would stay artificially locked
+  // from the previous one's progress.
+  const maxStepIndexRef = useRef(-1);
+  const currentStepIndexForLock = STEP_KEYS.indexOf(currentPage);
+  if (currentStepIndexForLock !== -1) {
+    maxStepIndexRef.current = Math.max(maxStepIndexRef.current, currentStepIndexForLock);
+  }
   // Exit-confirm dialog is rendered outside/on top of the per-screen
   // components, so it needs its own spatial-nav scope -- the screens'
   // useFlatFocusNav hooks only act while focus is inside their own
@@ -239,6 +258,34 @@ function App() {
     };
   }, []);
 
+  // ---- Lock input to arrow keys / Enter / Backspace only -------------------
+  // Per request: no other key should do anything. pal.js's own
+  // KEYCODE_TO_ACTION already stops treating Space as Enter (see its own
+  // comment), which handles every screen's *custom* action-based
+  // handlers -- but real <button> elements (Start, the settings gear, the
+  // volume +/-, ProgressBar's dots, etc.) still activate on Space by
+  // default via the browser's own native behavior, completely independent
+  // of pal.js's map, and Tab still cycles focus via the browser's own
+  // native tab order, independent of the D-pad nav effects every screen
+  // builds. Both need to be preventDefault'd directly to actually stop.
+  // Registered with { capture: true } so it runs in the capture phase,
+  // before the event even reaches its target (let alone any bubble-phase
+  // listener, including every screen's own keydown effects and the Back
+  // handler right below) -- guaranteeing Space/Tab never reach a native
+  // element's default activation/focus-shift behavior no matter which
+  // screen is mounted. Only ever calls preventDefault, never
+  // stopPropagation, so it doesn't interfere with any other handler still
+  // wanting to see (and ignore) the same event.
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.keyCode === 32 || e.keyCode === 9) {
+        e.preventDefault();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown, { capture: true });
+    return () => window.removeEventListener('keydown', handleKeyDown, { capture: true });
+  }, []);
+
   // ---- Back key policy (single PAL-driven path) ---------------------------
   // Top-level menu (main, or the exit-confirm dialog on top of it) routes to
   // exit UX then close. Every other screen's Back walks one step back
@@ -283,7 +330,12 @@ function App() {
         setCurrentPage('main');
         setCustomerNumber(1);
         sendAdOpportunity('MENU_RETURN');
-      } else {
+      } else if (idx - 1 >= maxStepIndexRef.current) {
+        // Only actually steps back if that previous station somehow isn't
+        // locked yet (idx is normally exactly maxStepIndexRef.current, so
+        // idx - 1 is normally always < it -- see maxStepIndexRef's own
+        // comment above) -- per request, a station already left behind for
+        // a later one can't be revisited, Backspace included.
         setCurrentPage(STEP_KEYS[idx - 1]);
       }
     };
@@ -297,6 +349,11 @@ function App() {
   };
 
   const handlePlayClick = () => {
+    // Fresh round -- reset the lock too (see maxStepIndexRef's own comment
+    // above), before setCurrentPage below actually lands on 'ordering', so
+    // this customer's stations don't start out already locked from
+    // whatever the previous customer reached.
+    maxStepIndexRef.current = -1;
     setCustomerNumber(1);
     setCurrentOrder(null);
     setMatchaBowl(null);
@@ -306,8 +363,16 @@ function App() {
   };
 
   // Progress bar: clicking any step other than the current one jumps
-  // straight there, forward or back.
+  // straight there -- forward freely, but per request never backward past
+  // whichever station's already been left behind for a later one (see
+  // maxStepIndexRef's own comment above). This is the single choke point
+  // both ProgressBar's dot-click (moot now that the mouse is disabled
+  // entirely, but still routes through here) and its own Left-arrow
+  // handler (onNavigate(PROGRESS_STEPS[activeIndex - 1].key)) both call,
+  // so locking it here alone covers every path into this function.
   const navigateTo = (pageKey) => {
+    const targetIndex = STEP_KEYS.indexOf(pageKey);
+    if (targetIndex !== -1 && targetIndex < maxStepIndexRef.current) return;
     setCurrentPage(pageKey);
   };
 
@@ -323,6 +388,10 @@ function App() {
       return;
     }
     if (customerNumber < ORDERS_PER_SESSION) {
+      // Next customer, fresh round -- reset the lock (see maxStepIndexRef's
+      // own comment above) before setCurrentPage below lands back on
+      // 'ordering', same reasoning as handlePlayClick's own reset.
+      maxStepIndexRef.current = -1;
       setCustomerNumber((n) => n + 1);
       setCurrentOrder(null);
       setMatchaBowl(null);

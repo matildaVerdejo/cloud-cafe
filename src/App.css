@@ -19,6 +19,37 @@ body {
   background-color: #f0f0f0;
 }
 
+/* Per request: the game should only be playable with arrow keys, Enter,
+   and Backspace -- no mouse/trackpad at all. Blocks every mouse-driven
+   click/drag across the entire app in one shot, without having to touch
+   each screen's own onPointerDown/Move/Up and onClick handlers
+   individually. This does NOT affect keyboard input at all: focus
+   navigation (the D-pad effects/useFlatFocusNav) and keyboard-triggered
+   activation (native <button> Enter behavior, and every screen's own
+   onKeyDown handlers) don't depend on pointer-events in any way -- only
+   real mouse/touch/pen hit-testing is gated by this property, so
+   Enter/Backspace/arrows keep working exactly as before.
+
+   Targets .App *  (every descendant directly), not just .App itself --
+   pointer-events is inherited, but inheritance only fills in for elements
+   that don't set their own value; several screens already have their own
+   more-specific "pointer-events: auto" overrides (e.g. MatchaMaking.css's
+   focused-tin/dragging states, OrderReceiptButton.css's open drawer,
+   ToppingsStation.css's equivalents) that exist to selectively re-enable
+   dragging/clicking for one element at a time, and those would still win
+   over anything merely *inherited* from a .App-level rule, no matter how
+   far up the tree it comes from or whether that ancestor rule uses
+   !important -- an element's own explicit declaration always beats an
+   inherited value regardless of importance. Setting the property directly
+   on every descendant (via *), with !important, is what actually
+   guarantees none of those can quietly re-open a mouse path anywhere in
+   the app -- none of the existing "auto" overrides use !important
+   themselves, so this wins everywhere. */
+.App,
+.App * {
+  pointer-events: none !important;
+}
+
 /* Wraps whichever single screen is currently mounted (.page-slide ->
    that screen's own fixed 1920x1080-aspect container) -- unstyled other
    than this, so it always sizes to exactly match that screen's own box

@@ -11,7 +11,13 @@ const KEYCODE_TO_ACTION = {
   39: 'Right',
   40: 'Down',
   13: 'Enter',
-  32: 'Enter',
+  // Space (32) used to also map to 'Enter' -- removed per request: the
+  // game should only respond to arrow keys, Enter, and Backspace, nothing
+  // else. See the capture-phase listener in App.js for the other half of
+  // this -- removing the mapping here stops the game's own action-based
+  // handlers from treating Space as Enter, but native <button> elements
+  // still activate on Space by default regardless of this map, so that
+  // listener also preventDefaults Space (and Tab) directly.
   // Back deltas: Backspace/Escape (desktop/browser testing), 461 (LG webOS),
   // 10009 (Samsung Tizen), 27 duplicated intentionally for clarity.
   8: 'Back',
