@@ -374,7 +374,7 @@ const ICE_BOX_SPOTS = [
   { left: 12.93, top: 77.13 },
 ];
 const ICE_BOX_SIZE = { width: 5.03, height: 9.196 };
-const ICE_CUP_SIZE = { width: 4, height: 4.11 };
+export const ICE_CUP_SIZE = { width: 4, height: 4.11 };
 // Cluster near the bottom of the glass instead of floating at the rim --
 // y values follow the taper of GlassCup.png (verified against a stretched
 // preview of the art). Five cubes form a front row along the glass floor;
@@ -402,7 +402,7 @@ const ICE_CUP_SLOT_FRACTIONS = [
 // ICE_CUP_SLOT_FRACTIONS themselves were only ever tuned against
 // GlassCup.png's own taper, so this is a reasonable approximation rather
 // than a pixel-perfect trace when the plastic cup is the active one.
-function getIceCupSlotPos(index, cupPos, cupSize) {
+export function getIceCupSlotPos(index, cupPos, cupSize) {
   const frac = ICE_CUP_SLOT_FRACTIONS[index % ICE_CUP_SLOT_FRACTIONS.length];
   const centerX = cupPos.left + frac.x * cupSize.width;
   const centerY = cupPos.top + frac.y * cupSize.height;
@@ -1261,7 +1261,19 @@ const MilkSelection = ({ activeStep, customerNumber, onNavigate, onAdvance, orde
     // deliberately out-of-scope-for-now simplification (this screen's own
     // shelf<->table/pour/send mechanics are what needed to work correctly
     // for both cup types, not what the next screen visually shows).
-    onSendToToppings?.({ milk: cupMilk, matcha: cupMatcha, cupType: activeCup });
+    // iceCubes: how many cubes were actually placed in the cup (icePlaced
+    // itself is a per-slot boolean array; only the count matters on the
+    // other side, since ToppingsStation just needs to know how many to
+    // draw, not which specific box slots they came from) -- without this,
+    // any ice the player placed here was silently vanishing the moment the
+    // drink reached Toppings, since nothing in the handoff object carried
+    // it over at all.
+    onSendToToppings?.({
+      milk: cupMilk,
+      matcha: cupMatcha,
+      cupType: activeCup,
+      iceCubes: icePlaced.filter(Boolean).length,
+    });
     setCupSendPos({
       left: SEND_DRINK_ZONE.left + SEND_DRINK_ZONE.width / 2 - CUP_TYPES[activeCup].tableSize.width / 2,
       top: SEND_DRINK_ZONE.top + SEND_DRINK_ZONE.height / 2 - CUP_TYPES[activeCup].tableSize.height / 2,

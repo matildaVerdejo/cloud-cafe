@@ -4,7 +4,7 @@ import { useFlatFocusNav } from '../gameloop/useFlatFocusNav';
 import { getActionFromKeyEvent, shouldDebounceEnter } from '../gameloop/pal';
 import ProgressBar from './ProgressBar';
 import OrderReceiptButton from './OrderReceiptButton';
-import { getMilkBoxFor, getMatchaBoxFor, TABLE_SIZE, CUP_TYPES } from './MilkSelection';
+import { getMilkBoxFor, getMatchaBoxFor, TABLE_SIZE, CUP_TYPES, getIceCupSlotPos, ICE_CUP_SIZE } from './MilkSelection';
 import { WHISK_FLIP_DEG } from './MatchaMaking';
 
 // Where the finished cup (see incomingDrink below) sent over from Milk
@@ -509,6 +509,235 @@ const ToppingsStation = ({
   onSendToFinal,
 }) => {
   const containerRef = useRef(null);
+
+  // This station's own explicit keyboard nav graph, per request -- same
+  // "exact fixed graph, not generic spatial nearest-neighbor matching"
+  // approach as every other frame's own graph. Starting legs: station dot
+  // Up -> the carried-over cup; cup Left -> reg-cold-foam (the "white"
+  // foam -- closer to center, since FOAM_PAIR's own layoutPair always
+  // places index 0, matcha-cold-foam, further left and index 1,
+  // reg-cold-foam, to its right/closer in), Left again from there ->
+  // matcha-cold-foam (the green one, further out); cup Right ->
+  // matcha-powder (closer to center within POWDER_PAIR, same reasoning),
+  // Right again from there -> guava-powder (further out). More legs to be
+  // added here as the rest of this frame's nav gets worked out.
+  //
+  // None of the syrup/foam/powder pairs (or the cup) had any distinguishing
+  // class of their own to query by (all three pairs, plus the cup, share
+  // the exact same .station-item.movable class) -- data-topping-key was
+  // added to each of their own JSX (see the syrup/foam/powder render
+  // blocks and the cup below) purely so this effect can look them up
+  // reliably by key instead of guessing at DOM order across three separate
+  // .filter(...).map(...) blocks.
+  //
+  // Registered before useFlatFocusNav(containerRef) below for the same
+  // reason worked out for every other frame: useFlatFocusNav's own spatial
+  // Up/Down/Left/Right handling calls focus() synchronously within the
+  // same event dispatch, so if this effect attached its listener after
+  // useFlatFocusNav's, a single keypress could let that generic hook move
+  // focus first and then have this handler act again immediately after,
+  // skipping a step. Registering this one first guarantees it only ever
+  // sees focus as it was *before* any handler for this keypress has run.
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      const action = getActionFromKeyEvent(e);
+      if (action !== 'Up' && action !== 'Down' && action !== 'Left' && action !== 'Right') return;
+      const active = document.activeElement;
+
+      const cup = containerRef.current?.querySelector('[data-topping-key="cup"]') ?? null;
+      const regFoam = containerRef.current?.querySelector('[data-topping-key="reg-cold-foam"]') ?? null;
+      const matchaFoam = containerRef.current?.querySelector('[data-topping-key="matcha-cold-foam"]') ?? null;
+      const matchaPowder = containerRef.current?.querySelector('[data-topping-key="matcha-powder"]') ?? null;
+      const guavaPowder = containerRef.current?.querySelector('[data-topping-key="guava-powder"]') ?? null;
+      const guavaSyrup = containerRef.current?.querySelector('[data-topping-key="guava-syrup"]') ?? null;
+      const mintSyrup = containerRef.current?.querySelector('[data-topping-key="mint-syrup"]') ?? null;
+      const orderButton = document.querySelector('.order-receipt-button');
+      const gearButton = document.querySelector('.settings-toggle-button');
+
+      // Station dot -> cup.
+      if (active === document.querySelector('.progress-step.current')) {
+        if (action === 'Up') {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          cup?.focus();
+        }
+        return;
+      }
+
+      // Cup: Left -> reg-cold-foam (white), Right -> matcha-powder, Down ->
+      // station dot.
+      if (active === cup) {
+        if (action === 'Left') {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          regFoam?.focus();
+        } else if (action === 'Right') {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          matchaPowder?.focus();
+        } else if (action === 'Down') {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          document.querySelector('.progress-step.current')?.focus();
+        }
+        return;
+      }
+
+      // Reg-cold-foam (white): Left -> matcha-cold-foam (green), Up ->
+      // guava-syrup, Down -> station dot.
+      if (active === regFoam) {
+        if (action === 'Left') {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          matchaFoam?.focus();
+        } else if (action === 'Up') {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          guavaSyrup?.focus();
+        } else if (action === 'Down') {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          document.querySelector('.progress-step.current')?.focus();
+        }
+        return;
+      }
+
+      // Matcha-cold-foam (green): Up -> guava-syrup (same target as
+      // reg-cold-foam's own Up above -- the syrup pair sits directly above
+      // the whole foam pair, not one-per-foam), Down -> station dot.
+      if (active === matchaFoam) {
+        if (action === 'Up') {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          guavaSyrup?.focus();
+        } else if (action === 'Down') {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          document.querySelector('.progress-step.current')?.focus();
+        }
+        return;
+      }
+
+      // Guava-syrup: Right -> mint-syrup, Down -> matcha-cold-foam (same
+      // target as mint-syrup's own Down below -- the whole foam pair sits
+      // directly below the syrup pair, not one-per-syrup), Up -> settings
+      // (not the order button -- unlike the powder pair, this pair's Up
+      // goes to the gear directly).
+      if (active === guavaSyrup) {
+        if (action === 'Right') {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          mintSyrup?.focus();
+        } else if (action === 'Down') {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          matchaFoam?.focus();
+        } else if (action === 'Up') {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          gearButton?.focus();
+        }
+        return;
+      }
+
+      // Mint-syrup: Right -> matcha-powder (continuing the same rightward
+      // chain matcha-powder's own Right -> guava-powder already forms),
+      // Down -> matcha-cold-foam, Up -> settings (same target as
+      // guava-syrup's own Up above).
+      if (active === mintSyrup) {
+        if (action === 'Right') {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          matchaPowder?.focus();
+        } else if (action === 'Down') {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          matchaFoam?.focus();
+        } else if (action === 'Up') {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          gearButton?.focus();
+        }
+        return;
+      }
+
+      // Matcha-powder: Right -> guava-powder, Up -> order button, Down ->
+      // cup.
+      if (active === matchaPowder) {
+        if (action === 'Right') {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          guavaPowder?.focus();
+        } else if (action === 'Up') {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          orderButton?.focus();
+        } else if (action === 'Down') {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          cup?.focus();
+        }
+        return;
+      }
+
+      // Guava-powder: Up -> order button, Down -> cup. Right is trapped (a
+      // no-op) -- it's the last item in the pair, so it shouldn't fall
+      // through to useFlatFocusNav's generic spatial fallback, which was
+      // jumping out to the order button on Right instead of only on Up.
+      if (active === guavaPowder) {
+        if (action === 'Up') {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          orderButton?.focus();
+        } else if (action === 'Down') {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          cup?.focus();
+        } else if (action === 'Right') {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+        }
+        return;
+      }
+
+      // Order button -> Left goes to settings, Down goes to matcha-powder,
+      // same reciprocal pair every other frame's own order button/gear
+      // share.
+      if (active === orderButton) {
+        if (action === 'Left') {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          gearButton?.focus();
+        } else if (action === 'Down') {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          matchaPowder?.focus();
+        }
+        return;
+      }
+
+      // Settings gear -> Right goes back to the order button, Down goes to
+      // guava-syrup -- same reciprocal-pair shape as every other frame's
+      // own gear legs. Down only while its popover is closed; while open,
+      // SettingsPanel's own handler owns Down (moving into the volume
+      // controls instead).
+      if (active === gearButton) {
+        if (action === 'Right') {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          orderButton?.focus();
+        } else if (action === 'Down' && !document.querySelector('.settings-popover')) {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          guavaSyrup?.focus();
+        }
+        return;
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
   useFlatFocusNav(containerRef);
 
   // ---- Sending the finished drink on to Serving ---------------------------
@@ -1246,6 +1475,7 @@ const ToppingsStation = ({
               alt={`${item.alt}. Drag onto the drink to pour some in, or select it and press Enter. While it's pouring, use Left/Right to aim the stream.`}
               className={`station-item movable${dragging ? ' dragging' : ''}${isPouring ? ' settling' : ''}`}
               data-focusable
+              data-topping-key={item.key}
               tabIndex={0}
               draggable={false}
               style={{
@@ -1282,6 +1512,7 @@ const ToppingsStation = ({
                 alt={`${item.alt}. Drag onto the drink to pour some in, or select it and press Enter. While it's pouring, use Left/Right to aim the stream.`}
                 className={`station-item movable${dragging ? ' dragging' : ''}${isPouring ? ' settling' : ''}`}
                 data-focusable
+                data-topping-key={item.key}
                 tabIndex={0}
                 draggable={false}
                 style={{
@@ -1319,6 +1550,7 @@ const ToppingsStation = ({
               alt={`${item.alt}. Drag onto the drink to pour some in, or select it and press Enter. While it's pouring, use Left/Right to aim the stream.`}
               className={`station-item movable${dragging ? ' dragging' : ''}${isPouring ? ' settling' : ''}`}
               data-focusable
+              data-topping-key={item.key}
               tabIndex={0}
               draggable={false}
               style={{
@@ -1407,6 +1639,7 @@ const ToppingsStation = ({
                 drinkSendStage === 'vanishing' ? ' bowl-vanishing' : ''
               }`}
               data-focusable
+              data-topping-key="cup"
               tabIndex={0}
               draggable={false}
               style={{
@@ -1421,6 +1654,43 @@ const ToppingsStation = ({
               onPointerUp={handleDrinkPointerUp}
               onKeyDown={handleDrinkKeyDown}
             />
+            {/* Ice cubes carried over from Milk Selection -- incomingDrink
+                only ever carried milk/matcha/cupType across before, so any
+                ice the player placed in the cup there was silently getting
+                dropped the moment the drink reached this screen. Milk
+                Selection's own beginSendDrink now also hands off an
+                iceCubes count (see its own comment), and getIceCupSlotPos/
+                ICE_CUP_SIZE are reused directly from there (both exported
+                for exactly this) so the cubes land in the same seven fixed
+                cup-relative spots they already use, positioned off
+                incomingDrinkRenderPos/incomingDrinkSize like every other
+                fill here so they glide/vanish with the rest of the drink
+                instead of staying behind. Rendered before the milk fill
+                below (same paint-order reasoning Milk Selection's own
+                comment gives) so milk/matcha correctly paints over them
+                once poured. Purely decorative here -- unlike Milk
+                Selection's own cubes, these aren't draggable/focusable;
+                the player's ice decisions are already locked in by this
+                screen. */}
+            {Array.from({ length: incomingDrink.iceCubes ?? 0 }).map((_, index) => {
+              const iceSlotPos = getIceCupSlotPos(index, incomingDrinkRenderPos, incomingDrinkSize);
+              return (
+                <img
+                  key={index}
+                  src="./IceCube.png"
+                  alt=""
+                  aria-hidden="true"
+                  className={`ice-cube placed${drinkSendStage === 'vanishing' ? ' bowl-vanishing' : ''}`}
+                  style={{
+                    left: `${iceSlotPos.left}%`,
+                    top: `${iceSlotPos.top}%`,
+                    width: `${ICE_CUP_SIZE.width}%`,
+                    height: `${ICE_CUP_SIZE.height}%`,
+                    pointerEvents: 'none',
+                  }}
+                />
+              );
+            })}
             {incomingMilkBox && (
               <div
                 className={`cup-milk-fill ${incomingDrink.milk.type}${
