@@ -96,20 +96,34 @@ const MATCHA_POWDER_ITEM = {
 // canvasAspect values re-measured after these four were also re-exported
 // with their own excess transparent padding trimmed (139x264, 140x269,
 // 155x297, 151x290 now -- all were 193-wide before).
+// Mint first (left), guava second (right) -- swapped from the original
+// guava-then-mint order per request.
 const SYRUP_PAIR = [
-  { key: 'guava-syrup', src: './GuavaSyrup.png', alt: 'Guava syrup', canvasAspect: 139 / 264 },
   { key: 'mint-syrup', src: './MintSyrup.png', alt: 'Mint syrup', canvasAspect: 140 / 269 },
+  { key: 'guava-syrup', src: './GuavaSyrup.png', alt: 'Guava syrup', canvasAspect: 139 / 264 },
 ];
-const FOAM_PAIR = [
+const FOAM_PAIR_BASE = [
   { key: 'matcha-cold-foam', src: './MatchaColdFoam.png', alt: 'Matcha cold foam', canvasAspect: 155 / 297 },
   { key: 'reg-cold-foam', src: './RegColdFoam.png', alt: 'Regular cold foam', canvasAspect: 151 / 290 },
 ];
+// Banana foam -- new order-2-and-later topping, same "locked until order 2"
+// gating as MilkSelection's own strawberry milk bottle. Sits next to
+// reg-cold-foam (to its right), per request. canvasAspect measured the same
+// way as the other five toppings (361x692 raw canvas) -- works out to
+// 0.5217, close enough to matcha-cold-foam's 0.5219 and reg-cold-foam's
+// 0.5207 that scaling by the shared TOPPING_HEIGHT alone already gives it
+// the "same size" as the other two, no extra tuning needed. Same squeeze-
+// bottle art style as reg-cold-foam/matcha-cold-foam (not a tin/jar), so it
+// gets the exact same treatment (canvasAspect-only sizing, no leftPad/
+// rightPad fields) as its two pair-mates.
+const BANANA_FOAM_ITEM = { key: 'banana-foam', src: './BananaFoam.png', alt: 'Banana foam', canvasAspect: 361 / 692 };
+const FOAM_PAIR_WITH_BANANA = [...FOAM_PAIR_BASE, BANANA_FOAM_ITEM];
 // The same two item objects laid out at the top of the file (matcha-powder/
-// guava-powder), just grouped the same "pair" way as SYRUP_PAIR/FOAM_PAIR
-// above so the pour-mechanic code below can filter/iterate them the same
-// way (layoutPair itself is still called with [MATCHA_POWDER_ITEM,
-// GUAVA_POWDER_ITEM] directly below, in TOPPING_ITEMS -- this is just an
-// alias for the interactive-rendering code further down).
+// guava-powder), just grouped the same "pair" way as SYRUP_PAIR/
+// FOAM_PAIR_BASE above so the pour-mechanic code below can filter/iterate
+// them the same way (layoutPair itself is still called with
+// [MATCHA_POWDER_ITEM, GUAVA_POWDER_ITEM] directly below, in POWDER_ITEMS --
+// this is just an alias for the interactive-rendering code further down).
 const POWDER_PAIR = [MATCHA_POWDER_ITEM, GUAVA_POWDER_ITEM];
 
 // Eyeballed starting guess (no reference for where these six should sit on
@@ -132,14 +146,34 @@ const POWDER_HEIGHT = TOPPING_HEIGHT * 0.7; // smaller than the syrup/foam pairs
 const TOPPING_ROW_BOTTOM = 45; // the powder pair's bottom edge lands here -- raised up from the table line (was 64, then 58, 50, 47), per request
 const EDGE_MARGIN = 5; // gap from the left/right edges of the frame
 // The powder pair sits VERY close together internally -- much tighter than
-// PAIR_GAP. FOAM_PAIR's spacing was already confirmed good, so it keeps
-// the wider PAIR_GAP.
+// PAIR_GAP. The foam row's spacing was already confirmed good, so it keeps
+// the wider PAIR_GAP (including for banana-foam, added later).
 const TIGHT_PAIR_GAP = 0.15;
 // The syrup pair needs to be even closer together than TIGHT_PAIR_GAP, per
 // request -- tightened further still (was 0.05) per a later request to
 // move guava-syrup and mint-syrup closer to each other.
 const SYRUP_PAIR_GAP = 0.02;
 const PAIR_GAP = 0.6;
+// The foam pair's own PNGs (MatchaColdFoam.png/RegColdFoam.png) still carry
+// a lot of internal transparent padding on their outward-facing sides even
+// after the trim mentioned above (matcha-cold-foam's visible art starts
+// ~38% of its own box-width in from its left edge; guava-powder's visible
+// art, by contrast, only has ~4.6% of its own box-width as padding on its
+// right side). Anchoring the foam pair at the same EDGE_MARGIN as the
+// syrup/powder pairs therefore left a noticeably bigger *visual* gap
+// between the screen's left edge and the actual foam art than the gap
+// between guava-powder's actual art and the right edge, even though both
+// pairs' boxes technically started/ended at the same EDGE_MARGIN. Given a
+// separate, smaller left anchor here (2.01, vs EDGE_MARGIN's 5) so the
+// foam pair's *visible* left margin lines up with the powder pair's
+// *visible* right margin instead -- per request. The syrup pair (mint-syrup
+// leftmost after the swap) shares this same anchor too, per a later request
+// to move it left so it lines back up with the foam pair below it -- its
+// own leftmost item's padding (mint-syrup, ~38.6% of its own box-width) is
+// close enough to matcha-cold-foam's (~38.1%) that reusing this one anchor
+// for both keeps the two pairs' visible left edges aligned within a
+// fraction of a percent, not just their boxes.
+const STACK_LEFT_MARGIN = 2.01;
 // Syrup pair's top -- shifted down slightly from the very top edge (was
 // CORNER_PAIR_TOP-style 6), per request.
 const SYRUP_TOP = 12;
@@ -148,12 +182,16 @@ const SYRUP_TOP = 12;
 const STACK_GAP = 3;
 const FOAM_TOP = SYRUP_TOP + TOPPING_HEIGHT + STACK_GAP;
 
-// Lays out one pair as two boxes `gap` apart at a shared height/top,
-// anchored either to a left edge, a right edge, or horizontally centered
-// on a point -- anchor is { type: 'left' | 'right' | 'center', x }.
+// Lays out a row of items (originally always exactly a "pair" of two --
+// name kept for the powder/syrup call sites that still are -- generalized
+// to any length once the foam row grew a third member, banana-foam) as
+// boxes `gap` apart at a shared height/top, anchored either to a left
+// edge, a right edge, or horizontally centered on a point -- anchor is
+// { type: 'left' | 'right' | 'center', x }. Behaves identically to the old
+// two-item-only version for every existing 2-item call site.
 function layoutPair(pair, height, top, gap, anchor) {
   const widths = pair.map((item) => height * item.canvasAspect * (9 / 16));
-  const totalWidth = widths[0] + gap + widths[1];
+  const totalWidth = widths.reduce((sum, w) => sum + w, 0) + gap * (widths.length - 1);
   let startLeft;
   if (anchor.type === 'left') {
     startLeft = anchor.x;
@@ -162,7 +200,12 @@ function layoutPair(pair, height, top, gap, anchor) {
   } else {
     startLeft = anchor.x - totalWidth / 2;
   }
-  const lefts = [startLeft, startLeft + widths[0] + gap];
+  const lefts = [];
+  let cursor = startLeft;
+  for (let i = 0; i < widths.length; i += 1) {
+    lefts.push(cursor);
+    cursor += widths[i] + gap;
+  }
   return pair.map((item, index) => ({
     key: item.key,
     src: item.src,
@@ -174,25 +217,46 @@ function layoutPair(pair, height, top, gap, anchor) {
   }));
 }
 
-const TOPPING_ITEMS = [
-  // matcha-powder first, guava-powder to its right -- smaller (POWDER_
-  // HEIGHT), tight (TIGHT_PAIR_GAP), now down on the table baseline at the
-  // right edge instead of up in the corner.
-  ...layoutPair([MATCHA_POWDER_ITEM, GUAVA_POWDER_ITEM], POWDER_HEIGHT, TOPPING_ROW_BOTTOM - POWDER_HEIGHT, TIGHT_PAIR_GAP, {
-    type: 'right',
-    x: 100 - EDGE_MARGIN,
-  }),
-  // guava-syrup first, mint-syrup to its right -- upper-left corner,
-  // shifted down slightly (SYRUP_TOP) and even tighter (SYRUP_PAIR_GAP).
-  ...layoutPair(SYRUP_PAIR, TOPPING_HEIGHT, SYRUP_TOP, SYRUP_PAIR_GAP, {
+// matcha-powder first, guava-powder to its right -- smaller (POWDER_
+// HEIGHT), tight (TIGHT_PAIR_GAP), now down on the table baseline at the
+// right edge instead of up in the corner. Shared by both TOPPING_ITEMS
+// variants below -- unaffected by whether banana-foam is unlocked.
+const POWDER_ITEMS = layoutPair([MATCHA_POWDER_ITEM, GUAVA_POWDER_ITEM], POWDER_HEIGHT, TOPPING_ROW_BOTTOM - POWDER_HEIGHT, TIGHT_PAIR_GAP, {
+  type: 'right',
+  x: 100 - EDGE_MARGIN,
+});
+// mint-syrup first, guava-syrup to its right -- upper-left corner, shifted
+// down slightly (SYRUP_TOP) and even tighter (SYRUP_PAIR_GAP). Anchored at
+// STACK_LEFT_MARGIN (not EDGE_MARGIN) so it lines back up with the foam
+// row directly below it -- see STACK_LEFT_MARGIN's own comment. Also
+// shared by both variants -- the syrup pair itself never gains a third
+// member.
+const SYRUP_ITEMS = layoutPair(SYRUP_PAIR, TOPPING_HEIGHT, SYRUP_TOP, SYRUP_PAIR_GAP, {
+  type: 'left',
+  x: STACK_LEFT_MARGIN,
+});
+// matcha-cold-foam first, reg-cold-foam to its right (then banana-foam
+// further right still, order-2-and-later only) -- directly below the syrup
+// row, stacked at FOAM_TOP. Anchored at STACK_LEFT_MARGIN (not EDGE_MARGIN)
+// so its visible left margin matches the powder pair's visible right
+// margin -- see STACK_LEFT_MARGIN's own comment. Two precomputed variants
+// (base/with-banana), same "precompute both, pick one per customerNumber"
+// pattern as MilkSelection's own BOTTLE_ITEMS_BASE/_WITH_STRAWBERRY --
+// picked via toppingItems in the component below.
+const TOPPING_ITEMS_BASE = [
+  ...POWDER_ITEMS,
+  ...SYRUP_ITEMS,
+  ...layoutPair(FOAM_PAIR_BASE, TOPPING_HEIGHT, FOAM_TOP, PAIR_GAP, {
     type: 'left',
-    x: EDGE_MARGIN,
+    x: STACK_LEFT_MARGIN,
   }),
-  // matcha-cold-foam first, reg-cold-foam to its right -- directly below
-  // the syrup pair (same left-edge anchor), stacked at FOAM_TOP.
-  ...layoutPair(FOAM_PAIR, TOPPING_HEIGHT, FOAM_TOP, PAIR_GAP, {
+];
+const TOPPING_ITEMS_WITH_BANANA = [
+  ...POWDER_ITEMS,
+  ...SYRUP_ITEMS,
+  ...layoutPair(FOAM_PAIR_WITH_BANANA, TOPPING_HEIGHT, FOAM_TOP, PAIR_GAP, {
     type: 'left',
-    x: EDGE_MARGIN,
+    x: STACK_LEFT_MARGIN,
   }),
 ];
 
@@ -208,6 +272,7 @@ const TOPPING_LABELS = {
   'mint-syrup': 'mint syrup',
   'matcha-cold-foam': 'matcha foam',
   'reg-cold-foam': 'regular foam',
+  'banana-foam': 'banana foam',
   'matcha-powder': 'matcha powder',
   'guava-powder': 'guava powder',
 };
@@ -381,6 +446,8 @@ const FOAM_CLICK_MAX_MOVE_PCT = 1;
 const FOAM_STREAM_COLORS = {
   'matcha-cold-foam': 'rgba(200, 213, 171, 0.95)',
   'reg-cold-foam': 'rgba(234, 232, 227, 0.95)',
+  // Banana-yellow, same family as the banana-foam bottle's own art.
+  'banana-foam': 'rgba(240, 219, 137, 0.95)',
 };
 
 // ---- Pouring matcha-powder/guava-powder onto the carried-over drink -----
@@ -510,14 +577,24 @@ const ToppingsStation = ({
 }) => {
   const containerRef = useRef(null);
 
+  // Banana foam only becomes orderable/visible from order 2 onward -- same
+  // "precompute both variants, pick one per customerNumber" gating as
+  // MilkSelection's own strawberryUnlocked/bottleItems. Since App.js only
+  // ever mounts one station component at a time (see the identical caveat
+  // on strawberryUnlocked in MilkSelection.js), customerNumber is fixed for
+  // this component's whole mounted lifetime, so a plain read here (no
+  // memoization) is safe.
+  const bananaFoamUnlocked = customerNumber >= 2;
+  const toppingItems = bananaFoamUnlocked ? TOPPING_ITEMS_WITH_BANANA : TOPPING_ITEMS_BASE;
+
   // This station's own explicit keyboard nav graph, per request -- same
   // "exact fixed graph, not generic spatial nearest-neighbor matching"
   // approach as every other frame's own graph. Starting legs: station dot
   // Up -> the carried-over cup; cup Left -> reg-cold-foam (the "white"
-  // foam -- closer to center, since FOAM_PAIR's own layoutPair always
-  // places index 0, matcha-cold-foam, further left and index 1,
-  // reg-cold-foam, to its right/closer in), Left again from there ->
-  // matcha-cold-foam (the green one, further out); cup Right ->
+  // foam -- closer to center, since FOAM_PAIR_BASE/_WITH_BANANA's own
+  // layoutPair always places index 0, matcha-cold-foam, further left and
+  // index 1, reg-cold-foam, to its right/closer in), Left again from there
+  // -> matcha-cold-foam (the green one, further out); cup Right ->
   // matcha-powder (closer to center within POWDER_PAIR, same reasoning),
   // Right again from there -> guava-powder (further out). More legs to be
   // added here as the rest of this frame's nav gets worked out.
@@ -547,6 +624,10 @@ const ToppingsStation = ({
       const cup = containerRef.current?.querySelector('[data-topping-key="cup"]') ?? null;
       const regFoam = containerRef.current?.querySelector('[data-topping-key="reg-cold-foam"]') ?? null;
       const matchaFoam = containerRef.current?.querySelector('[data-topping-key="matcha-cold-foam"]') ?? null;
+      // Only actually rendered from order 2 onward (see bananaFoamUnlocked
+      // above) -- null on order 1, so the optional-chained focus() calls
+      // below just no-op until then.
+      const bananaFoam = containerRef.current?.querySelector('[data-topping-key="banana-foam"]') ?? null;
       const matchaPowder = containerRef.current?.querySelector('[data-topping-key="matcha-powder"]') ?? null;
       const guavaPowder = containerRef.current?.querySelector('[data-topping-key="guava-powder"]') ?? null;
       const guavaSyrup = containerRef.current?.querySelector('[data-topping-key="guava-syrup"]') ?? null;
@@ -583,13 +664,18 @@ const ToppingsStation = ({
         return;
       }
 
-      // Reg-cold-foam (white): Left -> matcha-cold-foam (green), Up ->
-      // guava-syrup, Down -> station dot.
+      // Reg-cold-foam (white): Left -> matcha-cold-foam (green), Right ->
+      // banana-foam (order 2+ only -- a no-op on order 1, since bananaFoam
+      // is null then), Up -> guava-syrup, Down -> station dot.
       if (active === regFoam) {
         if (action === 'Left') {
           e.preventDefault();
           e.stopImmediatePropagation();
           matchaFoam?.focus();
+        } else if (action === 'Right') {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          bananaFoam?.focus();
         } else if (action === 'Up') {
           e.preventDefault();
           e.stopImmediatePropagation();
@@ -618,16 +704,42 @@ const ToppingsStation = ({
         return;
       }
 
-      // Guava-syrup: Right -> mint-syrup, Down -> matcha-cold-foam (same
-      // target as mint-syrup's own Down below -- the whole foam pair sits
-      // directly below the syrup pair, not one-per-syrup), Up -> settings
-      // (not the order button -- unlike the powder pair, this pair's Up
-      // goes to the gear directly).
-      if (active === guavaSyrup) {
+      // Banana-foam (order 2+ only, sits to the right of reg-cold-foam):
+      // Left -> reg-cold-foam, Up -> guava-syrup (same shared target as the
+      // other two foams' own Up), Down -> station dot. Right is trapped (a
+      // no-op) -- it's the last item in the row, same "don't fall through
+      // to useFlatFocusNav's generic fallback" reasoning as guava-powder's
+      // own Right trap.
+      if (active === bananaFoam) {
+        if (action === 'Left') {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          regFoam?.focus();
+        } else if (action === 'Up') {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          guavaSyrup?.focus();
+        } else if (action === 'Down') {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          document.querySelector('.progress-step.current')?.focus();
+        } else if (action === 'Right') {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+        }
+        return;
+      }
+
+      // Mint-syrup (now leftmost, per swap): Right -> guava-syrup, Down ->
+      // matcha-cold-foam (same target as guava-syrup's own Down below --
+      // the whole foam pair sits directly below the syrup pair, not
+      // one-per-syrup), Up -> settings (not the order button -- unlike the
+      // powder pair, this pair's Up goes to the gear directly).
+      if (active === mintSyrup) {
         if (action === 'Right') {
           e.preventDefault();
           e.stopImmediatePropagation();
-          mintSyrup?.focus();
+          guavaSyrup?.focus();
         } else if (action === 'Down') {
           e.preventDefault();
           e.stopImmediatePropagation();
@@ -640,11 +752,11 @@ const ToppingsStation = ({
         return;
       }
 
-      // Mint-syrup: Right -> matcha-powder (continuing the same rightward
-      // chain matcha-powder's own Right -> guava-powder already forms),
-      // Down -> matcha-cold-foam, Up -> settings (same target as
-      // guava-syrup's own Up above).
-      if (active === mintSyrup) {
+      // Guava-syrup (now rightmost, per swap): Right -> matcha-powder
+      // (continuing the same rightward chain matcha-powder's own Right ->
+      // guava-powder already forms), Down -> matcha-cold-foam, Up ->
+      // settings (same target as mint-syrup's own Up above).
+      if (active === guavaSyrup) {
         if (action === 'Right') {
           e.preventDefault();
           e.stopImmediatePropagation();
@@ -833,7 +945,7 @@ const ToppingsStation = ({
   // the-cup landing spot).
   const [syrupPositions, setSyrupPositions] = useState(() => {
     const positions = {};
-    for (const item of TOPPING_ITEMS) {
+    for (const item of toppingItems) {
       if (item.key === 'guava-syrup' || item.key === 'mint-syrup') {
         positions[item.key] = { left: item.left, top: item.top };
       }
@@ -872,8 +984,8 @@ const ToppingsStation = ({
   // bottom).
   const [foamPositions, setFoamPositions] = useState(() => {
     const positions = {};
-    for (const item of TOPPING_ITEMS) {
-      if (item.key === 'matcha-cold-foam' || item.key === 'reg-cold-foam') {
+    for (const item of toppingItems) {
+      if (item.key === 'matcha-cold-foam' || item.key === 'reg-cold-foam' || item.key === 'banana-foam') {
         positions[item.key] = { left: item.left, top: item.top };
       }
     }
@@ -893,7 +1005,7 @@ const ToppingsStation = ({
   // whether foam's already in the cup).
   const [powderPositions, setPowderPositions] = useState(() => {
     const positions = {};
-    for (const item of TOPPING_ITEMS) {
+    for (const item of toppingItems) {
       if (item.key === 'matcha-powder' || item.key === 'guava-powder') {
         positions[item.key] = { left: item.left, top: item.top };
       }
@@ -959,7 +1071,7 @@ const ToppingsStation = ({
 
   const beginSyrupPour = (key) => {
     if (!canPourSyrup) return;
-    const item = TOPPING_ITEMS.find((i) => i.key === key);
+    const item = toppingItems.find((i) => i.key === key);
     setSyrupPositions((prev) => ({ ...prev, [key]: getSyrupHoverPos(item) }));
     setPourOffset(0);
     setPouringKey(key);
@@ -974,7 +1086,7 @@ const ToppingsStation = ({
     if (pourStage === 'pouring') {
       setCupSyrup({ key: pouringKey });
       const t = setTimeout(() => {
-        const home = TOPPING_ITEMS.find((i) => i.key === pouringKey);
+        const home = toppingItems.find((i) => i.key === pouringKey);
         setSyrupPositions((prev) => ({ ...prev, [pouringKey]: { left: home.left, top: home.top } }));
         setPourStage('idle');
         setPouringKey(null);
@@ -983,7 +1095,7 @@ const ToppingsStation = ({
       return () => clearTimeout(t);
     }
     return undefined;
-  }, [pourStage, pouringKey]);
+  }, [pourStage, pouringKey, toppingItems]);
 
   // Left/Right aim while pouring -- a capture-phase window listener (rather
   // than a plain onKeyDown on the bottle) so it runs and can
@@ -1076,7 +1188,7 @@ const ToppingsStation = ({
   // different about foam itself (lands on top of the drink, not the bottom).
   const beginFoamPour = (key) => {
     if (!canPourFoam) return;
-    const item = TOPPING_ITEMS.find((i) => i.key === key);
+    const item = toppingItems.find((i) => i.key === key);
     setFoamPositions((prev) => ({ ...prev, [key]: getFoamHoverPos(item) }));
     setFoamPourOffset(0);
     setFoamPouringKey(key);
@@ -1091,7 +1203,7 @@ const ToppingsStation = ({
     if (foamPourStage === 'pouring') {
       setCupFoam({ key: foamPouringKey });
       const t = setTimeout(() => {
-        const home = TOPPING_ITEMS.find((i) => i.key === foamPouringKey);
+        const home = toppingItems.find((i) => i.key === foamPouringKey);
         setFoamPositions((prev) => ({ ...prev, [foamPouringKey]: { left: home.left, top: home.top } }));
         setFoamPourStage('idle');
         setFoamPouringKey(null);
@@ -1100,7 +1212,7 @@ const ToppingsStation = ({
       return () => clearTimeout(t);
     }
     return undefined;
-  }, [foamPourStage, foamPouringKey]);
+  }, [foamPourStage, foamPouringKey, toppingItems]);
 
   // Same capture-phase-before-useFlatFocusNav intercept as the syrup aim
   // effect above -- see its own big comment for why this has to be capture
@@ -1186,7 +1298,7 @@ const ToppingsStation = ({
   // landing spot).
   const beginPowderPour = (key) => {
     if (!canPourPowder) return;
-    const item = TOPPING_ITEMS.find((i) => i.key === key);
+    const item = toppingItems.find((i) => i.key === key);
     setPowderPositions((prev) => ({ ...prev, [key]: getPowderHoverPos(item) }));
     setPowderPourOffset(0);
     setPowderPouringKey(key);
@@ -1201,7 +1313,7 @@ const ToppingsStation = ({
     if (powderPourStage === 'pouring') {
       setCupPowder({ key: powderPouringKey });
       const t = setTimeout(() => {
-        const home = TOPPING_ITEMS.find((i) => i.key === powderPouringKey);
+        const home = toppingItems.find((i) => i.key === powderPouringKey);
         setPowderPositions((prev) => ({ ...prev, [powderPouringKey]: { left: home.left, top: home.top } }));
         setPowderPourStage('idle');
         setPowderPouringKey(null);
@@ -1210,7 +1322,7 @@ const ToppingsStation = ({
       return () => clearTimeout(t);
     }
     return undefined;
-  }, [powderPourStage, powderPouringKey]);
+  }, [powderPourStage, powderPouringKey, toppingItems]);
 
   // Same capture-phase-before-useFlatFocusNav intercept as the syrup/foam
   // aim effects above -- see the syrup one's own big comment for why this
@@ -1388,7 +1500,7 @@ const ToppingsStation = ({
   // getSyrupBoxFor above. Anchored to the pouring bottle's own current
   // (offset-nudged) position, falling down to the syrup box's own top edge
   // so it reads as landing right where the syrup will appear.
-  const pouringSyrupItem = pouringKey ? TOPPING_ITEMS.find((i) => i.key === pouringKey) : null;
+  const pouringSyrupItem = pouringKey ? toppingItems.find((i) => i.key === pouringKey) : null;
   const pouringSyrupPos = pouringKey ? syrupPositions[pouringKey] : null;
   const syrupPourLeft =
     pouringSyrupItem && pouringSyrupPos ? pouringSyrupPos.left + pouringSyrupItem.width / 2 + pourOffset : 0;
@@ -1398,7 +1510,7 @@ const ToppingsStation = ({
 
   // ---- Falling foam stream -- same idea as the syrup stream above, just
   // landing at the foam box's own top edge (incomingFoamBox) instead.
-  const pouringFoamItem = foamPouringKey ? TOPPING_ITEMS.find((i) => i.key === foamPouringKey) : null;
+  const pouringFoamItem = foamPouringKey ? toppingItems.find((i) => i.key === foamPouringKey) : null;
   const pouringFoamPos = foamPouringKey ? foamPositions[foamPouringKey] : null;
   const foamPourLeft =
     pouringFoamItem && pouringFoamPos ? pouringFoamPos.left + pouringFoamItem.width / 2 + foamPourOffset : 0;
@@ -1411,7 +1523,7 @@ const ToppingsStation = ({
   // foam cap's own top edge if there's foam already in the cup to catch
   // it (cupFoam), otherwise the liquid column's own top edge
   // (incomingPowderLiquidBox) -- see the big comment above POWDER_HOVER_GAP.
-  const pouringPowderItem = powderPouringKey ? TOPPING_ITEMS.find((i) => i.key === powderPouringKey) : null;
+  const pouringPowderItem = powderPouringKey ? toppingItems.find((i) => i.key === powderPouringKey) : null;
   const pouringPowderPos = powderPouringKey ? powderPositions[powderPouringKey] : null;
   const powderPourLeft =
     pouringPowderItem && pouringPowderPos
@@ -1463,7 +1575,7 @@ const ToppingsStation = ({
             imported from MatchaMaking.js) plays while settling/pouring --
             see the big comment on SYRUP_HOVER_GAP above for why a full flip
             rather than milk bottles' own partial tilt. */}
-        {TOPPING_ITEMS.filter((item) => item.key === 'guava-syrup' || item.key === 'mint-syrup').map((item) => {
+        {toppingItems.filter((item) => item.key === 'guava-syrup' || item.key === 'mint-syrup').map((item) => {
           const dragging = syrupDrag?.key === item.key;
           const isPouring = pouringKey === item.key;
           const basePos = dragging ? syrupDrag : syrupPositions[item.key];
@@ -1494,12 +1606,12 @@ const ToppingsStation = ({
             />
           );
         })}
-        {/* Matcha-cold-foam/reg-cold-foam -- identical interaction to the
-            syrup pair above (drag onto the drink or Enter to pour, 180deg
-            flip via WHISK_FLIP_DEG, Left/Right to aim while pouring); see
-            the big comment above FOAM_HOVER_GAP for what's different about
-            where foam actually lands. */}
-        {TOPPING_ITEMS.filter((item) => item.key === 'matcha-cold-foam' || item.key === 'reg-cold-foam').map(
+        {/* Matcha-cold-foam/reg-cold-foam/banana-foam -- identical interaction
+            to the syrup pair above (drag onto the drink or Enter to pour,
+            180deg flip via WHISK_FLIP_DEG, Left/Right to aim while pouring);
+            see the big comment above FOAM_HOVER_GAP for what's different
+            about where foam actually lands. */}
+        {toppingItems.filter((item) => item.key === 'matcha-cold-foam' || item.key === 'reg-cold-foam' || item.key === 'banana-foam').map(
           (item) => {
             const dragging = foamDrag?.key === item.key;
             const isPouring = foamPouringKey === item.key;
@@ -1538,7 +1650,7 @@ const ToppingsStation = ({
             the big comment above POWDER_HOVER_GAP for what's different
             about powder itself (particle stream, foam-dependent landing
             spot). */}
-        {TOPPING_ITEMS.filter((item) => POWDER_PAIR.some((p) => p.key === item.key)).map((item) => {
+        {toppingItems.filter((item) => POWDER_PAIR.some((p) => p.key === item.key)).map((item) => {
           const dragging = powderDrag?.key === item.key;
           const isPouring = powderPouringKey === item.key;
           const basePos = dragging ? powderDrag : powderPositions[item.key];
@@ -1577,13 +1689,13 @@ const ToppingsStation = ({
             works it out (drag position if mid-drag, else its resting
             position, shifted by that pair's own pourOffset while it's
             actually pouring). */}
-        {TOPPING_ITEMS.filter((item) => item.key === focusedTopping).map((item) => {
+        {toppingItems.filter((item) => item.key === focusedTopping).map((item) => {
           let pos;
           if (item.key === 'guava-syrup' || item.key === 'mint-syrup') {
             const dragging = syrupDrag?.key === item.key;
             const basePos = dragging ? syrupDrag : syrupPositions[item.key];
             pos = pouringKey === item.key ? { left: basePos.left + pourOffset, top: basePos.top } : basePos;
-          } else if (item.key === 'matcha-cold-foam' || item.key === 'reg-cold-foam') {
+          } else if (item.key === 'matcha-cold-foam' || item.key === 'reg-cold-foam' || item.key === 'banana-foam') {
             const dragging = foamDrag?.key === item.key;
             const basePos = dragging ? foamDrag : foamPositions[item.key];
             pos = foamPouringKey === item.key ? { left: basePos.left + foamPourOffset, top: basePos.top } : basePos;

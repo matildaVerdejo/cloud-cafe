@@ -35,6 +35,18 @@ const ProgressBar = ({
   // currentStepHint is given, a label pops in above the bar.
   highlightCurrentStep = false,
   currentStepHint = null,
+  // Opt-in, only ever passed by FinalCombination.js when there's a next
+  // order to start (customerNumber < ORDERS_PER_SESSION) -- per request,
+  // starting the next order is now a dedicated "Start order N" button on
+  // that screen instead of this bar's usual "current step = I'm done
+  // here" gesture (Right-arrow or clicking the Serve dot), since using the
+  // exact same widget the player was just blocked from stepping backward
+  // through to jump into a whole new round read as confusing. When true,
+  // both of those still preventDefault/consume the keypress/click (so
+  // nothing falls through to some other nav) but no longer call onAdvance
+  // at all -- every other screen leaves this false and keeps the original
+  // behavior.
+  disableAdvance = false,
 }) => {
   const activeIndex = PROGRESS_STEPS.findIndex((step) => step.key === activeStep);
   const barRef = useRef(null);
@@ -74,14 +86,14 @@ const ProgressBar = ({
       e.preventDefault();
       e.stopImmediatePropagation();
       if (action === 'Right') {
-        onAdvance();
+        if (!disableAdvance) onAdvance();
       } else if (activeIndex > 0) {
         onNavigate(PROGRESS_STEPS[activeIndex - 1].key);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [activeIndex, onAdvance, onNavigate]);
+  }, [activeIndex, onAdvance, onNavigate, disableAdvance]);
 
   // Moves focus onto the current step's dot the moment highlightCurrentStep
   // turns on -- same "the highlighted thing becomes the next thing
@@ -130,7 +142,13 @@ const ProgressBar = ({
                 data-focusable
                 autoFocus={isCurrent}
                 aria-current={isCurrent ? 'step' : undefined}
-                onClick={() => (isCurrent ? onAdvance() : onNavigate(step.key))}
+                onClick={() => {
+                  if (isCurrent) {
+                    if (!disableAdvance) onAdvance();
+                  } else {
+                    onNavigate(step.key);
+                  }
+                }}
               >
                 <span className="progress-step-dot">{isDone ? '✓' : index + 1}</span>
                 <span className="progress-step-label">{step.label}</span>

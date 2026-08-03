@@ -79,7 +79,21 @@ const SCORE_SECTIONS = [
 const TOTAL_POSSIBLE = SCORE_SECTIONS.reduce((sum, section) => sum + section.points, 0);
 const totalEarned = SCORE_SECTIONS.reduce((sum, section) => sum + section.earned, 0);
 
-const FinalCombination = ({ activeStep, customerNumber, onNavigate, onAdvance, incomingDrink }) => {
+const FinalCombination = ({
+  activeStep,
+  customerNumber,
+  onNavigate,
+  onAdvance,
+  incomingDrink,
+  // Whether there's actually a next order this session (App.js's own
+  // customerNumber < ORDERS_PER_SESSION) -- true for the first two of
+  // three orders, false for the last one (which instead returns to the
+  // main menu, unchanged). Drives the "Start order N" button below and
+  // disables the ProgressBar's own Right-arrow/current-dot "advance"
+  // gesture while true, so starting a new round is only ever done through
+  // that dedicated button -- see its own comment further down.
+  hasNextOrder = false,
+}) => {
   const containerRef = useRef(null);
   useFlatFocusNav(containerRef);
 
@@ -278,7 +292,36 @@ const FinalCombination = ({ activeStep, customerNumber, onNavigate, onAdvance, i
           customerNumber={customerNumber}
           onNavigate={onNavigate}
           onAdvance={onAdvance}
+          disableAdvance={hasNextOrder}
         />
+
+        {/* Starting the next order used to happen via this same
+            ProgressBar (Right-arrow or clicking the current/Serve dot,
+            same "I'm done here" gesture every other station's own advance
+            uses) -- per request, that's now this dedicated button instead
+            (disableAdvance above turns the bar's own version of it off
+            while this is showing), since jumping into a whole new round
+            through the exact same widget the player was just blocked from
+            stepping backward through read as confusing. onAdvance itself
+            is unchanged -- App.js's handleAdvance already does everything
+            needed (resets the order/bowl/drink state, bumps
+            customerNumber, sends the player back to 'ordering'); this
+            button just calls the very same handler from a clearer,
+            explicit spot instead of through the bar. Only rendered when
+            there's actually a next order (hasNextOrder) -- the final
+            (3rd) order's own completion still returns to the main menu
+            via the bar as before. */}
+        {hasNextOrder && (
+          <button
+            type="button"
+            className="start-next-order-button"
+            data-focusable
+            tabIndex={0}
+            onClick={onAdvance}
+          >
+            Start order {customerNumber + 1}
+          </button>
+        )}
       </div>
     </div>
   );

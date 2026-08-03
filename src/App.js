@@ -485,7 +485,12 @@ function App() {
         )}
         {currentPage === 'final-combination' && (
           <div className="page-slide">
-            <FinalCombination activeStep="final-combination" incomingDrink={servedDrink} {...progressProps} />
+            <FinalCombination
+              activeStep="final-combination"
+              incomingDrink={servedDrink}
+              hasNextOrder={customerNumber < ORDERS_PER_SESSION}
+              {...progressProps}
+            />
           </div>
         )}
 

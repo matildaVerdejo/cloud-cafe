@@ -14,6 +14,7 @@ const BASE_LABELS = {
   oat: 'Oat milk',
   almond: 'Almond milk',
   coconut: 'Coconut water',
+  strawberry: 'Strawberry milk',
 };
 const TOPPING_LABELS = {
   'guava-syrup': 'Guava syrup',

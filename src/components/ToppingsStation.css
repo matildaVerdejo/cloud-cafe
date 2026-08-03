@@ -170,6 +170,17 @@
   );
 }
 
+/* Banana foam -- same treatment, colors sampled from BananaFoam.png's own
+   banana-yellow (see FOAM_STREAM_COLORS in ToppingsStation.js). */
+.cup-foam-fill.banana-foam {
+  background: linear-gradient(
+    to bottom,
+    rgba(240, 219, 137, 0.7) 0%,
+    rgba(240, 219, 137, 0.7) 92%,
+    rgba(240, 219, 137, 0) 100%
+  );
+}
+
 /* Foam's flattened top-surface ellipse ("cap" -- see getFoamCapBoxFor in
    ToppingsStation.js), straddling the body's own top edge. A plain circle
    (border-radius: 50%, applied to a non-square box so it renders as an
@@ -195,6 +206,10 @@
 
 .cup-foam-cap.reg-cold-foam {
   background: rgba(234, 232, 227, 0.85);
+}
+
+.cup-foam-cap.banana-foam {
+  background: rgba(240, 219, 137, 0.85);
 }
 
 /* Matcha-powder/guava-powder settled flecks (see getFleckPositions/

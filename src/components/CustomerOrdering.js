@@ -23,12 +23,19 @@ const CUP_OPTIONS = [
 // generateSpokenOrder below) is always something the player can actually
 // match in this same dropdown.
 const ICE_OPTIONS = [0, 1, 2, 3, 4, 5, 6, 7].map((n) => ({ value: n, label: `${n}` }));
-const BASE_OPTIONS = [
+// Base four, always orderable. Strawberry milk (added per request, order 2
+// onward only, same as its counter bottle on Milk Selection -- see
+// baseOptions in the component below) is kept as a separate list rather
+// than merged into this one directly so a first-time player is never asked
+// for -- or hears the customer speak -- an ingredient they haven't been
+// introduced to on the counter yet.
+const BASE_OPTIONS_BASE = [
   { value: 'dairy', label: 'Dairy milk' },
   { value: 'oat', label: 'Oat milk' },
   { value: 'almond', label: 'Almond milk' },
   { value: 'coconut', label: 'Coconut water' },
 ];
+const BASE_OPTIONS_WITH_STRAWBERRY = [...BASE_OPTIONS_BASE, { value: 'strawberry', label: 'Strawberry milk' }];
 const TOPPING_OPTIONS = [
   { value: 'guava-syrup', label: 'Guava syrup' },
   { value: 'mint-syrup', label: 'Mint syrup' },
@@ -134,7 +141,13 @@ function joinWithAndSegments(items) {
 // count lower -- a random max of 2 or 3, rather than the full 0-7 range --
 // so a brand-new player's first order is a simpler one to read and build.
 // Every later round uses the full range as before.
-function generateSpokenOrder(customerNumber) {
+//
+// baseOptions is passed in (rather than this reading the module-level
+// BASE_OPTIONS_BASE directly) so whichever milk pool the component decided
+// is unlocked this round (see baseOptions in the component below) is what
+// the customer can actually ask for -- order 1 can never randomly speak an
+// ingredient (strawberry milk) the player hasn't seen on the counter yet.
+function generateSpokenOrder(customerNumber, baseOptions) {
   const toppingCap = customerNumber === 1 ? pickRandom([2, 3]) : TOPPING_OPTIONS.length;
   return {
     greeting: pickRandom(GREETINGS),
@@ -142,7 +155,7 @@ function generateSpokenOrder(customerNumber) {
     grade: pickRandom(GRADE_OPTIONS).value,
     cup: pickRandom(CUP_OPTIONS).value,
     ice: pickRandom(ICE_OPTIONS).value,
-    milk: pickRandom(BASE_OPTIONS).value,
+    milk: pickRandom(baseOptions).value,
     toppings: pickRandomSubset(TOPPING_OPTIONS, toppingCap).map((t) => t.value),
   };
 }
@@ -156,10 +169,10 @@ function generateSpokenOrder(customerNumber) {
 // while the surrounding scripted phrasing and the greeting stay
 // unhighlighted. flattenSegments (below) rejoins these into one plain
 // string for the typewriter effect's character-count timing.
-function buildSpeechSegments(o) {
+function buildSpeechSegments(o, baseOptions) {
   const grade = GRADE_OPTIONS.find((g) => g.value === o.grade).label.toLowerCase();
   const cup = CUP_OPTIONS.find((c) => c.value === o.cup).label.toLowerCase();
-  const milk = BASE_OPTIONS.find((m) => m.value === o.milk).label.toLowerCase();
+  const milk = baseOptions.find((m) => m.value === o.milk).label.toLowerCase();
   const tspWord = o.teaspoons === 1 ? 'teaspoon' : 'teaspoons';
   const iceWord = o.ice === 1 ? 'ice cube' : 'ice cubes';
 
@@ -296,6 +309,14 @@ function Dropdown({ placeholder, options, value, onSelect, isOpen, onToggle, tog
 
 const CustomerOrdering = ({ activeStep, customerNumber, onNavigate, onAdvance, onPlaceOrder }) => {
   const containerRef = useRef(null);
+  // Strawberry milk only becomes orderable from order 2 onward -- same
+  // unlock as its counter bottle on Milk Selection. This screen fully
+  // unmounts/remounts between customers (App.js only ever renders one
+  // page-slide's component at a time), so customerNumber is fixed for this
+  // whole mount's lifetime -- no need for this to be reactive, just read
+  // once and used both for the dropdown's own options and for whatever the
+  // customer might randomly ask for (see generateSpokenOrder below).
+  const baseOptions = customerNumber >= 2 ? BASE_OPTIONS_WITH_STRAWBERRY : BASE_OPTIONS_BASE;
   // Declared up here (rather than down by orderFormOpen/the order-builder
   // state, where the rest of these would naturally sit) purely so the two
   // bridge effects right below -- which need these refs -- can be
@@ -511,8 +532,8 @@ const CustomerOrdering = ({ activeStep, customerNumber, onNavigate, onAdvance, o
   // Rolled once per mount (i.e. once per customer -- see the big comment
   // above generateSpokenOrder) via the lazy initializer, so it doesn't
   // re-roll on every re-render (opening a dropdown, picking a value, etc).
-  const [spokenOrder] = useState(() => generateSpokenOrder(customerNumber));
-  const speechSegments = buildSpeechSegments(spokenOrder);
+  const [spokenOrder] = useState(() => generateSpokenOrder(customerNumber, baseOptions));
+  const speechSegments = buildSpeechSegments(spokenOrder, baseOptions);
   const speechText = flattenSegments(speechSegments);
 
   // Typewriter effect -- same one the very first version of this screen's
@@ -866,7 +887,7 @@ const CustomerOrdering = ({ activeStep, customerNumber, onNavigate, onAdvance, o
                   <h2 className="order-section-title">Base</h2>
                   <Dropdown
                     placeholder="Milk / water"
-                    options={BASE_OPTIONS}
+                    options={baseOptions}
                     value={baseMilk}
                     onSelect={setBaseMilk}
                     isOpen={openControl === 'base'}

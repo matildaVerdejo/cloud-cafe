@@ -155,3 +155,36 @@
   box-shadow: 0 4px 10px rgba(0, 0, 0, 0.15);
 }
 
+/* Bottom-right corner, per request -- replaces the ProgressBar's own
+   Right-arrow/current-dot "advance" gesture as the way to start the next
+   order (see the big comment on this button in FinalCombination.js).
+   Same pill shape/border thickness/font as CustomerOrdering.css's own
+   .order-place-button (border: 4px solid #8a7a6a matches the "order
+   button" thickness convention used across the Start/Settings buttons
+   too), just its own color rather than reusing that class directly, since
+   this lives in a different file/screen. */
+.start-next-order-button {
+  position: absolute;
+  right: 3%;
+  bottom: 4%;
+  padding: min(12px, 0.65vw) min(28px, 1.5vw);
+  border-radius: 999px;
+  border: 4px solid #8a7a6a;
+  background: #ff9eb2;
+  color: #ffffff;
+  font-family: 'Pixelify Sans', cursive;
+  font-size: min(22px, 1.1vw);
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  cursor: pointer;
+  box-shadow: 0 6px 14px rgba(255, 158, 178, 0.45);
+  transition: filter 0.15s ease, transform 0.15s ease;
+  animation: finalDrinkCupIn 0.4s ease-out both;
+}
+
+.start-next-order-button:focus-visible {
+  outline: min(4px, 0.2vw) solid #ffffff;
+  outline-offset: 2px;
+  filter: brightness(1.08);
+}
+

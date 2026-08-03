@@ -171,11 +171,24 @@ const BOTTLE_CLUSTER_CENTER = 83; // roughly centered under the cabinet in the a
 // gaps since e.g. coconut's canvas has ~40% empty space on its left side
 // alone. leftPad/rightPad below are what let the loop underneath space
 // bottles by where their actual art starts/ends instead of by their boxes.
-const BOTTLE_KEYS = [
+// Base four, always available. Strawberry milk (added per request, order 2
+// onward only -- see strawberryUnlocked in the component below) sits at the
+// end of this list so it lands as the new rightmost bottle once unlocked --
+// see layoutBottles below for how that "shifts everything else left, new
+// one ends up at the old rightmost edge" effect actually happens.
+// leftPad/rightPad measured off StrawberryMilk.png's own alpha bounding box
+// (169x325 canvas, bbox (24, 55, 108, 265)) the same way as every other
+// bottle here -- turns out to exactly match oat's own bottle silhouette
+// bounds (same canvas size, same bbox), hence the identical fractions.
+const BOTTLE_KEYS_BASE = [
   { key: 'oat', src: './OatMilk.png', alt: 'Oat milk', leftPad: 24 / 169, rightPad: (169 - 108) / 169 },
   { key: 'dairy', src: './DairyMilk.png', alt: 'Dairy milk', leftPad: 34 / 170, rightPad: (170 - 136) / 170 },
   { key: 'almond', src: './AlmondMilk.png', alt: 'Almond milk', leftPad: 34 / 169, rightPad: (169 - 119) / 169 },
   { key: 'coconut', src: './CoconutWater.png', alt: 'Coconut water', leftPad: 67 / 169, rightPad: (169 - 144) / 169 },
+];
+const BOTTLE_KEYS_WITH_STRAWBERRY = [
+  ...BOTTLE_KEYS_BASE,
+  { key: 'strawberry', src: './StrawberryMilk.png', alt: 'Strawberry milk', leftPad: 24 / 169, rightPad: (169 - 108) / 169 },
 ];
 
 // Display name per bottle, shown as a label beneath whichever one currently
@@ -187,6 +200,7 @@ const BOTTLE_LABELS = {
   dairy: 'dairy milk',
   almond: 'almond milk',
   coconut: 'coconut water',
+  strawberry: 'strawberry milk',
 };
 
 // Small gap between a bottle's own top edge and its label above it --
@@ -196,35 +210,52 @@ const BOTTLE_LABEL_GAP = -3.5;
 
 // Walk left-to-right so each bottle's visible content (box left + leftPad,
 // through box left + (1 - rightPad) * BOTTLE_WIDTH) sits exactly
-// BOTTLE_VISUAL_GAP past the previous bottle's, then shift the whole row
-// so it's centered on BOTTLE_CLUSTER_CENTER.
-const bottleBoxLefts = [0];
-for (let i = 1; i < BOTTLE_KEYS.length; i += 1) {
-  const prev = BOTTLE_KEYS[i - 1];
-  const gapNeeded = (1 - prev.rightPad - BOTTLE_KEYS[i].leftPad) * BOTTLE_WIDTH + BOTTLE_VISUAL_GAP;
-  bottleBoxLefts.push(bottleBoxLefts[i - 1] + gapNeeded);
+// BOTTLE_VISUAL_GAP past the previous bottle's, then shift the whole row so
+// it's centered on BOTTLE_CLUSTER_CENTER -- re-centering around the same
+// fixed point is exactly what makes adding a bottle to the end shift every
+// bottle left to make room, rather than only growing further right.
+// Pulled out into its own function (rather than one inline module-level
+// computation, like this used to be) so it can run twice below -- once for
+// the base four, once for all five -- letting order 1 keep the exact
+// original tight four-bottle layout while order 2+ gets the wider one with
+// strawberry milk, instead of order 1 showing an empty gap where a locked
+// bottle would otherwise sit.
+function layoutBottles(keys) {
+  const boxLefts = [0];
+  for (let i = 1; i < keys.length; i += 1) {
+    const prev = keys[i - 1];
+    const gapNeeded = (1 - prev.rightPad - keys[i].leftPad) * BOTTLE_WIDTH + BOTTLE_VISUAL_GAP;
+    boxLefts.push(boxLefts[i - 1] + gapNeeded);
+  }
+  const clusterBoxWidth = boxLefts[boxLefts.length - 1] + BOTTLE_WIDTH - boxLefts[0];
+  const clusterStartLeft = BOTTLE_CLUSTER_CENTER - clusterBoxWidth / 2;
+
+  const items = keys.map((item, index) => ({
+    key: item.key,
+    src: item.src,
+    alt: item.alt,
+    left: clusterStartLeft + boxLefts[index],
+    top: BOTTLE_BOTTOM - BOTTLE_HEIGHT,
+    width: BOTTLE_WIDTH,
+    height: BOTTLE_HEIGHT,
+  }));
+
+  // Each bottle's counter spot, keyed for lookup -- both the starting
+  // position on mount and the "home" a bottle snaps back to once it's been
+  // picked up and set back down (see BOTTLE_SNAP_FRACTION/BOTTLE_CLICK_MAX_
+  // MOVE_PCT below).
+  const home = items.reduce((acc, item) => {
+    acc[item.key] = { left: item.left, top: item.top };
+    return acc;
+  }, {});
+
+  return { items, home };
 }
-const clusterBoxWidth = bottleBoxLefts[bottleBoxLefts.length - 1] + BOTTLE_WIDTH - bottleBoxLefts[0];
-const clusterStartLeft = BOTTLE_CLUSTER_CENTER - clusterBoxWidth / 2;
 
-const BOTTLE_ITEMS = BOTTLE_KEYS.map((item, index) => ({
-  key: item.key,
-  src: item.src,
-  alt: item.alt,
-  left: clusterStartLeft + bottleBoxLefts[index],
-  top: BOTTLE_BOTTOM - BOTTLE_HEIGHT,
-  width: BOTTLE_WIDTH,
-  height: BOTTLE_HEIGHT,
-}));
-
-// Each bottle's counter spot, keyed for lookup -- both the starting
-// position on mount and the "home" a bottle snaps back to once it's been
-// picked up and set back down (see BOTTLE_SNAP_FRACTION/BOTTLE_CLICK_MAX_
-// MOVE_PCT below).
-const BOTTLE_HOME = BOTTLE_ITEMS.reduce((acc, item) => {
-  acc[item.key] = { left: item.left, top: item.top };
-  return acc;
-}, {});
+const { items: BOTTLE_ITEMS_BASE, home: BOTTLE_HOME_BASE } = layoutBottles(BOTTLE_KEYS_BASE);
+const { items: BOTTLE_ITEMS_WITH_STRAWBERRY, home: BOTTLE_HOME_WITH_STRAWBERRY } = layoutBottles(
+  BOTTLE_KEYS_WITH_STRAWBERRY
+);
 
 // ---- Pouring a bottle into the cup ---------------------------------------
 // Same shape as MatchaMaking's kettle-pouring-into-the-bowl sequence:
@@ -285,6 +316,7 @@ const MILK_STREAM_COLORS = {
   dairy: 'rgba(255, 253, 246, 0.95)',
   almond: 'rgba(238, 231, 219, 0.92)',
   coconut: 'rgba(240, 247, 247, 0.85)',
+  strawberry: 'rgba(250, 200, 210, 0.92)',
 };
 
 // Generic version of the milk-box math, parameterized on a cup position/
@@ -473,6 +505,18 @@ function isOverSendDrinkZone(leftPct, topPct) {
 
 const MilkSelection = ({ activeStep, customerNumber, onNavigate, onAdvance, order, incomingBowl, onSendToToppings }) => {
   const containerRef = useRef(null);
+
+  // Strawberry milk (and, per request, other bonus items still to come)
+  // only shows up from order 2 onward -- this screen fully unmounts/
+  // remounts between customers (App.js only ever renders one page-slide's
+  // component at a time), so customerNumber is effectively fixed for this
+  // whole mount's lifetime; no need for this to be reactive/memoized, just
+  // read once here and used to pick which of the two precomputed layouts
+  // (see layoutBottles/BOTTLE_ITEMS_BASE/BOTTLE_ITEMS_WITH_STRAWBERRY
+  // above) this particular order gets.
+  const strawberryUnlocked = customerNumber >= 2;
+  const bottleItems = strawberryUnlocked ? BOTTLE_ITEMS_WITH_STRAWBERRY : BOTTLE_ITEMS_BASE;
+  const bottleHome = strawberryUnlocked ? BOTTLE_HOME_WITH_STRAWBERRY : BOTTLE_HOME_BASE;
 
   // This station's own explicit keyboard nav graph, per request -- same
   // "exact fixed graph, not generic spatial nearest-neighbor matching"
@@ -1054,7 +1098,7 @@ const MilkSelection = ({ activeStep, customerNumber, onNavigate, onAdvance, orde
   };
 
   // ---- Milk/water bottles: pick up, move anywhere, snap back home -------
-  const [bottlePositions, setBottlePositions] = useState(BOTTLE_HOME);
+  const [bottlePositions, setBottlePositions] = useState(bottleHome);
   // Which bottle (if any) is being dragged right now, and its live position.
   const [bottleDrag, setBottleDrag] = useState(null); // { key, left, top } | null
   const bottleDragStartRef = useRef({ pointerX: 0, pointerY: 0, left: 0, top: 0 });
@@ -1172,7 +1216,7 @@ const MilkSelection = ({ activeStep, customerNumber, onNavigate, onAdvance, orde
       ? { left: bowlPos.left, top: bowlPos.top, width: incomingBowlWidth, height: incomingBowlHeight }
       : pouringKey
       ? (() => {
-          const item = BOTTLE_ITEMS.find((b) => b.key === pouringKey);
+          const item = bottleItems.find((b) => b.key === pouringKey);
           const pos = bottlePositions[pouringKey];
           return { left: pos.left, top: pos.top, width: item.width, height: item.height };
         })()
@@ -1209,7 +1253,7 @@ const MilkSelection = ({ activeStep, customerNumber, onNavigate, onAdvance, orde
       );
     } else {
       if (!canPourMilk) return;
-      const item = BOTTLE_ITEMS.find((b) => b.key === key);
+      const item = bottleItems.find((b) => b.key === key);
       setBottlePositions((prev) => ({
         ...prev,
         [key]: getBottleHoverPos(activeTableSpot, activeTableSize, item),
@@ -1234,7 +1278,7 @@ const MilkSelection = ({ activeStep, customerNumber, onNavigate, onAdvance, orde
         if (pouringKey === 'bowl') {
           setBowlPos(INCOMING_BOWL_SPOT);
         } else {
-          setBottlePositions((prev) => ({ ...prev, [pouringKey]: BOTTLE_HOME[pouringKey] }));
+          setBottlePositions((prev) => ({ ...prev, [pouringKey]: bottleHome[pouringKey] }));
         }
         setPourStage('idle');
         setPouringKey(null);
@@ -1242,7 +1286,7 @@ const MilkSelection = ({ activeStep, customerNumber, onNavigate, onAdvance, orde
       return () => clearTimeout(t);
     }
     return undefined;
-  }, [pourStage, pouringKey, incomingBowl, INCOMING_BOWL_SPOT]);
+  }, [pourStage, pouringKey, incomingBowl, INCOMING_BOWL_SPOT, bottleHome]);
 
   // Snapshotting cupMilk/cupMatcha here (rather than letting ToppingsStation
   // read this screen's own state, which won't exist anymore once the player
@@ -1331,7 +1375,7 @@ const MilkSelection = ({ activeStep, customerNumber, onNavigate, onAdvance, orde
       beginPour(item.key);
       return;
     }
-    const home = BOTTLE_HOME[item.key];
+    const home = bottleHome[item.key];
     const totalMove = Math.max(
       Math.abs(e.clientX - bottleDragStartRef.current.pointerX),
       Math.abs(e.clientY - bottleDragStartRef.current.pointerY)
@@ -1365,7 +1409,7 @@ const MilkSelection = ({ activeStep, customerNumber, onNavigate, onAdvance, orde
       beginPour(item.key);
       return;
     }
-    const home = BOTTLE_HOME[item.key];
+    const home = bottleHome[item.key];
     setBottlePositions((prev) => ({ ...prev, [item.key]: { left: home.left, top: home.top } }));
   };
 
@@ -1678,7 +1722,7 @@ const MilkSelection = ({ activeStep, customerNumber, onNavigate, onAdvance, orde
             }}
           />
         )}
-        {BOTTLE_ITEMS.map((item) => {
+        {bottleItems.map((item) => {
           const dragging = bottleDrag?.key === item.key;
           const pos = dragging ? bottleDrag : bottlePositions[item.key];
           // All four bottles share the same pour sequence now -- settling/
@@ -1722,7 +1766,7 @@ const MilkSelection = ({ activeStep, customerNumber, onNavigate, onAdvance, orde
             translate(-50%, -100%) is what actually lifts the label fully
             above that anchor line regardless of the label's own text
             height. */}
-        {BOTTLE_ITEMS.filter((item) => item.key === focusedBottle).map((item) => {
+        {bottleItems.filter((item) => item.key === focusedBottle).map((item) => {
           const dragging = bottleDrag?.key === item.key;
           const pos = dragging ? bottleDrag : bottlePositions[item.key];
           return (
