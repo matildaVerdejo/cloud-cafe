@@ -804,6 +804,25 @@
   box-shadow: 0 0 2px rgba(0, 0, 0, 0.35);
 }
 
+/* Exact-temperature marker, sitting in the gap between the two green ticks
+   (position set via TEMP_BAR_EXACT_LINE in MatchaMaking.js -- see that
+   constant's own comment for why it's derived from the ticks rather than a
+   separate hardcoded number). A thin white hairline rather than a block
+   like the ticks themselves, so it reads as a precise "aim here" mark
+   against the green fill instead of a third zone -- centered on its own
+   left% via translateX(-50%) since, unlike the ticks (which have their own
+   width), this is a single point, not a span. */
+.heater-temp-bar-exact-line {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  width: min(2px, 0.11vw);
+  transform: translateX(-50%);
+  pointer-events: none;
+  background: #ffffff;
+  box-shadow: 0 0 3px rgba(0, 0, 0, 0.5);
+}
+
 /* Steam above the kettle's spout, shown once the water's hot enough (see
    showSteam in MatchaMaking.js). The container itself is a zero-size
    anchor point (positioned at the spout via KETTLE_SPOUT_OFFSET), with

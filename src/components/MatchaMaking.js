@@ -346,6 +346,18 @@ const TEMP_BAR_TICKS = [
   { key: 'tick-right', left: 60.5, width: 3.5 },
 ];
 
+// Thin marker line sitting in the gap between the two green ticks above --
+// the single exact "right on target" temperature, as opposed to the wider
+// green window the two ticks themselves bound (see GREEN_AT_MS/RED_AT_MS
+// below, still the whole green span the button/tempZone actually key off
+// of -- this line is purely a visual bullseye within that span, not a
+// narrower pass/fail zone of its own). Derived from the ticks' own left/
+// width (their outer edges -- tick-left's own left, tick-right's own
+// right) rather than a separate hardcoded number, so it always sits
+// exactly centered in the green window even if the ticks themselves are
+// ever moved/resized.
+const TEMP_BAR_EXACT_LINE = (TEMP_BAR_TICKS[0].left + TEMP_BAR_TICKS[TEMP_BAR_TICKS.length - 1].left + TEMP_BAR_TICKS[TEMP_BAR_TICKS.length - 1].width) / 2;
+
 // How long the fill takes to grow from empty to full (see the inline
 // transitionDuration on .heater-temp-bar-fill below) -- kept as a single
 // JS constant, rather than living only in the CSS, so the button's
@@ -1090,6 +1102,16 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
   // fill while it's between the two ticks by stopping it there.
   const [heaterOn, setHeaterOn] = useState(false);
   const [tempZone, setTempZone] = useState('below'); // 'below' | 'target' | 'over'
+  // How far across the gauge (0-100, same percent-space TEMP_BAR_TICKS/
+  // TEMP_BAR_EXACT_LINE already use) the fill actually was the instant the
+  // player stopped it -- 0 until stopBar below captures a real reading, same
+  // "continuous reading, not just which discrete zone it landed in" role
+  // scoopFillPercent plays for the matcha scoop gauge. tempZone above still
+  // drives the button's own below/target/over color and the kettle-pour
+  // gate (tempConfirmed); this is purely for scoreMatchaMaking's own
+  // graduated "how close to the exact line" credit (see gameloop/
+  // scoring.js), which needs the real distance, not just which zone.
+  const [tempFillPercent, setTempFillPercent] = useState(0);
   // Whether the gauge is actively animating right now -- true from the
   // moment the heater is switched on until the player stops it (or the
   // heater is switched off). Enter/Space on the gauge is a no-op once this
@@ -1148,6 +1170,7 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
       fillRef.current.style.transform = '';
     }
     setTempZone('below');
+    setTempFillPercent(0);
     setTempConfirmed(false);
     setTempBarVisible(true);
     clearTimeout(tempBarHideTimerRef.current);
@@ -1219,6 +1242,10 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
       // the comment above in the reset effect for why.
       fill.style.transitionProperty = 'none';
       fill.style.transform = `scaleX(${frozenScaleX})`;
+      // Same 0-100 percent-space TEMP_BAR_TICKS/TEMP_BAR_EXACT_LINE already
+      // use (frozenScaleX is the fraction of the bar's full width the fill
+      // had reached) -- see tempFillPercent's own comment above.
+      setTempFillPercent(frozenScaleX * 100);
     }
     setBarRunning(false);
     setTempConfirmed(true);
@@ -1566,7 +1593,7 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
       scoreMatchaMaking({
         selectedTin,
         scoopFillPercent,
-        tempZone,
+        tempFillPercent,
         spillCount: messUpCountRef.current,
         order,
       })
@@ -2336,6 +2363,9 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
                   style={{ left: `${tick.left}%`, width: `${tick.width}%` }}
                 />
               ))}
+              {/* Exact-temperature marker -- see TEMP_BAR_EXACT_LINE's own
+                  comment above. */}
+              <span className="heater-temp-bar-exact-line" style={{ left: `${TEMP_BAR_EXACT_LINE}%` }} />
             </div>
             {barRunning && (
               <p

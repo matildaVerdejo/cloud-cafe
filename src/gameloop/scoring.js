@@ -7,8 +7,9 @@
 // own placeOrder/beginBowlCarry/beginSendDrink/beginSendToFinal -- since
 // every station fully unmounts once left behind (App.js only ever renders
 // one page-slide's component at a time), so that handoff is the last moment
-// any of a station's transient minigame state (tempZone, scoopFillPercent,
-// spill count, etc.) still exists to read. The result travels the same way
+// any of a station's transient minigame state (tempFillPercent,
+// scoopFillPercent, spill count, etc.) still exists to read. The result
+// travels the same way
 // the carried-over bowl/drink objects already do: lifted up to App.js via a
 // new onScored-style prop, stored in state there, and threaded down to
 // FinalCombination once the round finishes.
@@ -20,11 +21,11 @@
 // used before this file replaced it) -- and checks is a list of { key,
 // label, correct, detail, credit? } for the score card's own per-category
 // expand/collapse view. Most checks are plain all-or-nothing (credit is
-// omitted, and pct() below just reads 1/0 off `correct` instead) -- the one
-// exception today is Matcha Making's own teaspoons check (see
-// scoreMatchaMaking), which is a graduated 0-1 credit instead, since "how
-// close were you" is a real, continuous thing on that minigame's gauge
-// rather than a simple hit-or-miss.
+// omitted, and pct() below just reads 1/0 off `correct` instead) -- the two
+// exceptions today are Matcha Making's own teaspoons and water-temperature
+// checks (see scoreMatchaMaking), both graduated 0-1 credit instead, since
+// "how close were you" is a real, continuous thing on those two minigames'
+// gauges rather than a simple hit-or-miss.
 //
 // Two known, deliberate gaps, both because the underlying station simply
 // doesn't have the mechanic yet (not something this scoring layer can fix on
@@ -148,6 +149,52 @@ function scoopCredit(distance) {
   return Math.max(0, 1 - distance / SCOOP_BUCKET_SPACING);
 }
 
+// ---- Graduated water-temperature credit ------------------------------
+// Per request: full credit only for stopping the heater gauge exactly on
+// the thin white line MatchaMaking.js's own TEMP_BAR_EXACT_LINE renders in
+// the middle of the two green ticks -- anywhere else inside that green
+// window is still a good (but not perfect) score, and anywhere outside the
+// green window entirely is a pretty bad one. Same own-copy-of-a-few-numbers
+// convention SCOOP_BUCKETS above already uses for the scoop gauge's own
+// lines (rather than importing MatchaMaking.js's layout constants directly)
+// -- TEMP_ZONE_LEFT/RIGHT mirror that file's own TEMP_BAR_TICKS (52, and
+// 60.5 + 3.5 == 64), and TEMP_EXACT_LINE mirrors its own TEMP_BAR_EXACT_LINE
+// ((52 + 64) / 2 == 58).
+//
+// TEMP_ZONE_HALF_WIDTH (6) is the distance from the exact line out to
+// either edge of the green window. tempCredit below is two straight-line
+// segments stitched together at that edge, not one single slope end to
+// end, which is what gives the "still pretty good anywhere in the green,
+// pretty bad the instant you're outside it" shape asked for instead of a
+// single gentle taper the whole way out:
+//   - Inside the green window (distance <= TEMP_ZONE_HALF_WIDTH): tapers
+//     gently from 1 at the exact line down to TEMP_GREEN_FLOOR_CREDIT right
+//     at the window's own edge -- still a good score anywhere in here.
+//   - Outside it (distance > TEMP_ZONE_HALF_WIDTH): tapers steeply the rest
+//     of the way from that same floor down to 0, reaching 0 once it's
+//     drifted a further TEMP_ZONE_HALF_WIDTH past the edge -- a bad score,
+//     and a quickly-worsening one, for anything before or after the window.
+//
+// TEMP_EXACT_EPSILON is the same kind of floating-point fuzz guard
+// SCOOP_EXACT_EPSILON is above (tempFillPercent comes from a live CSS
+// scaleX() transform read via getCurrentScaleX in MatchaMaking.js's own
+// stopBar, so a genuinely dead-on stop could still read back as e.g.
+// 57.9999996 rather than a clean 58) -- not a real leniency margin.
+const TEMP_ZONE_LEFT = 52;
+const TEMP_ZONE_RIGHT = 64;
+const TEMP_EXACT_LINE = (TEMP_ZONE_LEFT + TEMP_ZONE_RIGHT) / 2;
+const TEMP_ZONE_HALF_WIDTH = (TEMP_ZONE_RIGHT - TEMP_ZONE_LEFT) / 2;
+const TEMP_GREEN_FLOOR_CREDIT = 0.75;
+const TEMP_EXACT_EPSILON = 0.05;
+
+function tempCredit(distance) {
+  if (distance <= TEMP_ZONE_HALF_WIDTH) {
+    return 1 - (distance / TEMP_ZONE_HALF_WIDTH) * (1 - TEMP_GREEN_FLOOR_CREDIT);
+  }
+  const overshoot = distance - TEMP_ZONE_HALF_WIDTH;
+  return Math.max(0, TEMP_GREEN_FLOOR_CREDIT * (1 - overshoot / TEMP_ZONE_HALF_WIDTH));
+}
+
 // Order-independent, duplicate-count-sensitive set comparison -- two
 // toppings lists count as "the same" only if every value appears the same
 // number of times in both (a plain `every value in the other list` check
@@ -238,13 +285,16 @@ export function scoreOrderTaking(order, spokenOrder) {
 // finished bowl is handed off to Milk Selection.
 //   selectedTin: MatchaMaking's own selectedTin state ('cafe-grade' | ...).
 //   scoopFillPercent: MatchaMaking's own scoopFillPercent state (0-100).
-//   tempZone: MatchaMaking's own tempZone state ('below' | 'target' | 'over'),
-//     frozen at whatever it was the instant the player stopped the gauge.
+//   tempFillPercent: MatchaMaking's own tempFillPercent state (0-100, same
+//     percent-space TEMP_ZONE_LEFT/RIGHT/EXACT_LINE above use) -- how far
+//     across the heater gauge the fill actually was the instant the player
+//     stopped it, frozen at that reading via getCurrentScaleX in that
+//     file's own stopBar.
 //   spillCount: MatchaMaking's own messUpCountRef.current -- the raw count
 //     of every mess-up during whisking, not spills.length (which caps at
 //     however many puddle images exist -- see that ref's own comment).
 //   order: the placed order from CustomerOrdering.
-export function scoreMatchaMaking({ selectedTin, scoopFillPercent, tempZone, spillCount, order }) {
+export function scoreMatchaMaking({ selectedTin, scoopFillPercent, tempFillPercent, spillCount, order }) {
   const gotGrade = TIN_TO_ORDER_GRADE[selectedTin] ?? null;
   const gotTeaspoons = nearestScoopTeaspoons(scoopFillPercent);
   // Graduated, not all-or-nothing -- see scoopCredit's own comment above.
@@ -258,6 +308,14 @@ export function scoreMatchaMaking({ selectedTin, scoopFillPercent, tempZone, spi
   // Exact line only -- see SCOOP_EXACT_EPSILON's own comment above for why
   // this isn't a real leniency margin.
   const teaspoonExact = teaspoonDistance <= SCOOP_EXACT_EPSILON;
+  // Graduated the same way, just with tempCredit's own two-segment "still
+  // good anywhere in the green, bad outside it" shape instead of
+  // scoopCredit's single taper -- see that function's own comment above.
+  const tempDistance = Math.abs(tempFillPercent - TEMP_EXACT_LINE);
+  const tempCreditValue = tempCredit(tempDistance);
+  const tempExact = tempDistance <= TEMP_EXACT_EPSILON;
+  const tempInGreenWindow = tempDistance <= TEMP_ZONE_HALF_WIDTH;
+  const tempTooHot = tempFillPercent > TEMP_EXACT_LINE;
   const checks = [
     {
       key: 'grade',
@@ -279,11 +337,17 @@ export function scoreMatchaMaking({ selectedTin, scoopFillPercent, tempZone, spi
     {
       key: 'temp',
       label: 'Water temperature',
-      correct: tempZone === 'target',
-      detail:
-        tempZone === 'target'
-          ? 'Caught the water right in the target window.'
-          : `Missed the target window (caught it running ${tempZone === 'over' ? 'too hot' : 'too cold'}).`,
+      correct: tempExact,
+      credit: tempCreditValue,
+      detail: tempExact
+        ? 'Caught the water right on the exact temperature line.'
+        : tempInGreenWindow
+        ? `Caught it inside the target window, but a touch ${
+            tempTooHot ? 'over' : 'under'
+          } the exact line (${Math.round(tempCreditValue * 100)}% credit).`
+        : `Missed the target window, running too ${tempTooHot ? 'hot' : 'cold'} (${Math.round(
+            tempCreditValue * 100
+          )}% credit).`,
     },
     {
       key: 'whisk',
