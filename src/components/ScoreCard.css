@@ -37,6 +37,16 @@
   }
 }
 
+.score-card-order-number {
+  margin: 0 0 min(2px, 0.1vw);
+  text-align: center;
+  font-size: min(13px, 0.68vw);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #8a7a6a;
+}
+
 .score-card-title {
   margin: 0 0 min(10px, 0.55vw);
   text-align: center;

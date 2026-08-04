@@ -14,11 +14,17 @@
 // FinalCombination once the round finishes.
 //
 // Every category score has the same { percent, checks } shape -- percent is
-// just the % of that category's checks that came out correct (equal weight
-// per check, the same "every section counts the same" simplification the
-// old placeholder SCORE_SECTIONS in FinalCombination.js used before this
-// file replaced it), and checks is a list of { key, label, correct, detail }
-// for the score card's own per-category expand/collapse view.
+// the average, across that category's own checks, of each check's own
+// credit (equal weight per check, the same "every section counts the same"
+// simplification the old placeholder SCORE_SECTIONS in FinalCombination.js
+// used before this file replaced it) -- and checks is a list of { key,
+// label, correct, detail, credit? } for the score card's own per-category
+// expand/collapse view. Most checks are plain all-or-nothing (credit is
+// omitted, and pct() below just reads 1/0 off `correct` instead) -- the one
+// exception today is Matcha Making's own teaspoons check (see
+// scoreMatchaMaking), which is a graduated 0-1 credit instead, since "how
+// close were you" is a real, continuous thing on that minigame's gauge
+// rather than a simple hit-or-miss.
 //
 // Two known, deliberate gaps, both because the underlying station simply
 // doesn't have the mechanic yet (not something this scoring layer can fix on
@@ -103,6 +109,45 @@ function nearestScoopTeaspoons(scoopFillPercent) {
   return best.teaspoons;
 }
 
+// ---- Graduated scoop-amount credit ---------------------------------------
+// Per request: the teaspoons check shouldn't be all-or-nothing the way the
+// rest of this file's checks are -- catching the gauge close to the right
+// line should cost only a little, catching it way off should cost (close
+// to) everything, scaling smoothly in between rather than jumping straight
+// from full credit to zero the moment it's not the literal nearest bucket.
+//
+// SCOOP_BUCKET_SPACING (42) is the gap between any two adjacent lines (50-8
+// == 92-50 -- see SCOOP_BUCKETS above), so "off by a full bucket-spacing"
+// means "drifted exactly as far as the *next* tin's own line" -- past that,
+// credit floors at 0 rather than going negative.
+//
+// SCOOP_EXACT_EPSILON is NOT a "close enough" leniency window -- per
+// request, only landing exactly on the line earns full credit/reads as
+// correct (✓); being even a little off should always cost at least a
+// little (see scoopCredit below, which already scales smoothly with
+// distance -- that's what keeps a near-miss from losing much). This is
+// purely a floating-point fuzz guard: scoopFillPercent is derived from a
+// live CSS pixel measurement (window.getComputedStyle(el).top in
+// MatchaMaking.js's own stopScoop), so a genuinely dead-on stop could still
+// come back as e.g. 49.9999997 rather than a clean 50 -- without this, that
+// kind of sub-pixel rounding noise (not the player being off at all) could
+// wrongly deny credit for a stop that, on screen, landed exactly on the
+// line.
+const SCOOP_BUCKET_SPACING = 42;
+const SCOOP_EXACT_EPSILON = 0.05;
+
+function scoopFillForTeaspoons(teaspoons) {
+  return SCOOP_BUCKETS.find((bucket) => bucket.teaspoons === teaspoons)?.fill ?? null;
+}
+
+// 1 right on the ordered line, falling off linearly to 0 by the time the
+// caught reading has drifted a full SCOOP_BUCKET_SPACING away in either
+// direction (too few scoops or too many both cost the same for the same
+// distance -- there's no "safer" side to miss on).
+function scoopCredit(distance) {
+  return Math.max(0, 1 - distance / SCOOP_BUCKET_SPACING);
+}
+
 // Order-independent, duplicate-count-sensitive set comparison -- two
 // toppings lists count as "the same" only if every value appears the same
 // number of times in both (a plain `every value in the other list` check
@@ -119,12 +164,19 @@ function toppingListText(values) {
   return names.length > 0 ? names.join(', ') : 'nothing extra';
 }
 
-// Every category's percent is just "% of its own checks that came out
-// correct" -- equal weight per check within a category.
+// Every category's percent is the average, across its own checks, of each
+// check's own credit -- equal weight per check within a category. Plain
+// all-or-nothing checks don't set `credit` at all, so this reads 1 or 0 off
+// `correct` for those (same result as before this became credit-aware);
+// scoreMatchaMaking's own teaspoons check is the one place that sets a real
+// 0-1 `credit` instead (see scoopCredit above).
 function pct(checks) {
   if (!checks || checks.length === 0) return 100;
-  const correctCount = checks.filter((c) => c.correct).length;
-  return Math.round((correctCount / checks.length) * 100);
+  const totalCredit = checks.reduce(
+    (sum, c) => sum + (typeof c.credit === 'number' ? c.credit : c.correct ? 1 : 0),
+    0
+  );
+  return Math.round((totalCredit / checks.length) * 100);
 }
 
 // ---- Order Taking -----------------------------------------------------
@@ -195,6 +247,17 @@ export function scoreOrderTaking(order, spokenOrder) {
 export function scoreMatchaMaking({ selectedTin, scoopFillPercent, tempZone, spillCount, order }) {
   const gotGrade = TIN_TO_ORDER_GRADE[selectedTin] ?? null;
   const gotTeaspoons = nearestScoopTeaspoons(scoopFillPercent);
+  // Graduated, not all-or-nothing -- see scoopCredit's own comment above.
+  // targetFill is null if order.teaspoons is somehow missing (defensive
+  // only -- isOrderComplete already requires it before an order can ever be
+  // placed), in which case this just floors to 0 credit/max distance rather
+  // than throwing.
+  const targetFill = scoopFillForTeaspoons(order?.teaspoons);
+  const teaspoonDistance = targetFill === null ? Infinity : Math.abs(scoopFillPercent - targetFill);
+  const teaspoonCredit = targetFill === null ? 0 : scoopCredit(teaspoonDistance);
+  // Exact line only -- see SCOOP_EXACT_EPSILON's own comment above for why
+  // this isn't a real leniency margin.
+  const teaspoonExact = teaspoonDistance <= SCOOP_EXACT_EPSILON;
   const checks = [
     {
       key: 'grade',
@@ -205,8 +268,13 @@ export function scoreMatchaMaking({ selectedTin, scoopFillPercent, tempZone, spi
     {
       key: 'teaspoons',
       label: 'Matcha amount',
-      correct: gotTeaspoons === order?.teaspoons,
-      detail: `Order calls for ${order?.teaspoons} tsp, measured ${gotTeaspoons} tsp on the scoop gauge.`,
+      correct: teaspoonExact,
+      credit: teaspoonCredit,
+      detail: teaspoonExact
+        ? `Caught the gauge right on the ${order?.teaspoons} tsp line.`
+        : `Order calls for ${order?.teaspoons} tsp -- caught the gauge closer to ${gotTeaspoons} tsp, ${
+            scoopFillPercent > targetFill ? 'a bit over' : 'a bit under'
+          } (${Math.round(teaspoonCredit * 100)}% credit for how close it was).`,
     },
     {
       key: 'temp',

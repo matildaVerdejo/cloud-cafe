@@ -22,7 +22,7 @@ const CATEGORIES = [
   { key: 'toppings', label: 'Toppings' },
 ];
 
-const ScoreCard = ({ orderTakingScore, matchaScore, mixingScore, toppingsScore }) => {
+const ScoreCard = ({ customerNumber, orderTakingScore, matchaScore, mixingScore, toppingsScore }) => {
   const scoresByKey = {
     'order-taking': orderTakingScore,
     'matcha-making': matchaScore,
@@ -51,6 +51,13 @@ const ScoreCard = ({ orderTakingScore, matchaScore, mixingScore, toppingsScore }
 
   return (
     <div className="score-card">
+      {/* Same "Order N of 3" wording ProgressBar.js's own .progress-order-count
+          already uses elsewhere on this screen -- repeated here so the order
+          number reads at a glance without needing to look away from the card
+          itself. ORDERS_PER_SESSION isn't threaded down this far (App.js
+          keeps it a local constant), so "of 3" is hardcoded the same way
+          ProgressBar.js's own copy already is. */}
+      {customerNumber != null && <p className="score-card-order-number">Order {customerNumber} of 3</p>}
       <h2 className="score-card-title">Order Score</h2>
       <div className="score-card-rows">
         {CATEGORIES.map((cat) => {

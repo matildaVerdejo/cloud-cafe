@@ -245,6 +245,7 @@ const FinalCombination = ({
             computed as the player actually plays (gameloop/scoring.js) and
             threaded down through App.js the same way incomingDrink is. */}
         <ScoreCard
+          customerNumber={customerNumber}
           orderTakingScore={orderTakingScore}
           matchaScore={matchaScore}
           mixingScore={mixingScore}
