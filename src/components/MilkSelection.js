@@ -12,6 +12,7 @@ import {
   WHISKED_LIQUID_IMAGES,
   SCOOP_FILL_COLORS,
 } from './MatchaMaking';
+import { scoreMixingDrink } from '../gameloop/scoring';
 
 // Where the bowl (whisked matcha, no whisk -- see incomingBowl below) sent
 // over from MatchaMaking's "Make Drink" drop-zone comes to rest on this
@@ -503,7 +504,16 @@ function isOverSendDrinkZone(leftPct, topPct) {
   );
 }
 
-const MilkSelection = ({ activeStep, customerNumber, onNavigate, onAdvance, order, incomingBowl, onSendToToppings }) => {
+const MilkSelection = ({
+  activeStep,
+  customerNumber,
+  onNavigate,
+  onAdvance,
+  order,
+  incomingBowl,
+  onSendToToppings,
+  onScored,
+}) => {
   const containerRef = useRef(null);
 
   // Strawberry milk (and, per request, other bonus items still to come)
@@ -1318,6 +1328,19 @@ const MilkSelection = ({ activeStep, customerNumber, onNavigate, onAdvance, orde
       cupType: activeCup,
       iceCubes: icePlaced.filter(Boolean).length,
     });
+    // Grades this station's own contribution (cup type, ice count, milk/
+    // base) against the placed order -- see gameloop/scoring.js's own
+    // scoreMixingDrink. Same "read it right at the handoff, the last moment
+    // this screen's own state still exists" reasoning as onSendToToppings
+    // itself just above.
+    onScored?.(
+      scoreMixingDrink({
+        cupType: activeCup,
+        iceCubes: icePlaced.filter(Boolean).length,
+        milkType: cupMilk?.type,
+        order,
+      })
+    );
     setCupSendPos({
       left: SEND_DRINK_ZONE.left + SEND_DRINK_ZONE.width / 2 - CUP_TYPES[activeCup].tableSize.width / 2,
       top: SEND_DRINK_ZONE.top + SEND_DRINK_ZONE.height / 2 - CUP_TYPES[activeCup].tableSize.height / 2,

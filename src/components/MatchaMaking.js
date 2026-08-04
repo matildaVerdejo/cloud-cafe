@@ -4,6 +4,7 @@ import { useFlatFocusNav } from '../gameloop/useFlatFocusNav';
 import { getActionFromKeyEvent, shouldDebounceEnter } from '../gameloop/pal';
 import ProgressBar from './ProgressBar';
 import OrderReceiptButton from './OrderReceiptButton';
+import { scoreMatchaMaking } from '../gameloop/scoring';
 
 // Static (not yet interactive) countertop items, layered on top of the now-
 // empty background art. Positions were worked out by compositing each item
@@ -850,7 +851,7 @@ function getCurrentScaleX(el) {
   return new DOMMatrixReadOnly(transform).a;
 }
 
-const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order, onSendToMilk }) => {
+const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order, onSendToMilk, onScored }) => {
   const containerRef = useRef(null);
   // Declared up here (rather than scattered near where each one used to
   // live -- heaterButtonRef/kettleRef/whiskRef were each declared right
@@ -1551,6 +1552,25 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
   const beginBowlCarry = () => {
     if (!bowlPowder || whiskStage !== 'done' || bowlStage !== 'idle') return;
     onSendToMilk?.({ ...bowlPowder });
+    // Grades this station's own four beats (tin/grade, scoop amount, water
+    // temperature, whisking-without-spilling) against the placed order --
+    // see gameloop/scoring.js's own big comment on scoreMatchaMaking for
+    // what each of these captures. This is the last moment any of that
+    // transient minigame state still exists to read (this whole component
+    // unmounts the instant App.js advances to Milk Selection), same "read
+    // it right at the handoff" reasoning as onSendToMilk itself just above.
+    // messUpCountRef.current (not spills.length, which caps at however many
+    // puddle images exist) is the true, uncapped spill count for this
+    // whisking session -- see that ref's own comment further up.
+    onScored?.(
+      scoreMatchaMaking({
+        selectedTin,
+        scoopFillPercent,
+        tempZone,
+        spillCount: messUpCountRef.current,
+        order,
+      })
+    );
     setItemPositions((prev) => ({
       ...prev,
       bowl: {

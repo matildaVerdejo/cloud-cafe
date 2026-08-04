@@ -4,6 +4,7 @@ import { useFlatFocusNav } from '../gameloop/useFlatFocusNav';
 import { getActionFromKeyEvent } from '../gameloop/pal';
 import { playButtonClick, playVoiceLine } from '../gameloop/sfx';
 import ProgressBar from './ProgressBar';
+import { scoreOrderTaking } from '../gameloop/scoring';
 
 // ---- Order-builder option lists ------------------------------------------
 // One list per dropdown/adder below, each a plain { value, label } pair --
@@ -307,7 +308,7 @@ function Dropdown({ placeholder, options, value, onSelect, isOpen, onToggle, tog
   );
 }
 
-const CustomerOrdering = ({ activeStep, customerNumber, onNavigate, onAdvance, onPlaceOrder }) => {
+const CustomerOrdering = ({ activeStep, customerNumber, onNavigate, onAdvance, onPlaceOrder, onOrderScored }) => {
   const containerRef = useRef(null);
   // Strawberry milk only becomes orderable from order 2 onward -- same
   // unlock as its counter bottle on Milk Selection. This screen fully
@@ -709,6 +710,14 @@ const CustomerOrdering = ({ activeStep, customerNumber, onNavigate, onAdvance, o
       toppings: toppings.map((t) => t.value),
     };
     onPlaceOrder?.(order);
+    // Grades this order against the customer's own spoken order (see
+    // spokenOrder/generateSpokenOrder above) -- both are independently
+    // rolled, so this is the "did the order actually match what was asked
+    // for" check for the score card's own Order Taking category (see
+    // gameloop/scoring.js). Computed right here, the one place both objects
+    // are ever in scope together, and lifted up to App.js the same way
+    // onPlaceOrder itself is.
+    onOrderScored?.(scoreOrderTaking(order, spokenOrder));
     closeOrderForm();
     setShowStationHint(true);
   };

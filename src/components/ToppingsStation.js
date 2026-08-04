@@ -6,6 +6,7 @@ import ProgressBar from './ProgressBar';
 import OrderReceiptButton from './OrderReceiptButton';
 import { getMilkBoxFor, getMatchaBoxFor, TABLE_SIZE, CUP_TYPES, getIceCupSlotPos, ICE_CUP_SIZE } from './MilkSelection';
 import { WHISK_FLIP_DEG } from './MatchaMaking';
+import { scoreToppings } from '../gameloop/scoring';
 
 // Where the finished cup (see incomingDrink below) sent over from Milk
 // Selection's own "Send to Toppings" drop-zone comes to rest on this
@@ -574,6 +575,7 @@ const ToppingsStation = ({
   order,
   incomingDrink,
   onSendToFinal,
+  onScored,
 }) => {
   const containerRef = useRef(null);
 
@@ -1428,6 +1430,20 @@ const ToppingsStation = ({
       // incomingCupType above.
       cupType: incomingCupType,
     });
+    // Grades this station's own toppings (syrup/foam/powder) against the
+    // placed order -- see gameloop/scoring.js's own scoreToppings, including
+    // its own note on why mint-leaves is excluded (no placement mechanic
+    // exists for it here yet). Same "read it right at the handoff, the last
+    // moment this screen's own state still exists" reasoning as
+    // onSendToFinal itself just above.
+    onScored?.(
+      scoreToppings({
+        syrupKey: cupSyrup?.key,
+        foamKey: cupFoam?.key,
+        powderKey: cupPowder?.key,
+        order,
+      })
+    );
     setDrinkSendPos({
       left: SEND_TO_FINAL_ZONE.left + SEND_TO_FINAL_ZONE.width / 2 - incomingDrinkSize.width / 2,
       top: SEND_TO_FINAL_ZONE.top + SEND_TO_FINAL_ZONE.height / 2 - incomingDrinkSize.height / 2,

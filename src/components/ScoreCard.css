@@ -1,0 +1,182 @@
+@import url('https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@400;700&display=swap');
+
+/* Sits on the right side of the drink, roughly where the old AnnieOrder1.png
+   receipt used to hang (see FinalCombination.css's removed .score-receipt) --
+   but unlike that image-backed box, this one isn't tied to any background
+   art's own aspect ratio, so it's just plain container-% positioning. Height
+   is intentionally NOT fixed (auto, capped by max-height + overflow-y below)
+   since expanding a category's detail list can make the card taller than any
+   one fixed box would comfortably fit -- scrolls internally instead of
+   pushing into the start-next-order-button/ProgressBar below it. */
+.score-card {
+  position: absolute;
+  left: 65%;
+  top: 6%;
+  width: 32%;
+  max-height: 76%;
+  overflow-y: auto;
+  box-sizing: border-box;
+  padding: min(14px, 0.73vw);
+  background: rgba(255, 250, 243, 0.94);
+  border: min(3px, 0.16vw) solid #8a7a6a;
+  border-radius: min(16px, 0.83vw);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.18);
+  font-family: 'Pixelify Sans', cursive;
+  animation: scoreCardFadeIn 0.5s ease-out both;
+  animation-delay: 0.3s;
+}
+
+@keyframes scoreCardFadeIn {
+  0% {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.score-card-title {
+  margin: 0 0 min(10px, 0.55vw);
+  text-align: center;
+  font-size: min(20px, 1.05vw);
+  font-weight: 700;
+  color: #2f4a28;
+}
+
+.score-card-rows {
+  display: flex;
+  flex-direction: column;
+  gap: min(8px, 0.42vw);
+}
+
+.score-card-row-wrap {
+  display: flex;
+  flex-direction: column;
+}
+
+/* Plain <button> (not a custom keydown handler) so Enter/Space on a focused
+   row "just works" via ordinary browser activation -- same convention
+   CustomerOrdering.js's own Dropdown toggle buttons rely on. data-focusable
+   is what plugs it into this screen's existing useFlatFocusNav spatial nav. */
+.score-card-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: min(8px, 0.42vw);
+  width: 100%;
+  box-sizing: border-box;
+  padding: min(8px, 0.42vw) min(12px, 0.63vw);
+  background: #ffffff;
+  border: min(2px, 0.11vw) solid #c9bcae;
+  border-radius: min(999px, 2vw);
+  font-family: inherit;
+  font-size: min(15px, 0.79vw);
+  font-weight: 700;
+  color: #4a3f36;
+  cursor: pointer;
+  transition: filter 0.15s ease, transform 0.15s ease, border-color 0.15s ease;
+}
+
+.score-card-row:hover:not(:disabled) {
+  filter: brightness(1.04);
+}
+
+.score-card-row:focus-visible {
+  outline: min(3px, 0.16vw) solid #5a8a4f;
+  outline-offset: 2px;
+}
+
+.score-card-row.open {
+  border-color: #5a8a4f;
+  border-bottom-left-radius: min(10px, 0.52vw);
+  border-bottom-right-radius: min(10px, 0.52vw);
+}
+
+.score-card-row:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.score-card-row-label {
+  white-space: nowrap;
+}
+
+.score-card-row-percent {
+  color: #5a8a4f;
+}
+
+.score-card-detail-list {
+  list-style: none;
+  margin: 0;
+  padding: min(8px, 0.42vw) min(12px, 0.63vw);
+  background: #f5efe6;
+  border: min(2px, 0.11vw) solid #5a8a4f;
+  border-top: none;
+  border-bottom-left-radius: min(10px, 0.52vw);
+  border-bottom-right-radius: min(10px, 0.52vw);
+  display: flex;
+  flex-direction: column;
+  gap: min(6px, 0.31vw);
+  animation: scoreCardDetailOpen 0.15s ease-out both;
+}
+
+@keyframes scoreCardDetailOpen {
+  0% {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.score-card-detail-item {
+  display: flex;
+  align-items: flex-start;
+  gap: min(6px, 0.31vw);
+  font-size: min(13px, 0.68vw);
+  font-weight: 400;
+  line-height: 1.35;
+}
+
+.score-card-detail-icon {
+  flex: none;
+  font-weight: 700;
+}
+
+.score-card-detail-item.correct .score-card-detail-icon {
+  color: #5a8a4f;
+}
+
+.score-card-detail-item.incorrect .score-card-detail-icon {
+  color: #a4453d;
+}
+
+.score-card-detail-label {
+  font-weight: 700;
+}
+
+.score-card-detail-item.correct .score-card-detail-text {
+  color: #3a4a34;
+}
+
+.score-card-detail-item.incorrect .score-card-detail-text {
+  color: #5a3430;
+}
+
+.score-card-total {
+  margin-top: min(10px, 0.55vw);
+  box-sizing: border-box;
+  text-align: center;
+  font-size: min(19px, 0.91vw);
+  font-weight: 700;
+  color: #2f4a28;
+  background: rgba(255, 255, 255, 0.92);
+  border: min(3px, 0.14vw) solid #8a7a6a;
+  border-radius: 999px;
+  padding: min(8px, 0.38vw) 0;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.15);
+}

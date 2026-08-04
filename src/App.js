@@ -78,6 +78,19 @@ function App() {
   // are, for the same reason -- a new customer's Serving screen should
   // never show the previous customer's leftover drink.
   const [servedDrink, setServedDrink] = useState(null);
+  // Per-category score results for the round's score card (see ScoreCard.js
+  // and gameloop/scoring.js) -- each null until the station that produces it
+  // hands it off (CustomerOrdering's placeOrder, MatchaMaking's
+  // beginBowlCarry, MilkSelection's beginSendDrink, ToppingsStation's
+  // beginSendToFinal, in that order), same lift-it-up-through-a-callback
+  // shape as currentOrder/matchaBowl/finishedDrink/servedDrink above. Reset
+  // to null in the exact same places those are, for the same reason -- a
+  // new customer's round should never show the previous customer's scores
+  // while it's still in progress.
+  const [orderTakingScore, setOrderTakingScore] = useState(null);
+  const [matchaScore, setMatchaScore] = useState(null);
+  const [mixingScore, setMixingScore] = useState(null);
+  const [toppingsScore, setToppingsScore] = useState(null);
   const [showExitConfirm, setShowExitConfirm] = useState(false);
   const [adPlaying, setAdPlaying] = useState(false);
   // Background music -- one <audio> element rendered once here (outside the
@@ -359,6 +372,10 @@ function App() {
     setMatchaBowl(null);
     setFinishedDrink(null);
     setServedDrink(null);
+    setOrderTakingScore(null);
+    setMatchaScore(null);
+    setMixingScore(null);
+    setToppingsScore(null);
     setCurrentPage('ordering');
   };
 
@@ -397,6 +414,10 @@ function App() {
       setMatchaBowl(null);
       setFinishedDrink(null);
       setServedDrink(null);
+      setOrderTakingScore(null);
+      setMatchaScore(null);
+      setMixingScore(null);
+      setToppingsScore(null);
       setCurrentPage('ordering');
     } else {
       setCustomerNumber(1);
@@ -404,6 +425,10 @@ function App() {
       setMatchaBowl(null);
       setFinishedDrink(null);
       setServedDrink(null);
+      setOrderTakingScore(null);
+      setMatchaScore(null);
+      setMixingScore(null);
+      setToppingsScore(null);
       setCurrentPage('main');
       sendAdOpportunity('MENU_RETURN');
     }
@@ -448,7 +473,12 @@ function App() {
         )}
         {currentPage === 'ordering' && (
           <div className="page-slide">
-            <CustomerOrdering activeStep="ordering" onPlaceOrder={setCurrentOrder} {...progressProps} />
+            <CustomerOrdering
+              activeStep="ordering"
+              onPlaceOrder={setCurrentOrder}
+              onOrderScored={setOrderTakingScore}
+              {...progressProps}
+            />
           </div>
         )}
         {currentPage === 'matcha-making' && (
@@ -457,6 +487,7 @@ function App() {
               activeStep="matcha-making"
               order={currentOrder}
               onSendToMilk={setMatchaBowl}
+              onScored={setMatchaScore}
               {...progressProps}
             />
           </div>
@@ -468,6 +499,7 @@ function App() {
               order={currentOrder}
               incomingBowl={matchaBowl}
               onSendToToppings={setFinishedDrink}
+              onScored={setMixingScore}
               {...progressProps}
             />
           </div>
@@ -479,6 +511,7 @@ function App() {
               order={currentOrder}
               incomingDrink={finishedDrink}
               onSendToFinal={setServedDrink}
+              onScored={setToppingsScore}
               {...progressProps}
             />
           </div>
@@ -489,6 +522,10 @@ function App() {
               activeStep="final-combination"
               incomingDrink={servedDrink}
               hasNextOrder={customerNumber < ORDERS_PER_SESSION}
+              orderTakingScore={orderTakingScore}
+              matchaScore={matchaScore}
+              mixingScore={mixingScore}
+              toppingsScore={toppingsScore}
               {...progressProps}
             />
           </div>

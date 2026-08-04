@@ -2,6 +2,7 @@ import React, { useRef } from 'react';
 import './FinalCombination.css';
 import { useFlatFocusNav } from '../gameloop/useFlatFocusNav';
 import ProgressBar from './ProgressBar';
+import ScoreCard from './ScoreCard';
 import { getMilkBoxFor, getMatchaBoxFor, CUP_TYPES } from './MilkSelection';
 import {
   getSyrupBoxFor,
@@ -48,37 +49,6 @@ const PLATE_SURFACE_Y_IMAGE_PCT = 74.5;
 const IMAGE_TO_CONTAINER_HEIGHT_SCALE = 16 / 9 / (1394 / 768);
 const PLATE_SURFACE_Y = PLATE_SURFACE_Y_IMAGE_PCT * IMAGE_TO_CONTAINER_HEIGHT_SCALE;
 
-// Per-section score for the completed order, shown as a "+N" badge over
-// each of the 6 cells on the receipt image (matcha / cup / ice / milk /
-// mint syrup / mint leaf), plus a total out of 100 underneath.
-//
-// PLACEHOLDER SCORING: only Milk Selection currently tracks real player
-// choices (cup placement, ice count) -- Matcha Making and Toppings are
-// still static/decorative and there's no milk-type picker yet, so there's
-// no real accuracy data to grade most sections against. Every section is
-// full marks for now. `points` is the max for that section (weighted so
-// the two flavor-defining choices, matcha amount and milk type, are worth
-// a bit more than the presentation/garnish sections); `earned` is what the
-// player actually scored -- swap that to real per-station results once
-// those stations track player choices. The UI already reads earned/points
-// per section plus the summed total, so nothing here will need to change
-// shape when that happens, only the `earned` values.
-//
-// top/right are % positions of each badge within .score-receipt, anchored
-// to the top-right corner of that section's cell on the 836x1089 order
-// image (see AnnieOrder1.png) with a small inset margin.
-const SCORE_SECTIONS = [
-  { key: 'matcha', label: 'Matcha', points: 20, earned: 20, top: 20.82, right: 8.82 },
-  { key: 'cup', label: 'Cup', points: 15, earned: 15, top: 40.48, right: 53.79 },
-  { key: 'ice', label: 'Ice', points: 15, earned: 15, top: 40.48, right: 8.82 },
-  { key: 'milk', label: 'Milk', points: 20, earned: 20, top: 60.4, right: 8.82 },
-  { key: 'mint-syrup', label: 'Mint syrup', points: 15, earned: 15, top: 79.96, right: 53.67 },
-  { key: 'mint-leaf', label: 'Mint leaf', points: 15, earned: 15, top: 79.96, right: 8.82 },
-];
-
-const TOTAL_POSSIBLE = SCORE_SECTIONS.reduce((sum, section) => sum + section.points, 0);
-const totalEarned = SCORE_SECTIONS.reduce((sum, section) => sum + section.earned, 0);
-
 const FinalCombination = ({
   activeStep,
   customerNumber,
@@ -93,6 +63,14 @@ const FinalCombination = ({
   // gesture while true, so starting a new round is only ever done through
   // that dedicated button -- see its own comment further down.
   hasNextOrder = false,
+  // Per-category score results (see ScoreCard.js and gameloop/scoring.js) --
+  // each null until the station that produces it hands it off, same "lifted
+  // through App.js state, threaded down as a prop" shape incomingDrink
+  // itself already uses.
+  orderTakingScore,
+  matchaScore,
+  mixingScore,
+  toppingsScore,
 }) => {
   const containerRef = useRef(null);
   useFlatFocusNav(containerRef);
@@ -261,31 +239,17 @@ const FinalCombination = ({
           </>
         )}
 
-        {/* Positioned over the blank hanging receipt paper in the art. The
-            box is sized to the order image's own aspect ratio (836:1089) so
-            object-fit: contain renders it with no letterboxing -- that's
-            what lets the score badges below use the same top/right
-            percentage coordinate space as the receipt image itself. */}
-        <div className="score-receipt">
-          <img
-            src="./AnnieOrder1.png"
-            alt="Completed order receipt with per-section score"
-            className="score-receipt-img"
-          />
-          {SCORE_SECTIONS.map((section) => (
-            <span
-              key={section.key}
-              className="score-badge"
-              style={{ top: `${section.top}%`, right: `${section.right}%` }}
-            >
-              +{section.earned}
-            </span>
-          ))}
-        </div>
-
-        <div className="score-total">
-          Total: {totalEarned}/{TOTAL_POSSIBLE}
-        </div>
+        {/* Replaces the old hardcoded AnnieOrder1.png receipt + per-section
+            badge overlay -- see ScoreCard.js's own comment for the
+            placeholder this grew out of. Real per-station accuracy now,
+            computed as the player actually plays (gameloop/scoring.js) and
+            threaded down through App.js the same way incomingDrink is. */}
+        <ScoreCard
+          orderTakingScore={orderTakingScore}
+          matchaScore={matchaScore}
+          mixingScore={mixingScore}
+          toppingsScore={toppingsScore}
+        />
 
         <ProgressBar
           activeStep={activeStep}
