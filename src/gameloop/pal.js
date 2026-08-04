@@ -24,6 +24,19 @@ const KEYCODE_TO_ACTION = {
   27: 'Back',
   461: 'Back',
   10009: 'Back',
+  // Android/Fire TV native D-pad keycodes (KEYCODE_DPAD_*), for when the app
+  // is wrapped in an Android WebView instead of a general-purpose TV browser.
+  // Chromium's WebView normally remaps these to the standard DOM ArrowUp/Down/
+  // Left/Right (37-40) before they ever reach page JS, but some OEM WebView
+  // builds pass the raw Android keyCode through instead -- map both so either
+  // behavior works without needing a device-specific branch.
+  19: 'Up',
+  20: 'Down',
+  21: 'Left',
+  22: 'Right',
+  23: 'Enter', // KEYCODE_DPAD_CENTER
+  66: 'Enter', // KEYCODE_ENTER
+  4: 'Back',   // KEYCODE_BACK
 };
 
 export function getActionFromKeyEvent(e) {

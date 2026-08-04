@@ -19,11 +19,13 @@ const BASE_LABELS = {
 const TOPPING_LABELS = {
   'guava-syrup': 'Guava syrup',
   'mint-syrup': 'Mint syrup',
+  'honey-syrup': 'Honey syrup',
   'reg-foam': 'Reg cold foam',
   'matcha-foam': 'Matcha cold foam',
   'guava-powder': 'Guava powder',
   'matcha-powder': 'Matcha powder',
   'mint-leaves': 'Mint leaves',
+  'banana-foam': 'Banana foam',
 };
 
 // Lets the player peek at the current order without leaving whichever

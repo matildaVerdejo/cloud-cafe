@@ -27,20 +27,17 @@
 // "how close were you" is a real, continuous thing on those two minigames'
 // gauges rather than a simple hit-or-miss.
 //
-// Two known, deliberate gaps, both because the underlying station simply
-// doesn't have the mechanic yet (not something this scoring layer can fix on
-// its own -- see the user-facing note wherever these come up):
+// One known, deliberate gap, because the underlying station simply doesn't
+// have the mechanic yet (not something this scoring layer can fix on its
+// own -- see the user-facing note wherever this comes up):
 //   - CustomerOrdering's order form can ask for a 'mug' cup (CUP_OPTIONS),
 //     but Milk Selection's own CUP_TYPES only ever implements 'glass' and
 //     'plastic' -- a mug order can never be matched there. Left as a real
 //     (correctly failing) check rather than special-cased away, since it's
 //     an honest reflection of what the station can actually do today.
-//   - CustomerOrdering's order form can ask for 'mint-leaves' (TOPPING_
-//     OPTIONS), but ToppingsStation has no mint-leaves placement mechanic at
-//     all (only syrup/foam/powder). scoreToppings below excludes it from the
-//     comparison entirely (rather than always failing it) since there's no
-//     action the player could ever take to satisfy it -- it's still fully
-//     scored, just up in Order Taking, where it's really just a form field.
+// (mint-leaves used to be a second gap here -- ToppingsStation had no
+// placement mechanic for it. It now does, see this file's own scoreToppings
+// and that screen's own mint-leaves pot.)
 
 // ---- Label maps -----------------------------------------------------------
 // Small, standalone value->display-name maps, same "own copy per file rather
@@ -60,11 +57,13 @@ const BASE_LABEL = {
 const TOPPING_LABEL = {
   'guava-syrup': 'Guava syrup',
   'mint-syrup': 'Mint syrup',
+  'honey-syrup': 'Honey syrup',
   'reg-foam': 'Reg cold foam',
   'matcha-foam': 'Matcha cold foam',
   'guava-powder': 'Guava powder',
   'matcha-powder': 'Matcha powder',
   'mint-leaves': 'Mint leaves',
+  'banana-foam': 'Banana foam',
 };
 
 // selectedTin (MatchaMaking's own tin keys, e.g. 'cafe-grade') -> the plain
@@ -76,10 +75,11 @@ const TIN_TO_ORDER_GRADE = { 'cafe-grade': 'cafe', 'classic-grade': 'classic', '
 // speech/order copy reads better as "regular"/"matcha" foam than this
 // screen's own "reg-cold-foam"/"matcha-cold-foam" item keys -- see
 // CustomerOrdering.js's own TOPPING_SPEECH_NAMES for that same wording
-// choice). banana-foam has no entry -- it isn't one of TOPPING_OPTIONS at
-// all yet (added to the counter, not yet to what a customer can ask for), so
-// it's left unmapped and therefore never matches anything a player could
-// have been asked to add -- see scoreToppings below.
+// choice). banana-foam has no entry here -- unlike those two, its
+// CustomerOrdering.js TOPPING_OPTIONS value reuses ToppingsStation's own
+// item key verbatim ('banana-foam' on both sides, same as honey-syrup/
+// mint-leaves), so the `?? foamKey` fallback in scoreToppings below already
+// matches it correctly with no mapping needed.
 const FOAM_KEY_TO_ORDER = { 'matcha-cold-foam': 'matcha-foam', 'reg-cold-foam': 'reg-foam' };
 
 // Bucket the matcha scoop gauge's continuous 0-100 "how full" reading
@@ -399,25 +399,25 @@ export function scoreMixingDrink({ cupType, iceCubes, milkType, order }) {
 }
 
 // ---- Toppings ---------------------------------------------------------
-// Grades ToppingsStation's own syrup/foam/powder picks against the placed
-// order's toppings list, one check per topping the order actually asks for
-// (correct if it was applied) plus one more for any applied topping the
-// order never asked for (always incorrect -- an unrequested extra). Called
-// from ToppingsStation's own beginSendToFinal, right as the finished drink
-// is handed off to Serving.
-//
-// order.toppings can include 'mint-leaves' (a valid CustomerOrdering.js
-// TOPPING_OPTIONS value), but this station has no mint-leaves placement
-// mechanic at all yet -- filtered out of `requested` below so this category
-// only ever grades toppings the player could actually have added; see this
-// file's own top-of-file note.
-//   syrupKey: ToppingsStation's own cupSyrup?.key ('guava-syrup' | 'mint-syrup' | null).
+// Grades ToppingsStation's own syrup/foam/powder/mint-leaves picks against
+// the placed order's toppings list, one check per topping the order
+// actually asks for (correct if it was applied) plus one more for any
+// applied topping the order never asked for (always incorrect -- an
+// unrequested extra). Called from ToppingsStation's own beginSendToFinal,
+// right as the finished drink is handed off to Serving.
+//   syrupKey: ToppingsStation's own cupSyrup?.key ('guava-syrup' | 'mint-syrup' | 'honey-syrup' | null).
 //   foamKey: ToppingsStation's own cupFoam?.key ('matcha-cold-foam' | 'reg-cold-foam' | 'banana-foam' | null).
 //   powderKey: ToppingsStation's own cupPowder?.key ('guava-powder' | 'matcha-powder' | null).
+//   mintLeavesApplied: ToppingsStation's own cupMintLeaf boolean.
 //   order: the placed order from CustomerOrdering.
-export function scoreToppings({ syrupKey, foamKey, powderKey, order }) {
-  const applied = [syrupKey, foamKey ? FOAM_KEY_TO_ORDER[foamKey] ?? foamKey : null, powderKey].filter(Boolean);
-  const requested = (order?.toppings ?? []).filter((value) => value !== 'mint-leaves');
+export function scoreToppings({ syrupKey, foamKey, powderKey, mintLeavesApplied, order }) {
+  const applied = [
+    syrupKey,
+    foamKey ? FOAM_KEY_TO_ORDER[foamKey] ?? foamKey : null,
+    powderKey,
+    mintLeavesApplied ? 'mint-leaves' : null,
+  ].filter(Boolean);
+  const requested = order?.toppings ?? [];
 
   const checks = [];
   requested.forEach((value) => {

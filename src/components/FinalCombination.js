@@ -10,6 +10,7 @@ import {
   getFoamCapBoxFor,
   getPowderLiquidBoxFor,
   getFleckPositions,
+  getLeafBoxFor,
   POWDER_FLECK_OFFSETS_ELLIPSE,
   POWDER_FLECK_OFFSETS_LIQUID,
 } from './ToppingsStation';
@@ -127,6 +128,13 @@ const FinalCombination = ({
     incomingDrink?.foam && incomingFoamCapBox ? POWDER_FLECK_OFFSETS_ELLIPSE : POWDER_FLECK_OFFSETS_LIQUID;
   const powderFleckPositions =
     incomingDrink?.powder && powderLandingBox ? getFleckPositions(powderLandingBox, powderFleckOffsets) : [];
+  // Same "settle on the foam's own top ellipse if there's foam to catch it,
+  // otherwise the plain top layer instead" choice as powderLandingBox just
+  // above -- see ToppingsStation.js's own leafLandingBox/getLeafBoxFor for
+  // the full reasoning (this is that same box, just recomputed here against
+  // this screen's own fixed finalDrinkSpot-based boxes instead).
+  const leafLandingBox = incomingDrink?.foam && incomingFoamCapBox ? incomingFoamCapBox : incomingTopBox;
+  const incomingLeafBox = incomingDrink?.leaf && leafLandingBox ? getLeafBoxFor(leafLandingBox) : null;
 
   return (
     <div className="final-combination-container" ref={containerRef}>
@@ -236,6 +244,24 @@ const FinalCombination = ({
                   style={{ left: `${pos.left}%`, top: `${pos.top}%` }}
                 />
               ))}
+            {/* Mint-leaf garnish, carried over from ToppingsStation's own
+                incomingDrink.leaf flag -- see incomingLeafBox above and
+                that screen's own matching render block for the reasoning. */}
+            {incomingLeafBox && (
+              <img
+                src="./MintLeaf.png"
+                alt=""
+                aria-hidden="true"
+                draggable={false}
+                className="cup-leaf-garnish"
+                style={{
+                  left: `${incomingLeafBox.left}%`,
+                  top: `${incomingLeafBox.top}%`,
+                  width: `${incomingLeafBox.width}%`,
+                  height: `${incomingLeafBox.height}%`,
+                }}
+              />
+            )}
           </>
         )}
 

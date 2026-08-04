@@ -37,13 +37,30 @@ const BASE_OPTIONS_BASE = [
   { value: 'coconut', label: 'Coconut water' },
 ];
 const BASE_OPTIONS_WITH_STRAWBERRY = [...BASE_OPTIONS_BASE, { value: 'strawberry', label: 'Strawberry milk' }];
-const TOPPING_OPTIONS = [
+// Same "kept as a separate list, not merged in directly" reasoning as
+// BASE_OPTIONS_BASE/_WITH_STRAWBERRY above -- banana foam (order 2+, see
+// ToppingsStation.js's own bananaFoamUnlocked) and honey syrup/mint leaves
+// (order 3+, see that file's own honeySyrupUnlocked/mintLeavesUnlocked)
+// only become orderable/speakable once the counter itself actually has
+// them, same "never ask for what the player hasn't been introduced to
+// yet" rule. banana-foam was missing entirely here before (a real bug --
+// the counter offered it from order 2 on, but there was no way to ever be
+// asked for it), unlike honey-syrup/mint-leaves, whose value here reuses
+// ToppingsStation's own item key directly rather than a differently-named
+// order-form value (contrast matcha-cold-foam/reg-cold-foam, which map
+// through FOAM_KEY_TO_ORDER in gameloop/scoring.js).
+const TOPPING_OPTIONS_BASE = [
   { value: 'guava-syrup', label: 'Guava syrup' },
   { value: 'mint-syrup', label: 'Mint syrup' },
   { value: 'reg-foam', label: 'Reg cold foam' },
   { value: 'matcha-foam', label: 'Matcha cold foam' },
   { value: 'guava-powder', label: 'Guava powder' },
   { value: 'matcha-powder', label: 'Matcha powder' },
+];
+const TOPPING_OPTIONS_ORDER2 = [...TOPPING_OPTIONS_BASE, { value: 'banana-foam', label: 'Banana foam' }];
+const TOPPING_OPTIONS_ORDER3 = [
+  ...TOPPING_OPTIONS_ORDER2,
+  { value: 'honey-syrup', label: 'Honey syrup' },
   { value: 'mint-leaves', label: 'Mint leaves' },
 ];
 
@@ -70,11 +87,13 @@ const GREETINGS = ['Hello!', 'Hi!', 'Howdy!'];
 const TOPPING_SPEECH_NAMES = {
   'guava-syrup': 'guava syrup',
   'mint-syrup': 'mint syrup',
+  'honey-syrup': 'honey syrup',
   'reg-foam': 'regular foam',
   'matcha-foam': 'matcha foam',
   'guava-powder': 'guava powder',
   'matcha-powder': 'matcha powder',
   'mint-leaves': 'mint leaves',
+  'banana-foam': 'banana foam',
 };
 
 // ---- Per-character ordering voice line -----------------------------------
@@ -143,13 +162,14 @@ function joinWithAndSegments(items) {
 // so a brand-new player's first order is a simpler one to read and build.
 // Every later round uses the full range as before.
 //
-// baseOptions is passed in (rather than this reading the module-level
-// BASE_OPTIONS_BASE directly) so whichever milk pool the component decided
-// is unlocked this round (see baseOptions in the component below) is what
-// the customer can actually ask for -- order 1 can never randomly speak an
-// ingredient (strawberry milk) the player hasn't seen on the counter yet.
-function generateSpokenOrder(customerNumber, baseOptions) {
-  const toppingCap = customerNumber === 1 ? pickRandom([2, 3]) : TOPPING_OPTIONS.length;
+// baseOptions/toppingOptions are passed in (rather than this reading the
+// module-level BASE_OPTIONS_BASE/TOPPING_OPTIONS_BASE directly) so whichever
+// pools the component decided are unlocked this round (see baseOptions/
+// toppingOptions in the component below) are what the customer can actually
+// ask for -- order 1/2 can never randomly speak an ingredient (strawberry
+// milk, honey syrup, mint leaves) the player hasn't seen on the counter yet.
+function generateSpokenOrder(customerNumber, baseOptions, toppingOptions) {
+  const toppingCap = customerNumber === 1 ? pickRandom([2, 3]) : toppingOptions.length;
   return {
     greeting: pickRandom(GREETINGS),
     teaspoons: pickRandom(TEASPOON_OPTIONS).value,
@@ -157,7 +177,7 @@ function generateSpokenOrder(customerNumber, baseOptions) {
     cup: pickRandom(CUP_OPTIONS).value,
     ice: pickRandom(ICE_OPTIONS).value,
     milk: pickRandom(baseOptions).value,
-    toppings: pickRandomSubset(TOPPING_OPTIONS, toppingCap).map((t) => t.value),
+    toppings: pickRandomSubset(toppingOptions, toppingCap).map((t) => t.value),
   };
 }
 
@@ -318,6 +338,13 @@ const CustomerOrdering = ({ activeStep, customerNumber, onNavigate, onAdvance, o
   // once and used both for the dropdown's own options and for whatever the
   // customer might randomly ask for (see generateSpokenOrder below).
   const baseOptions = customerNumber >= 2 ? BASE_OPTIONS_WITH_STRAWBERRY : BASE_OPTIONS_BASE;
+  // Banana foam becomes orderable from order 2 onward, honey syrup/mint
+  // leaves from order 3 onward -- same "read once, unmounts between
+  // customers" reasoning as baseOptions just above -- see
+  // ToppingsStation.js's own bananaFoamUnlocked/honeySyrupUnlocked/
+  // mintLeavesUnlocked for the matching counter-side gates.
+  const toppingOptions =
+    customerNumber >= 3 ? TOPPING_OPTIONS_ORDER3 : customerNumber >= 2 ? TOPPING_OPTIONS_ORDER2 : TOPPING_OPTIONS_BASE;
   // Declared up here (rather than down by orderFormOpen/the order-builder
   // state, where the rest of these would naturally sit) purely so the two
   // bridge effects right below -- which need these refs -- can be
@@ -533,7 +560,7 @@ const CustomerOrdering = ({ activeStep, customerNumber, onNavigate, onAdvance, o
   // Rolled once per mount (i.e. once per customer -- see the big comment
   // above generateSpokenOrder) via the lazy initializer, so it doesn't
   // re-roll on every re-render (opening a dropdown, picking a value, etc).
-  const [spokenOrder] = useState(() => generateSpokenOrder(customerNumber, baseOptions));
+  const [spokenOrder] = useState(() => generateSpokenOrder(customerNumber, baseOptions, toppingOptions));
   const speechSegments = buildSpeechSegments(spokenOrder, baseOptions);
   const speechText = flattenSegments(speechSegments);
 
@@ -922,7 +949,7 @@ const CustomerOrdering = ({ activeStep, customerNumber, onNavigate, onAdvance, o
                     </button>
                     {openControl === 'toppings' && (
                       <div className="order-dropdown-list">
-                        {TOPPING_OPTIONS.map((opt, index) => (
+                        {toppingOptions.map((opt, index) => (
                           <button
                             key={opt.value}
                             ref={index === 0 ? toppingsFirstOptionRef : undefined}
@@ -940,7 +967,7 @@ const CustomerOrdering = ({ activeStep, customerNumber, onNavigate, onAdvance, o
                   {toppings.length > 0 && (
                     <div className="order-topping-chips">
                       {toppings.map((t) => {
-                        const opt = TOPPING_OPTIONS.find((o) => o.value === t.value);
+                        const opt = toppingOptions.find((o) => o.value === t.value);
                         return (
                           <button
                             key={t.id}

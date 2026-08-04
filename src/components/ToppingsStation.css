@@ -120,6 +120,13 @@
   background: linear-gradient(to top, rgba(101, 196, 155, 0.85) 0%, rgba(101, 196, 155, 0.85) 30%, rgba(101, 196, 155, 0) 100%);
 }
 
+/* Honey syrup -- new order-3-and-later topping, same shape/gradient
+   treatment as the other two, just its own honey-amber color (see
+   SYRUP_STREAM_COLORS in ToppingsStation.js). */
+.cup-syrup-fill.honey-syrup {
+  background: linear-gradient(to top, rgba(214, 158, 46, 0.85) 0%, rgba(214, 158, 46, 0.85) 30%, rgba(214, 158, 46, 0) 100%);
+}
+
 /* Cold foam, poured on top of the drink -- its own dedicated shape rather
    than reusing MilkSelection.css's .cup-matcha-fill clip-path (that
    clip-path's top edge is a pointed glass-taper meniscus, sharp corners
@@ -249,6 +256,33 @@
   100% {
     opacity: 1;
     transform: translate(-50%, -50%) scale(1);
+  }
+}
+
+/* Mint-leaf garnish (see incomingLeafBox/getLeafBoxFor in
+   ToppingsStation.js) -- a real <img>, not a colored fill, sitting on top
+   of everything else already poured. Its own pop-in keyframe (rather than
+   reusing .cup-powder-fleck's own powderFleckAppear) since that one bakes
+   in a translate(-50%, -50%) recentering meant for a point-anchored dot --
+   this element is a normal top-left-positioned box like every other fill
+   here, so it only needs a plain center-scale grow, no translate. */
+.cup-leaf-garnish {
+  position: absolute;
+  object-fit: contain;
+  pointer-events: none;
+  transform-origin: center;
+  filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.25));
+  animation: leafGarnishAppear 0.3s ease-out both;
+}
+
+@keyframes leafGarnishAppear {
+  0% {
+    opacity: 0;
+    transform: scale(0.4);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
   }
 }
 
