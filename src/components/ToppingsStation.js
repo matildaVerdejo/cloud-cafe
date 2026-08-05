@@ -1080,8 +1080,8 @@ const ToppingsStation = ({
   // along with the cup while it's being dragged/carried to the Serving
   // zone (see the big comment on incomingDrinkRenderPos above), and
   // incomingDrinkSize (not always TABLE_SIZE) so it fits whichever cup
-  // type actually arrived, glass or plastic.
-  const incomingMilkBox = incomingDrink?.milk ? getMilkBoxFor(incomingDrinkRenderPos, incomingDrinkSize) : null;
+  // type actually arrived (glass, plastic, or mug).
+  const incomingMilkBox = incomingDrink?.milk ? getMilkBoxFor(incomingDrinkRenderPos, incomingDrinkSize, CUP_TYPES[incomingCupType].bodyFrac) : null;
   const incomingMatchaBox = incomingDrink?.matcha && incomingMilkBox ? getMatchaBoxFor(incomingMilkBox) : null;
   const incomingSyrupBox = incomingMilkBox ? getSyrupBoxFor(incomingMilkBox) : null;
   // Foam always lands on whatever the drink's current top layer is -- the
@@ -2011,7 +2011,7 @@ const ToppingsStation = ({
             come from CUP_TYPES[incomingCupType] (see the big comment on
             incomingCupType above) rather than always GlassCup.png/
             INCOMING_DRINK_SIZE, so this actually renders the same cup type
-            (glass or plastic) the player used on Milk Selection instead of
+            (glass, plastic, or mug) the player used on Milk Selection instead of
             always showing the glass one. Stops rendering entirely once
             drinkSendStage reaches 'sent' (same "gone once sent" treatment
             the bowl/cup get). While 'carrying'/'vanishing' the cup is still
@@ -2066,7 +2066,7 @@ const ToppingsStation = ({
                 the player's ice decisions are already locked in by this
                 screen. */}
             {Array.from({ length: incomingDrink.iceCubes ?? 0 }).map((_, index) => {
-              const iceSlotPos = getIceCupSlotPos(index, incomingDrinkRenderPos, incomingDrinkSize);
+              const iceSlotPos = getIceCupSlotPos(index, incomingDrinkRenderPos, incomingDrinkSize, CUP_TYPES[incomingCupType].bodyFrac);
               return (
                 <img
                   key={index}

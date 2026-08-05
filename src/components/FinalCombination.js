@@ -39,7 +39,7 @@ import {
 //
 // The actual drink SIZE (and therefore FINAL_DRINK_SPOT, which depends on
 // it) can't be a fixed module constant anymore now that Milk Selection has
-// two cup types (glass/plastic) of different widths -- see
+// three cup types (glass/plastic/mug) of different widths -- see
 // finalDrinkSize/finalDrinkSpot in the component below, computed from
 // incomingDrink.cupType via the CUP_TYPES map imported from
 // MilkSelection.js, same "read the real cup type instead of always
@@ -109,7 +109,7 @@ const FinalCombination = ({
   // cupMilk/cupMatcha use, foam/syrup/powder are that screen's own cupFoam/
   // cupSyrup/cupPowder shapes ({ key } | null each), and cupType is which
   // cup this all needs to render inside of.
-  const incomingMilkBox = incomingDrink?.milk ? getMilkBoxFor(finalDrinkSpot, finalDrinkSize) : null;
+  const incomingMilkBox = incomingDrink?.milk ? getMilkBoxFor(finalDrinkSpot, finalDrinkSize, CUP_TYPES[finalCupType].bodyFrac) : null;
   const incomingMatchaBox = incomingDrink?.matcha && incomingMilkBox ? getMatchaBoxFor(incomingMilkBox) : null;
   const incomingSyrupBox = incomingDrink?.syrup && incomingMilkBox ? getSyrupBoxFor(incomingMilkBox) : null;
   const incomingTopBox = incomingMatchaBox || incomingMilkBox;

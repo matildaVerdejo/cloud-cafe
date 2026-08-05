@@ -64,28 +64,29 @@
 }
 
 /* Cup: glass starts sitting on the leftmost cabinet slot on the wall
-   (image x 990-1080, y 202-298 of 1392x768) and plastic sits in the slot
-   next to it (see PLASTIC_CUP_SPOTS in MilkSelection.js) -- either can be
-   dragged down to the table, where it renders bigger (as if set down
-   closer to camera). Table left/top in MilkSelection.js are picked so each
-   cup's enlarged box's bottom edge lands at y=605 -- the same level the
-   milk bottles' bases sit at (measured y 601-610 across the four
-   bottles) -- and is horizontally centered on the table (x=696, half of
-   the 1392-wide art). Enter/Select on the focused cup toggles shelf <->
-   table (or switches which cup is active, if it's the inactive one) as
+   (image x 990-1080, y 202-298 of 1392x768), plastic sits in the slot next
+   to it, and mug sits in the third/rightmost slot (see PLASTIC_CUP_SPOTS/
+   MUG_CUP_SPOTS in MilkSelection.js) -- any of the three can be dragged
+   down to the table, where it renders bigger (as if set down closer to
+   camera). Table left/top in MilkSelection.js are picked so each cup's
+   enlarged box's bottom edge lands at y=605 -- the same level the milk
+   bottles' bases sit at (measured y 601-610 across the four bottles) --
+   and is horizontally centered on the table (x=696, half of the
+   1392-wide art). Enter/Select on the focused cup toggles shelf <->
+   table (or switches which cup is active, if it's an inactive one) as
    the D-pad equivalent of dragging (see handleCupKeyDown/
    handleCupSwitchKeyDown in MilkSelection.js). left/top/width/height are
    set inline per-render since they're state-driven, not fixed -- only the
    static visual properties live here.
 
    object-fit: contain (rather than the default stretch-to-fill) is what
-   keeps the plastic cup from being squished -- its own canvas aspect ratio
-   doesn't match the glass cup's, since it's a differently-shaped cup (see
-   the big comment on PLASTIC_CUP_CANVAS_ASPECT in MilkSelection.js). Added
-   here rather than a plastic-only modifier since it's a no-op for the
-   glass cup: GlassCup.png's own canvas aspect already closely matches its
-   own SHELF_SIZE/TABLE_SIZE box, so there's nothing for contain to
-   letterbox. */
+   keeps the plastic cup/mug from being squished -- neither one's own
+   canvas aspect ratio matches the glass cup's, since each is a
+   differently-shaped cup (see the big comments on PLASTIC_CUP_CANVAS_ASPECT/
+   MUG_CUP_CANVAS_ASPECT in MilkSelection.js). Added here rather than a
+   per-type modifier since it's a no-op for the glass cup: GlassCup.png's
+   own canvas aspect already closely matches its own SHELF_SIZE/TABLE_SIZE
+   box, so there's nothing for contain to letterbox. */
 .glass-cup {
   position: absolute;
   object-fit: contain;

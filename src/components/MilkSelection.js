@@ -96,7 +96,71 @@ const PLASTIC_CUP_SPOTS = {
   },
 };
 
-// One entry per cup type -- both sit in the cubby, but only one is ever
+// ---- Mug: third cup option in the cubby -----------------------------------
+// The cabinet's third (rightmost) compartment in MilkMixingStation.png --
+// previously empty, now filled the same way slot 2 (plastic) filled the
+// cabinet's middle one. Exact same shelf<->table drag/Enter-toggle, milk/
+// matcha pour targeting, ice placement, and send-to-Toppings mechanics as
+// glass/plastic (all of that is already generic over CUP_TYPES[activeCup],
+// see the big comment above it -- adding this third entry there is what
+// actually turns it on, no mechanic-level code needed).
+//
+// MugCup.png was cropped to its own alpha bounding box (357x320) before
+// being copied into public/, same "trimmed tight to the actual drawing"
+// treatment PlasticCup.png already got -- the file the user added had the
+// mug's own artwork sitting well inside a much larger canvas. Its own
+// bbox reads WIDER than tall (unlike glass/plastic, both narrow columns)
+// since the handle sticks out to the side -- MUG_CUP_CANVAS_ASPECT (>1)
+// reflects that real proportion rather than assuming a tall-cup shape.
+//
+// Sized the same "match height, derive width from the source art's own
+// proportions" way PLASTIC_SHELF_SIZE/PLASTIC_TABLE_SIZE are above.
+const MUG_CUP_CANVAS_ASPECT = 357 / 320; // width/height of the (cropped) MugCup.png
+const MUG_SHELF_SIZE = {
+  width: SHELF_SIZE.height * MUG_CUP_CANVAS_ASPECT * (9 / 16),
+  height: SHELF_SIZE.height,
+};
+const MUG_TABLE_SIZE = {
+  width: TABLE_SIZE.height * MUG_CUP_CANVAS_ASPECT * (9 / 16),
+  height: TABLE_SIZE.height,
+};
+
+// Slot 3 of the cubby -- the cabinet's rightmost compartment, measured off
+// that art's own divider-line pixel positions the same way PLASTIC_CUP_SPOTS'
+// own shelf.left was, then centered the mug's own (wider) shelf width on
+// that slot's center. Same top as the other two (all three sit on the same
+// shelf row). Table spot follows the exact same "recenter on
+// CUP_SPOTS.table's centerline" formula PLASTIC_CUP_SPOTS.table uses --
+// MUG_TABLE_SIZE shares the glass/plastic table box's own height, so all
+// three cups' bottoms land on the same baseline.
+const MUG_CUP_SPOTS = {
+  shelf: { left: 88.22, top: CUP_SPOTS.shelf.top },
+  table: {
+    left: CUP_SPOTS.table.left + (TABLE_SIZE.width - MUG_TABLE_SIZE.width) / 2,
+    top: CUP_SPOTS.table.top,
+  },
+};
+
+// Where the mug's own drinkable BODY actually sits within its full
+// rendered box (MUG_SHELF_SIZE/MUG_TABLE_SIZE above) -- unlike glass/
+// plastic, which are simple columns that fill almost their entire box
+// width, the mug's box also has to make room for its handle sticking out
+// to the right (see MUG_CUP_CANVAS_ASPECT's own comment), so the actual
+// cup body only occupies its LEFT ~68% of that box, not the whole thing.
+// Measured directly off MugCup.png's own alpha channel: at the mug's
+// vertical middle, the body's opaque pixels span roughly x 10-254 of its
+// own 357-wide canvas (0.028-0.712 as a fraction), with a gap of
+// transparency, then the separate handle loop, out to the box's own right
+// edge. Passed through to getMilkBoxFor/getIceCupSlotPos below (see
+// bodyFrac there) so every fill/ice-cube position gets rescaled into this
+// narrower, left-shifted region instead of the full box those functions'
+// own fractions assume for glass/plastic -- without this, the milk/matcha/
+// syrup/foam/powder fills and ice cubes all rendered too far right and too
+// wide, encroaching into the handle's own empty space instead of sitting
+// inside the mug's actual opening.
+const MUG_CUP_BODY_FRAC = { left: 0.028, right: 0.712 };
+
+// One entry per cup type -- all three sit in the cubby, but only one is ever
 // "the" cup actually in play (see activeCup in the component below).
 // Bundling each type's own art/positions/sizes here is what lets the
 // shelf<->table drag, milk/matcha pour targeting, ice placement, and
@@ -105,7 +169,10 @@ const PLASTIC_CUP_SPOTS = {
 // Exported so ToppingsStation.js/FinalCombination.js can look up the right
 // cup art/size for whichever type was actually used here (see cupType on
 // the object beginSendDrink below hands off to onSendToToppings), instead
-// of always assuming glass for the carried-over cup on those screens.
+// of always assuming glass for the carried-over cup on those screens. Also
+// what actually closes the "a mug order can never be matched" scoring gap
+// (see gameloop/scoring.js's own scoreMixingDrink) -- that comparison was
+// always keyed on CUP_TYPES having a 'mug' entry, it just didn't exist yet.
 export const CUP_TYPES = {
   glass: {
     src: './GlassCup.png',
@@ -123,6 +190,18 @@ export const CUP_TYPES = {
     tableSpot: PLASTIC_CUP_SPOTS.table,
     tableSize: PLASTIC_TABLE_SIZE,
   },
+  mug: {
+    src: './MugCup.png',
+    alt: 'Mug',
+    shelfSpot: MUG_CUP_SPOTS.shelf,
+    shelfSize: MUG_SHELF_SIZE,
+    tableSpot: MUG_CUP_SPOTS.table,
+    tableSize: MUG_TABLE_SIZE,
+    // Only the mug needs this -- see MUG_CUP_BODY_FRAC's own comment above.
+    // Left undefined for glass/plastic so getMilkBoxFor/getIceCupSlotPos's
+    // own default parameter (the full box, no rescaling) applies instead.
+    bodyFrac: MUG_CUP_BODY_FRAC,
+  },
 };
 
 // Display name per cup type, shown as a label above whichever cup currently
@@ -133,6 +212,7 @@ export const CUP_TYPES = {
 const CUP_LABELS = {
   glass: 'glass cup',
   plastic: 'plastic cup',
+  mug: 'mug',
 };
 
 // Gap between a cup's own top edge and its label above it -- same
@@ -327,11 +407,28 @@ const MILK_STREAM_COLORS = {
 // fraction values. This screen's own cupMilkBox (further down) just calls
 // this with the cup's own live cupRenderPos/cupRenderSize, recomputed every
 // render so the fill tracks the cup wherever it currently is.
-export function getMilkBoxFor(cupPos, cupSize) {
+//
+// bodyFrac (left/right, both 0-1 fractions of cupSize.width) is where the
+// cup's own drinkable body actually sits within its full rendered box --
+// defaults to the whole box (0-1), correct as-is for glass/plastic, whose
+// boxes ARE basically just the body. The mug needs something narrower (see
+// MUG_CUP_BODY_FRAC's own comment) since its box also has to fit a handle
+// that isn't part of the liquid-holding body at all -- CUP_MILK_BOX_FRAC's
+// own leftFrac/rightFrac/etc. below get rescaled into whatever sub-range
+// bodyFrac describes instead of always spanning the full box, so every
+// downstream box that derives from this one (getMatchaBoxFor, and
+// ToppingsStation.js's own getFoamBoxFor/getSyrupBoxFor/
+// getPowderLiquidBoxFor/getLeafBoxFor, all of which read this box's own
+// left/width rather than the cup's directly) automatically inherits the
+// same narrower, left-shifted placement with no changes of their own
+// needed.
+export function getMilkBoxFor(cupPos, cupSize, bodyFrac = { left: 0, right: 1 }) {
+  const bodyLeft = cupPos.left + bodyFrac.left * cupSize.width;
+  const bodyWidth = (bodyFrac.right - bodyFrac.left) * cupSize.width;
   return {
-    left: cupPos.left + CUP_MILK_BOX_FRAC.leftFrac * cupSize.width,
+    left: bodyLeft + CUP_MILK_BOX_FRAC.leftFrac * bodyWidth,
     top: cupPos.top + CUP_MILK_BOX_FRAC.topFrac * cupSize.height,
-    width: (CUP_MILK_BOX_FRAC.rightFrac - CUP_MILK_BOX_FRAC.leftFrac) * cupSize.width,
+    width: (CUP_MILK_BOX_FRAC.rightFrac - CUP_MILK_BOX_FRAC.leftFrac) * bodyWidth,
     height: (CUP_MILK_BOX_FRAC.bottomFrac - CUP_MILK_BOX_FRAC.topFrac) * cupSize.height,
   };
 }
@@ -435,9 +532,20 @@ const ICE_CUP_SLOT_FRACTIONS = [
 // ICE_CUP_SLOT_FRACTIONS themselves were only ever tuned against
 // GlassCup.png's own taper, so this is a reasonable approximation rather
 // than a pixel-perfect trace when the plastic cup is the active one.
-export function getIceCupSlotPos(index, cupPos, cupSize) {
+//
+// bodyFrac -- same parameter, same default, and same reasoning as
+// getMilkBoxFor's own above: rescales ICE_CUP_SLOT_FRACTIONS' x fraction
+// into the mug's own narrower body region instead of its full box (which
+// also has to fit the handle), so ice cubes land inside the mug's actual
+// opening instead of drifting into that empty handle space. The y
+// fraction is left untouched either way (only bodyFrac.left/right narrow
+// the horizontal placement -- there's no equivalent vertical squeeze here,
+// same "not pixel-perfect, a reasonable approximation" caveat as always).
+export function getIceCupSlotPos(index, cupPos, cupSize, bodyFrac = { left: 0, right: 1 }) {
   const frac = ICE_CUP_SLOT_FRACTIONS[index % ICE_CUP_SLOT_FRACTIONS.length];
-  const centerX = cupPos.left + frac.x * cupSize.width;
+  const bodyLeft = cupPos.left + bodyFrac.left * cupSize.width;
+  const bodyWidth = (bodyFrac.right - bodyFrac.left) * cupSize.width;
+  const centerX = bodyLeft + frac.x * bodyWidth;
   const centerY = cupPos.top + frac.y * cupSize.height;
   return {
     left: centerX - ICE_CUP_SIZE.width / 2,
@@ -560,9 +668,10 @@ const MilkSelection = ({
         : [];
       const firstIceCube = iceCubes[0] ?? null;
       const gearButton = document.querySelector('.settings-toggle-button');
-      // Both shelf cups (glass and plastic) share the .glass-cup class (see
-      // their shared JSX below) -- glass is always first in DOM order
-      // (['glass', 'plastic'].map), so index 0 is exactly "the glass cup".
+      // All three shelf cups (glass, plastic, mug) share the .glass-cup
+      // class (see their shared JSX below) -- glass is always first in DOM
+      // order (['glass', 'plastic', 'mug'].map), so index 0 is exactly "the
+      // glass cup".
       const shelfCups = containerRef.current
         ? Array.from(containerRef.current.querySelectorAll('.glass-cup'))
         : [];
@@ -655,11 +764,23 @@ const MilkSelection = ({
         return;
       }
 
-      // The active cup, still up on the shelf: Left/Right only ever
-      // toggles between the two of them (trapped at both ends, same shape
-      // as the bottles above -- the "other" cup index is always
-      // 1 - thisIndex since there are only two). Up goes to the order
+      // The active cup, still up on the shelf: Left/Right cycles siblings,
+      // same trap-at-the-ends shape as the bottles above (DOM order is
+      // glass, plastic, mug -- see the ['glass', 'plastic', 'mug'].map
+      // further down -- so Left/Right just walk one step either way,
+      // nextIndex out of bounds at either end meaning shelfCups[nextIndex]
+      // is undefined and .focus() on it a no-op). Up goes to the order
       // button, Down goes to the first bottle.
+      //
+      // (This used to be a plain "toggle to the other one" --
+      // shelfCups[1 - cupIndex] -- back when there were only ever two cups
+      // to choose between, which happened to produce the same left-right-
+      // both-swap behavior this directional version does for exactly two.
+      // Now that there are three, that old formula would only ever swap
+      // between indices 0 and 1 and could never reach index 2 (mug) at
+      // all, so it's been generalized to the same directional-with-
+      // trapped-ends shape every other sibling row in this project already
+      // uses.)
       //
       // Once Enter's moved it down to the table (cupSpot, mirrored live
       // into cupSpotRef -- see that ref's own comment above), it's a
@@ -683,7 +804,8 @@ const MilkSelection = ({
         if (action === 'Left' || action === 'Right') {
           e.preventDefault();
           e.stopImmediatePropagation();
-          shelfCups[1 - cupIndex]?.focus();
+          const nextIndex = action === 'Right' ? cupIndex + 1 : cupIndex - 1;
+          shelfCups[nextIndex]?.focus();
         } else if (action === 'Down') {
           e.preventDefault();
           e.stopImmediatePropagation();
@@ -993,7 +1115,7 @@ const MilkSelection = ({
   // was dragged or carried away. cupMatchaBox is the shallower box the
   // matcha layer renders into on top of it -- see getMatchaBoxFor/
   // CUP_MATCHA_HEIGHT_FRAC above.
-  const cupMilkBox = getMilkBoxFor(cupRenderPos, cupRenderSize);
+  const cupMilkBox = getMilkBoxFor(cupRenderPos, cupRenderSize, CUP_TYPES[activeCup].bodyFrac);
   const cupMatchaBox = getMatchaBoxFor(cupMilkBox);
 
   // ---- Ice cubes: ice box -> cup ----------------------------------------
@@ -1008,7 +1130,7 @@ const MilkSelection = ({
     // if it hasn't been placed yet, or its cup slot if it has, so grabbing
     // a placed cube picks it up from the cup instead of jumping back to
     // the box.
-    const base = icePlaced[index] ? getIceCupSlotPos(index, cupRenderPos, cupRenderSize) : ICE_BOX_SPOTS[index];
+    const base = icePlaced[index] ? getIceCupSlotPos(index, cupRenderPos, cupRenderSize, CUP_TYPES[activeCup].bodyFrac) : ICE_BOX_SPOTS[index];
     e.currentTarget.setPointerCapture(e.pointerId);
     iceDragStartRef.current = {
       pointerX: e.clientX,
@@ -1549,10 +1671,11 @@ const MilkSelection = ({
             />
           </>
         )}
-        {/* Two cup graphics -- glass (slot 1) and plastic (slot 2) of the
-            same shelf cubby, see CUP_TYPES above -- but only one <img> per
-            type ever renders, and only one of them is ever the fully
-            interactive "cup in play" at a time (isActive, from activeCup).
+        {/* Three cup graphics -- glass (slot 1), plastic (slot 2), and mug
+            (slot 3) of the same shelf cubby, see CUP_TYPES above -- but
+            only one <img> per type ever renders, and only one of them is
+            ever the fully interactive "cup in play" at a time (isActive,
+            from activeCup).
             Keying on the cup type itself (key={type}), not on active/
             inactive role, means grabbing the inactive one and switching to
             it reuses the SAME DOM node across that switch (its props just
@@ -1585,7 +1708,7 @@ const MilkSelection = ({
             normal handleCupPointerDown/handleCupKeyDown, which is what
             actually performs the switch (see the big comment on activeCup
             above). */}
-        {['glass', 'plastic'].map((type) => {
+        {['glass', 'plastic', 'mug'].map((type) => {
           const cfg = CUP_TYPES[type];
           const isActive = activeCup === type;
           if (isActive && cupSendStage === 'sent') return null;
@@ -1626,12 +1749,12 @@ const MilkSelection = ({
           );
         })}
         {/* Name label above whichever cup currently has the white focus
-            halo (see focusedCupType above) -- "glass cup"/"plastic cup".
-            Uses that same cup's own live pos/size (recomputed the same way
+            halo (see focusedCupType above) -- "glass cup"/"plastic cup"/
+            "mug". Uses that same cup's own live pos/size (recomputed the same way
             the loop above works them out) so it tracks correctly whether
             the focused cup is sitting on the shelf, on the table, or
             mid-drag. */}
-        {['glass', 'plastic']
+        {['glass', 'plastic', 'mug']
           .filter((type) => type === focusedCupType)
           .map((type) => {
             const cfg = CUP_TYPES[type];
@@ -1659,7 +1782,7 @@ const MilkSelection = ({
           // an unplaced cube still sitting in the box is unaffected.
           if (placed && cupSendStage === 'sent') return null;
           const dragging = iceDrag?.index === index;
-          const pos = dragging ? iceDrag : placed ? getIceCupSlotPos(index, cupRenderPos, cupRenderSize) : boxSpot;
+          const pos = dragging ? iceDrag : placed ? getIceCupSlotPos(index, cupRenderPos, cupRenderSize, CUP_TYPES[activeCup].bodyFrac) : boxSpot;
           const size = placed ? ICE_CUP_SIZE : ICE_BOX_SIZE;
           const leaving = placed && cupSendStage === 'vanishing';
           return (

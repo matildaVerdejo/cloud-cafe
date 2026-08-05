@@ -27,17 +27,14 @@
 // "how close were you" is a real, continuous thing on those two minigames'
 // gauges rather than a simple hit-or-miss.
 //
-// One known, deliberate gap, because the underlying station simply doesn't
-// have the mechanic yet (not something this scoring layer can fix on its
-// own -- see the user-facing note wherever this comes up):
-//   - CustomerOrdering's order form can ask for a 'mug' cup (CUP_OPTIONS),
-//     but Milk Selection's own CUP_TYPES only ever implements 'glass' and
-//     'plastic' -- a mug order can never be matched there. Left as a real
-//     (correctly failing) check rather than special-cased away, since it's
-//     an honest reflection of what the station can actually do today.
-// (mint-leaves used to be a second gap here -- ToppingsStation had no
-// placement mechanic for it. It now does, see this file's own scoreToppings
-// and that screen's own mint-leaves pot.)
+// No known gaps left of the "order form can ask for something the station
+// can't actually produce" shape this section used to document -- CUP_OPTIONS'
+// 'mug' used to be one (Milk Selection's own CUP_TYPES only implemented
+// 'glass'/'plastic'), and 'mint-leaves' used to be another (ToppingsStation
+// had no placement mechanic for it) -- both now have real mechanics (see
+// MilkSelection.js's own CUP_TYPES.mug and ToppingsStation.js's own
+// mint-leaves pot), so scoreMixingDrink/scoreToppings below grade them for
+// real instead of the checks being structurally unwinnable.
 
 // ---- Label maps -----------------------------------------------------------
 // Small, standalone value->display-name maps, same "own copy per file rather
