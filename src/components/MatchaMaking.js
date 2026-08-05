@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import './MatchaMaking.css';
 import { useFlatFocusNav } from '../gameloop/useFlatFocusNav';
 import { getActionFromKeyEvent, shouldDebounceEnter } from '../gameloop/pal';
-import { playLiquidPouring } from '../gameloop/sfx';
+import { playLiquidPouring, playMatchaWhisking } from '../gameloop/sfx';
 import ProgressBar from './ProgressBar';
 import OrderReceiptButton from './OrderReceiptButton';
 import { scoreMatchaMaking } from '../gameloop/scoring';
@@ -2131,6 +2131,14 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
   useEffect(() => {
     if (whiskStage !== 'mixing') return undefined;
 
+    // "matcha whisking" SFX -- loops for this entire stage (see
+    // playMatchaWhisking's own comment for why it's a loop rather than a
+    // one-shot) and is explicitly stopped in this effect's own cleanup
+    // below, which fires the moment whiskStage leaves 'mixing' -- whether
+    // that's the minigame finishing normally (elapsedMs >= WHISK_MIX_
+    // DURATION_MS further down) or the component unmounting mid-whisk.
+    const whiskAudio = playMatchaWhisking();
+
     const ballWidthPercent = MIX_BALL_WIDTH_FRAC * 100;
     const maxPosition = 100 - ballWidthPercent;
     // Starts centered in the bar (not the zone specifically, though the
@@ -2286,6 +2294,7 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
     return () => {
       cancelAnimationFrame(rafId);
       window.removeEventListener('keydown', handleKeyDown, { capture: true });
+      whiskAudio.pause();
     };
   }, [whiskStage]);
 

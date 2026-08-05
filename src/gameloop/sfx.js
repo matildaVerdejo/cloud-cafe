@@ -11,6 +11,7 @@ const BUTTON_CLICK_ON_SRC = './ButtonClickOn.mp3';
 const BUTTON_CLICK_OFF_SRC = './ButtonClickOff.mp3';
 const LIQUID_POUR_SRC = './LiquidPour.wav';
 const ICE_CUBE_DROP_SRC = './IceCubeDrop.wav';
+const MATCHA_WHISKING_SRC = './MatchaWhisking.wav';
 
 // Current "Sound" volume (0-1) -- covers every clip played through this
 // module (button clicks, character ordering voice lines, and whatever else
@@ -94,4 +95,20 @@ export function playLiquidPouring() {
 // dropped back over the ice box) -- only on the box -> cup placement itself.
 export function playIceCubeDrop() {
   playClip(ICE_CUBE_DROP_SRC);
+}
+
+// Starts the whisking loop for the whole balance-minigame stretch of Matcha
+// Making (whiskStage === 'mixing') -- unlike every other clip above, this
+// one sets .loop so it keeps going for as long as the caller wants rather
+// than playing out once, since the minigame's own duration
+// (WHISK_MIX_DURATION_MS) isn't guaranteed to line up with the clip's own
+// length. Returns the Audio instance so the caller can .pause() it the
+// moment whisking actually stops -- normal completion or an early unmount --
+// same "caller owns stopping it" contract as playLiquidPouring.
+export function playMatchaWhisking() {
+  const audio = new Audio(MATCHA_WHISKING_SRC);
+  audio.volume = sfxVolume;
+  audio.loop = true;
+  audio.play().catch(() => {});
+  return audio;
 }
