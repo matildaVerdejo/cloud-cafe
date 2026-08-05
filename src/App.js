@@ -100,9 +100,9 @@ function App() {
   // Settings panel's volume control shipped -- turning musicVolume down to
   // 0% covers the same need); this always tries to play.
   // Music volume (0-1), adjustable from the Settings panel's up/down
-  // buttons (VOLUME_STEP, in SettingsPanel.js) -- default matches the value
-  // this used to be hardcoded to directly on the <audio> element.
-  const [musicVolume, setMusicVolume] = useState(0.5);
+  // buttons (VOLUME_STEP, in SettingsPanel.js) -- starts at 30% per
+  // request (soundVolume below keeps its own separate 50% default).
+  const [musicVolume, setMusicVolume] = useState(0.3);
   // Sound volume (0-1) -- covers every one-shot SFX/voice clip played
   // through gameloop/sfx.js (button clicks today; the character ordering
   // voice line; whatever else gets added there later), as a control

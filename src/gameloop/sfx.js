@@ -10,6 +10,7 @@
 const BUTTON_CLICK_ON_SRC = './ButtonClickOn.mp3';
 const BUTTON_CLICK_OFF_SRC = './ButtonClickOff.mp3';
 const LIQUID_POUR_SRC = './LiquidPour.wav';
+const ICE_CUBE_DROP_SRC = './IceCubeDrop.wav';
 
 // Current "Sound" volume (0-1) -- covers every clip played through this
 // module (button clicks, character ordering voice lines, and whatever else
@@ -82,4 +83,15 @@ export function playVoiceLine(src) {
 // letting it play out past the visual.
 export function playLiquidPouring() {
   return playClip(LIQUID_POUR_SRC);
+}
+
+// Plays the instant an ice cube is actually placed into a cup (any of the
+// three cup types) in Milk Selection -- both the drag-and-drop path and its
+// Enter-key equivalent. A short one-shot like the button clicks above (not
+// something that needs cutting short mid-clip the way playLiquidPouring
+// does), so this fires and forgets rather than returning the instance.
+// Deliberately NOT played when a cube is picked back out of the cup (or
+// dropped back over the ice box) -- only on the box -> cup placement itself.
+export function playIceCubeDrop() {
+  playClip(ICE_CUBE_DROP_SRC);
 }

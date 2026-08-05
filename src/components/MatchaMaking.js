@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import './MatchaMaking.css';
 import { useFlatFocusNav } from '../gameloop/useFlatFocusNav';
 import { getActionFromKeyEvent, shouldDebounceEnter } from '../gameloop/pal';
+import { playLiquidPouring } from '../gameloop/sfx';
 import ProgressBar from './ProgressBar';
 import OrderReceiptButton from './OrderReceiptButton';
 import { scoreMatchaMaking } from '../gameloop/scoring';
@@ -1317,6 +1318,12 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
   // MOVABLE_START.kettle and returns straight to 'idle', ready to be picked
   // up again -- unlike the spoon, the kettle isn't a used-up item.
   const [kettleStage, setKettleStage] = useState('idle');
+  // The "liquid pour" Audio instance currently playing for the kettle's
+  // water pour (see playLiquidPouring below) -- held in a ref, same
+  // reasoning/shape as Milk Selection's and Toppings Station's own
+  // pourAudioRef, so it can be cut short the moment KETTLE_POUR_MS ends
+  // rather than playing out past the pour itself.
+  const pourAudioRef = useRef(null);
 
   // The bowl's own persistent "has water been poured in" state -- same
   // "doesn't reset on tin/selection changes" persistence as bowlPowder,
@@ -2056,8 +2063,16 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
       return () => clearTimeout(t);
     }
     if (kettleStage === 'pouring') {
+      // "liquid pour" SFX -- same clip/timing shape as Milk Selection's
+      // base/matcha pours and Toppings Station's syrup pour: fires once
+      // right as the water actually lands, cut short (not left to finish
+      // on its own) the moment KETTLE_POUR_MS elapses below, and also on
+      // cleanup.
+      pourAudioRef.current = playLiquidPouring();
       setBowlWater({});
       const t = setTimeout(() => {
+        pourAudioRef.current?.pause();
+        pourAudioRef.current = null;
         setItemPositions((prev) => ({ ...prev, kettle: MOVABLE_START.kettle }));
         setKettleStage('idle');
         // Sends the halo to the bowl once the water's actually landed --
@@ -2065,7 +2080,11 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
         // regardless of which item was just used to fill it.
         bowlRef.current?.focus();
       }, KETTLE_POUR_MS);
-      return () => clearTimeout(t);
+      return () => {
+        clearTimeout(t);
+        pourAudioRef.current?.pause();
+        pourAudioRef.current = null;
+      };
     }
     return undefined;
   }, [kettleStage]);

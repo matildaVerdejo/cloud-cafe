@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import './MilkSelection.css';
 import { useFlatFocusNav } from '../gameloop/useFlatFocusNav';
 import { getActionFromKeyEvent, shouldDebounceEnter } from '../gameloop/pal';
-import { playLiquidPouring } from '../gameloop/sfx';
+import { playLiquidPouring, playIceCubeDrop } from '../gameloop/sfx';
 import ProgressBar from './ProgressBar';
 import OrderReceiptButton from './OrderReceiptButton';
 import {
@@ -1167,6 +1167,7 @@ const MilkSelection = ({
         return next;
       });
     } else if (isOverCup(iceDrag.left, iceDrag.top, cupSpot, CUP_TYPES[activeCup].tableSpot, CUP_TYPES[activeCup].tableSize)) {
+      playIceCubeDrop();
       setIcePlaced((prev) => {
         const next = [...prev];
         next[iceDrag.index] = true;
@@ -1213,6 +1214,7 @@ const MilkSelection = ({
     }
     if (cupSpot !== 'table') return;
     e.preventDefault();
+    playIceCubeDrop();
     setIcePlaced((prev) => {
       const next = [...prev];
       next[index] = true;
