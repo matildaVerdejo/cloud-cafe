@@ -9,6 +9,7 @@
 
 const BUTTON_CLICK_ON_SRC = './ButtonClickOn.mp3';
 const BUTTON_CLICK_OFF_SRC = './ButtonClickOff.mp3';
+const LIQUID_POUR_SRC = './LiquidPour.wav';
 
 // Current "Sound" volume (0-1) -- covers every clip played through this
 // module (button clicks, character ordering voice lines, and whatever else
@@ -63,4 +64,22 @@ export function playButtonClickOff() {
 // firing-and-forgetting.
 export function playVoiceLine(src) {
   return playClip(src);
+}
+
+// Plays when a liquid actually starts filling the cup/drink -- any base
+// (milk or coconut water) poured in Milk Selection, the matcha bowl poured
+// on top of it there, and any syrup poured onto the drink in the Toppings
+// station. Fired once per pour, right as each screen's own pour effect
+// flips into its 'pouring' stage (the same moment the fill state itself
+// gets set), not on 'moving' or 'idle'. Cold foam and powder toppings
+// intentionally don't use this -- they're not liquids being poured, so
+// they keep using their own visual-only settle/pour animation with no SFX.
+//
+// Returns the Audio instance (same reasoning as playVoiceLine above) so
+// callers can pause it early -- the clip itself runs longer than a single
+// pour's own on-screen duration (BOTTLE_POUR_MS/SYRUP_POUR_MS), so each
+// caller stops it the moment its own pour's timeout fires rather than
+// letting it play out past the visual.
+export function playLiquidPouring() {
+  return playClip(LIQUID_POUR_SRC);
 }

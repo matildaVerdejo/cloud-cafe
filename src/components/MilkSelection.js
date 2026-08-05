@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import './MilkSelection.css';
 import { useFlatFocusNav } from '../gameloop/useFlatFocusNav';
 import { getActionFromKeyEvent, shouldDebounceEnter } from '../gameloop/pal';
+import { playLiquidPouring } from '../gameloop/sfx';
 import ProgressBar from './ProgressBar';
 import OrderReceiptButton from './OrderReceiptButton';
 import {
@@ -1259,6 +1260,12 @@ const MilkSelection = ({
   // carried-over matcha), alongside the shared pourStage above.
   const [pourStage, setPourStage] = useState('idle');
   const [pouringKey, setPouringKey] = useState(null); // 'oat' | 'dairy' | 'almond' | 'coconut' | 'bowl' | null
+  // The "liquid pour" Audio instance currently playing for this pour (see
+  // playLiquidPouring below) -- held in a ref (not state, nothing here
+  // needs to re-render off it) purely so it can be paused/cut short the
+  // moment the pour's own BOTTLE_POUR_MS timeout ends, since the clip
+  // itself runs longer than a single pour's on-screen duration.
+  const pourAudioRef = useRef(null);
 
   // The bowl grows to its true, full MatchaMaking size (incomingBowlFull
   // Width/Height) the moment it's actually being handled -- either mid
@@ -1401,12 +1408,22 @@ const MilkSelection = ({
       return () => clearTimeout(t);
     }
     if (pourStage === 'pouring') {
+      // "liquid pour" SFX -- fires once right as the fill actually
+      // lands, covering both this same branch's cases: the matcha bowl
+      // (pouringKey === 'bowl') and any milk/water base bottle (oat,
+      // dairy, almond, coconut water, ...) poured into the cup below. Cut
+      // short (not left to finish on its own) the moment BOTTLE_POUR_MS
+      // elapses below, and also on cleanup (e.g. unmounting mid-pour), so
+      // it never keeps playing past the pour itself.
+      pourAudioRef.current = playLiquidPouring();
       if (pouringKey === 'bowl') {
         setCupMatcha({ grade: incomingBowl?.grade ?? 'classic-grade' });
       } else {
         setCupMilk({ type: pouringKey });
       }
       const t = setTimeout(() => {
+        pourAudioRef.current?.pause();
+        pourAudioRef.current = null;
         if (pouringKey === 'bowl') {
           setBowlPos(INCOMING_BOWL_SPOT);
         } else {
@@ -1415,7 +1432,11 @@ const MilkSelection = ({
         setPourStage('idle');
         setPouringKey(null);
       }, BOTTLE_POUR_MS);
-      return () => clearTimeout(t);
+      return () => {
+        clearTimeout(t);
+        pourAudioRef.current?.pause();
+        pourAudioRef.current = null;
+      };
     }
     return undefined;
   }, [pourStage, pouringKey, incomingBowl, INCOMING_BOWL_SPOT, bottleHome]);

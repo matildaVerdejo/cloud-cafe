@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import './ToppingsStation.css';
 import { useFlatFocusNav } from '../gameloop/useFlatFocusNav';
 import { getActionFromKeyEvent, shouldDebounceEnter } from '../gameloop/pal';
+import { playLiquidPouring } from '../gameloop/sfx';
 import ProgressBar from './ProgressBar';
 import OrderReceiptButton from './OrderReceiptButton';
 import { getMilkBoxFor, getMatchaBoxFor, TABLE_SIZE, CUP_TYPES, getIceCupSlotPos, ICE_CUP_SIZE } from './MilkSelection';
@@ -1129,6 +1130,11 @@ const ToppingsStation = ({
   //                 same reusable-not-one-time-use item as the milk bottles.
   const [pourStage, setPourStage] = useState('idle');
   const [pouringKey, setPouringKey] = useState(null); // 'guava-syrup' | 'mint-syrup' | 'honey-syrup' | null
+  // The "liquid pour" Audio instance currently playing for this syrup pour
+  // (see playLiquidPouring below) -- held in a ref, same reasoning as Milk
+  // Selection's own pourAudioRef, purely so it can be cut short the moment
+  // SYRUP_POUR_MS ends rather than playing out past the pour itself.
+  const pourAudioRef = useRef(null);
   // Horizontal nudge (see SYRUP_MOVE_STEP/SYRUP_MOVE_RANGE above), reset to
   // 0 at the start of every pour. Purely cosmetic -- see the big comment on
   // getSyrupBoxFor above for why it doesn't move where the syrup actually
@@ -1272,15 +1278,29 @@ const ToppingsStation = ({
       return () => clearTimeout(t);
     }
     if (pourStage === 'pouring') {
+      // "liquid pour" SFX -- syrup is the one topping pair here that's an
+      // actual poured liquid (unlike the cold-foam/powder pairs below,
+      // which intentionally don't play this), so it fires once right as
+      // the fill lands, same "on the 'pouring' transition, not 'moving'"
+      // timing Milk Selection's own base/matcha pours use -- and, same as
+      // there, gets cut short (not left to finish on its own) the moment
+      // SYRUP_POUR_MS elapses below, and also on cleanup.
+      pourAudioRef.current = playLiquidPouring();
       setCupSyrup({ key: pouringKey });
       const t = setTimeout(() => {
+        pourAudioRef.current?.pause();
+        pourAudioRef.current = null;
         const home = toppingItems.find((i) => i.key === pouringKey);
         setSyrupPositions((prev) => ({ ...prev, [pouringKey]: { left: home.left, top: home.top } }));
         setPourStage('idle');
         setPouringKey(null);
         setPourOffset(0);
       }, SYRUP_POUR_MS);
-      return () => clearTimeout(t);
+      return () => {
+        clearTimeout(t);
+        pourAudioRef.current?.pause();
+        pourAudioRef.current = null;
+      };
     }
     return undefined;
   }, [pourStage, pouringKey, toppingItems]);
