@@ -96,23 +96,36 @@ const TOPPING_SPEECH_NAMES = {
   'banana-foam': 'banana foam',
 };
 
-// ---- Per-character ordering voice line -----------------------------------
-// One short voice-over clip per customer character, keyed by character id
-// -- tied to WHO is at the counter, not to what they happen to order (the
-// spoken order text itself is randomized separately by generateSpokenOrder
-// above). Annie the bunny is the only character today; adding a new
-// character later means adding another entry here (and setting
-// CUSTOMER_CHARACTER appropriately for that round) rather than touching the
-// playback logic below at all.
-const CHARACTER_ORDERING_AUDIO = {
-  annie: './AnnieOrdering.wav',
+// ---- Which character is at the counter -----------------------------------
+// Three interchangeable customer characters -- Annie (the bunny, the
+// original/only one before this), Otto (the frog), and Katie (the cat) --
+// one is picked at random each time a new order starts (see CUSTOMER_
+// CHARACTER's own lazy useState initializer in the component below, same
+// "rolled once per mount, not re-rolled on every render" pattern
+// generateSpokenOrder's own spokenOrder already uses, since this whole
+// component unmounts/remounts between customers). All three share the same
+// bust framing/crop (Annie.png/Otto.png/Katie.png, each 398x506 -- cropped
+// from a shared 455x548 source canvas down to the union of all three
+// characters' own bounding boxes, so they render at identical scale/
+// position in .ordering-bunny below regardless of which one gets picked)
+// rather than each needing its own tuned box.
+const CUSTOMER_CHARACTERS = {
+  annie: { src: './Annie.png', alt: 'Annie the bunny, a customer at the counter' },
+  otto: { src: './Otto.png', alt: 'Otto the frog, a customer at the counter' },
+  katie: { src: './Katie.png', alt: 'Katie the cat, a customer at the counter' },
 };
 
-// Which character is at the counter this round. Hardcoded to 'annie' since
-// she's the only customer character that exists yet -- once more characters
-// are added, this should be derived per-customer (e.g. from customerNumber
-// or a prop) instead of a fixed constant.
-const CUSTOMER_CHARACTER = 'annie';
+// One short voice-over clip per customer character, keyed by character id --
+// tied to WHO is at the counter, not to what they happen to order (the
+// spoken order text itself is randomized separately by generateSpokenOrder
+// above). Otto is the only one without a recorded line so far -- he simply
+// has no entry yet, and the playback effect below already treats a missing
+// entry as "no line to play" rather than erroring -- adding one later is
+// just adding another key here, no other change needed.
+const CHARACTER_ORDERING_AUDIO = {
+  annie: './AnnieOrdering.wav',
+  katie: './KatieOrdering.wav',
+};
 
 function pickRandom(list) {
   return list[Math.floor(Math.random() * list.length)];
@@ -564,6 +577,12 @@ const CustomerOrdering = ({ activeStep, customerNumber, onNavigate, onAdvance, o
   const speechSegments = buildSpeechSegments(spokenOrder, baseOptions);
   const speechText = flattenSegments(speechSegments);
 
+  // Which of the three customer characters (CUSTOMER_CHARACTERS above) is at
+  // the counter this round -- rolled once per mount via the lazy
+  // initializer, same "once per customer, not re-rolled on every re-render"
+  // reasoning as spokenOrder just above.
+  const [customerCharacter] = useState(() => pickRandom(Object.keys(CUSTOMER_CHARACTERS)));
+
   // Typewriter effect -- same one the very first version of this screen's
   // speech bubble had (reveal one more character every TYPE_INTERVAL_MS, so
   // the bubble looks like the customer is actually talking) before this
@@ -590,25 +609,27 @@ const CustomerOrdering = ({ activeStep, customerNumber, onNavigate, onAdvance, o
 
   // Character voice line -- plays once, right as the speech bubble starts
   // typing (this effect and the typewriter one above both fire on mount,
-  // i.e. once per customer/remount, for the same reason). Keyed off the
-  // character (CUSTOMER_CHARACTER/CHARACTER_ORDERING_AUDIO above), not the
-  // rolled spokenOrder text, so this stays "Annie's ordering line" no
-  // matter what she orders -- and so later customer characters just need
-  // their own entry in that map, not a change here. Routed through
-  // sfx.js's playVoiceLine (a one-shot clip, same "not App.js's looping
-  // <audio ref> element" distinction as before) so it's controlled by the
-  // Settings panel's "Sound" slider rather than always playing at full
-  // volume. Autoplay can still be blocked the same way background music's
-  // can be (see App.js's own tryPlay/catch) if this is somehow the very
-  // first sound of the session with no prior user gesture; unlike
-  // background music there's no first-gesture retry for a one-shot line
-  // like this, it just silently doesn't play that round.
+  // i.e. once per customer/remount, for the same reason). Keyed off
+  // whichever character customerCharacter rolled above (not the rolled
+  // spokenOrder text), so this stays "that character's own ordering line"
+  // no matter what they order. Only Annie has a recorded line so far --
+  // CHARACTER_ORDERING_AUDIO simply has no entry for Otto/Katie yet, and
+  // that's exactly what the src/!src check below is for, so this silently
+  // skips playing anything on the rounds they're picked instead of erroring.
+  // Routed through sfx.js's playVoiceLine (a one-shot clip, same "not
+  // App.js's looping <audio ref> element" distinction as before) so it's
+  // controlled by the Settings panel's "Sound" slider rather than always
+  // playing at full volume. Autoplay can still be blocked the same way
+  // background music's can be (see App.js's own tryPlay/catch) if this is
+  // somehow the very first sound of the session with no prior user gesture;
+  // unlike background music there's no first-gesture retry for a one-shot
+  // line like this, it just silently doesn't play that round.
   useEffect(() => {
-    const src = CHARACTER_ORDERING_AUDIO[CUSTOMER_CHARACTER];
+    const src = CHARACTER_ORDERING_AUDIO[customerCharacter];
     if (!src) return undefined;
     const audio = playVoiceLine(src);
     return () => audio.pause();
-  }, []);
+  }, [customerCharacter]);
 
   // ---- Order-builder state -----------------------------------------------
   // Four sections (matcha, cup & ice, base, toppings) -- now shown inside a
@@ -759,14 +780,21 @@ const CustomerOrdering = ({ activeStep, customerNumber, onNavigate, onAdvance, o
           alt="The take-order counter, with an ordering computer terminal"
           className="ordering-art"
         />
-        {/* The customer (bunny) character, composited on top of the
-            background rather than baked into it -- same "cut character out
-            of the background so it can eventually be swapped per customer"
+        {/* The customer character, composited on top of the background
+            rather than baked into it -- same "cut character out of the
+            background so it can eventually be swapped per customer"
             approach the matcha/toppings stations use for their own props.
-            Swapped to a new BunnyOrder.png asset (was BunnyOrdering.png)
-            and moved back to roughly centered/counter-height -- see
-            .ordering-bunny in CustomerOrdering.css. */}
-        <img src="./BunnyOrder.png" alt="A bunny customer at the counter" className="ordering-bunny" />
+            Now actually swapped per customer -- randomly one of Annie/Otto/
+            Katie (see customerCharacter/CUSTOMER_CHARACTERS above) instead
+            of always Annie's own BunnyOrder.png -- see .ordering-bunny in
+            CustomerOrdering.css (class name kept as-is even though it's not
+            always the bunny anymore, to avoid churning that stylesheet's
+            own selector for a purely cosmetic rename). */}
+        <img
+          src={CUSTOMER_CHARACTERS[customerCharacter].src}
+          alt={CUSTOMER_CHARACTERS[customerCharacter].alt}
+          className="ordering-bunny"
+        />
 
         {/* Speech bubble, sitting above the bunny's head -- now carries the
             customer's actual (randomized, see generateSpokenOrder/
