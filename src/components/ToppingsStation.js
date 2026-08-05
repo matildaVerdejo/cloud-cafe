@@ -1652,12 +1652,18 @@ const ToppingsStation = ({
     // Snapshotted right away (same "fired at the moment the item starts its
     // carry, not deferred until the fade finishes" reasoning as
     // MatchaMaking's beginBowlCarry/Milk Selection's beginSendDrink) --
-    // milk/matcha come straight from incomingDrink (this screen never
-    // changes those), foam/syrup/powder/leaf are this screen's own
+    // milk/matcha/iceCubes come straight from incomingDrink (this screen
+    // never changes those), foam/syrup/powder/leaf are this screen's own
     // cupFoam/cupSyrup/cupPowder/cupMintLeaf state.
     onSendToFinal?.({
       milk: incomingDrink.milk,
       matcha: incomingDrink.matcha,
+      // Forwarded straight through, same "don't silently drop it" fix as
+      // this screen's own incomingDrink.iceCubes handling above (see the
+      // big comment on the ice-cube render block further down) -- without
+      // this, the cubes that made it this far were rendering fine here but
+      // getting lost the instant the drink moved on to Serving.
+      iceCubes: incomingDrink.iceCubes ?? 0,
       foam: cupFoam,
       syrup: cupSyrup,
       powder: cupPowder,

@@ -667,7 +667,16 @@ const MilkSelection = ({
       const iceCubes = containerRef.current
         ? Array.from(containerRef.current.querySelectorAll('.ice-cube'))
         : [];
-      const firstIceCube = iceCubes[0] ?? null;
+      // First cube that ISN'T already placed in the cup -- placed cubes are
+      // fully inert now (see the big comment on the ice-cube JSX further
+      // down) and can no longer take focus at all, so "Left from the bowl"
+      // has to skip over them to land on an actual selectable cube. If
+      // every cube's already placed, this is null and the .focus() call
+      // below is a no-op -- same "nothing left to land on, so the press
+      // just does nothing" trap-at-the-end shape used elsewhere in this
+      // graph, rather than incorrectly focusing (and highlighting) a
+      // placed one.
+      const firstIceCube = iceCubes.find((el, i) => !icePlacedRef.current[i]) ?? null;
       const gearButton = document.querySelector('.settings-toggle-button');
       // All three shelf cups (glass, plastic, mug) share the .glass-cup
       // class (see their shared JSX below) -- glass is always first in DOM
@@ -1124,6 +1133,16 @@ const MilkSelection = ({
   // ---- Ice cubes: ice box -> cup ----------------------------------------
   // Whether each of the 7 cubes has been placed in the cup yet.
   const [icePlaced, setIcePlaced] = useState(new Array(ICE_BOX_SPOTS.length).fill(false));
+  // Mirrors icePlaced into a ref, same "stale closure" reasoning as
+  // cupSpotRef above -- the big keyboard-nav effect near the top of this
+  // component (registered with an empty dependency array so it never
+  // re-subscribes) needs to always read the *current* icePlaced when it
+  // picks which ice cube "Left" from the bowl lands on, not whatever it
+  // was on that first render (all false).
+  const icePlacedRef = useRef(icePlaced);
+  useEffect(() => {
+    icePlacedRef.current = icePlaced;
+  }, [icePlaced]);
   // Which cube (if any) is being dragged right now, and its live position.
   const [iceDrag, setIceDrag] = useState(null); // { index, left, top } | null
   const iceDragStartRef = useRef({ pointerX: 0, pointerY: 0, left: 0, top: 0 });
@@ -1161,8 +1180,10 @@ const MilkSelection = ({
     if (!iceDrag) return;
     e.currentTarget.releasePointerCapture?.(e.pointerId);
     if (isOverIceBox(iceDrag.left, iceDrag.top)) {
-      // Dropped back over the ice box -- unplace it, whether it was placed
-      // before or not.
+      // Dropped back over the ice box -- this only ever fires for a cube
+      // that was already unplaced to begin with (a placed cube no longer
+      // gets onPointerDown at all -- see the JSX below), so this is just a
+      // harmless no-op snap-back in practice, kept for safety.
       setIcePlaced((prev) => {
         const next = [...prev];
         next[iceDrag.index] = false;
@@ -1177,11 +1198,12 @@ const MilkSelection = ({
       });
       // Same focus handoff as the keyboard path in handleIceKeyDown below
       // -- dragging normally focuses the cube via its own pointerdown, and
-      // this cube's about to lose tabIndex/data-focusable the instant it's
-      // marked placed, so without moving focus off it here first,
-      // document.activeElement would be left pointing at a now-unfocusable
-      // node, which useFlatFocusNav treats as "focus belongs to something
-      // else" and stops responding to arrow keys entirely.
+      // this cube's about to lose tabIndex/data-focusable/its pointer
+      // handlers entirely the instant it's marked placed, so without
+      // moving focus off it here first, document.activeElement would be
+      // left pointing at a now-inert node, which useFlatFocusNav treats as
+      // "focus belongs to something else" and stops responding to arrow
+      // keys entirely.
       if (document.activeElement?.classList.contains('ice-cube')) {
         const cubes = containerRef.current
           ? Array.from(containerRef.current.querySelectorAll('.ice-cube'))
@@ -1197,24 +1219,17 @@ const MilkSelection = ({
   };
 
   // D-pad / keyboard equivalent of dragging a cube: select it, press Enter
-  // to toggle it between the ice box and the cup. Placing (box -> cup) only
-  // works once the cup is actually on the table, same precondition as the
-  // drag-and-drop path; taking it back out (cup -> box) has no
-  // precondition.
+  // to place it in the cup. Only works once the cup is actually on the
+  // table, same precondition as the drag-and-drop path. Once a cube's
+  // actually placed, this (and the pointer handlers -- see the JSX below)
+  // no longer gets attached to it at all -- a placed cube can no longer be
+  // reselected or taken back out, since letting it stay grabbable was
+  // stealing the focus landing spot from the rest of this screen's own
+  // navigation.
   const handleIceKeyDown = (index) => (e) => {
     const action = getActionFromKeyEvent(e);
     if (action !== 'Enter') return;
     if (shouldDebounceEnter(e)) return;
-    if (icePlaced[index]) {
-      e.preventDefault();
-      playButtonClick();
-      setIcePlaced((prev) => {
-        const next = [...prev];
-        next[index] = false;
-        return next;
-      });
-      return;
-    }
     if (cupSpot !== 'table') return;
     e.preventDefault();
     playButtonClick();
@@ -1317,11 +1332,12 @@ const MilkSelection = ({
   const [cupMatcha, setCupMatcha] = useState(null);
 
   // Preconditions for starting a milk/water pour: cup has to actually be on
-  // the table (nothing to pour into otherwise), at least one ice cube
-  // already has to be in it, nothing else can already be mid-pour, and the
-  // drink can't already be on its way out.
-  const canPourMilk =
-    cupSpot === 'table' && icePlaced.some(Boolean) && pourStage === 'idle' && cupSendStage === 'idle';
+  // the table (nothing to pour into otherwise), nothing else can already be
+  // mid-pour, and the drink can't already be on its way out. Deliberately
+  // NOT gated on any ice actually being in the cup -- some orders call for
+  // no ice at all, and requiring at least one cube first made those
+  // impossible to make correctly.
+  const canPourMilk = cupSpot === 'table' && pourStage === 'idle' && cupSendStage === 'idle';
   // Matcha only pours once there's actually a base to pour it onto -- same
   // "pour the topping after the base" ordering the user asked for -- plus
   // the usual cup-on-table/nothing-else-mid-pour preconditions, an actual
@@ -1818,21 +1834,32 @@ const MilkSelection = ({
             <img
               key={index}
               src="./IceCube.png"
-              alt={placed ? 'Ice cube in the cup. Drag it back to the ice box, or select it and press Enter.' : 'Ice cube. Drag it into the cup, or select it and press Enter.'}
+              alt={placed ? '' : 'Ice cube. Drag it into the cup, or select it and press Enter.'}
+              aria-hidden={placed || undefined}
               className={`ice-cube${dragging ? ' dragging' : ''}${placed ? ' placed' : ''}${
                 leaving ? ' bowl-vanishing' : ''
               }`}
-              // Once a cube's placed in the cup, it drops out of keyboard
-              // nav entirely -- both useFlatFocusNav's generic spatial
-              // fallback (which only ever looks at [data-focusable]
-              // elements) and native Tab order skip it, since it sits right
-              // on top of/next to the cup and kept "stealing" the landing
-              // spot on presses that weren't explicitly wired elsewhere.
-              // Mouse/pointer drag (to pull it back out of the cup) is
-              // untouched -- that's plain pointer events, not tabIndex-
-              // gated. Cubes still in the ice box are unaffected either way.
-              {...(placed ? {} : { 'data-focusable': true })}
-              tabIndex={placed ? -1 : 0}
+              // Once a cube's placed in the cup, it becomes fully inert to
+              // the player and can never be focused at all -- no tabIndex
+              // (so it's outside native Tab order AND can't be
+              // programmatically .focus()'d -- an <img> with no tabIndex
+              // isn't a focusable element, period), no data-focusable (so
+              // useFlatFocusNav's generic spatial fallback skips it too), no
+              // pointer/drag handlers, and pointer-events: none in the CSS
+              // (.ice-cube.placed) so it can't even be clicked. It used to
+              // stay grabbable so it could be dragged back out, but that sat
+              // right on top of/next to the cup and kept "stealing" the
+              // landing spot/focus highlight on presses that weren't
+              // explicitly wired elsewhere -- per request, a placed cube's
+              // ice decision is now final and it's a plain decorative image
+              // from that point on. The one spot that used to rely on being
+              // able to focus the front-of-the-pile cube programmatically
+              // (firstIceCube, in the Bowl's own Left handler above) now
+              // skips placed cubes and looks for the first still-unplaced
+              // one instead, so nothing in this file needs to focus a
+              // placed cube anymore. Cubes still in the ice box are
+              // unaffected either way.
+              {...(placed ? {} : { 'data-focusable': true, tabIndex: 0 })}
               draggable={false}
               style={{
                 left: `${pos.left}%`,
@@ -1840,10 +1867,14 @@ const MilkSelection = ({
                 width: `${size.width}%`,
                 height: `${size.height}%`,
               }}
-              onPointerDown={handleIcePointerDown(index)}
-              onPointerMove={handleIcePointerMove}
-              onPointerUp={handleIcePointerUp}
-              onKeyDown={handleIceKeyDown(index)}
+              {...(placed
+                ? {}
+                : {
+                    onPointerDown: handleIcePointerDown(index),
+                    onPointerMove: handleIcePointerMove,
+                    onPointerUp: handleIcePointerUp,
+                    onKeyDown: handleIceKeyDown(index),
+                  })}
             />
           );
         })}

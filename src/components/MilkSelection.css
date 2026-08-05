@@ -133,8 +133,8 @@
    for each cube's exact spot). Each can be dragged onto the cup (only
    registers once the cup is on the table) or, once selected via D-pad,
    placed with Enter. Once placed it shrinks down and sits near the cup's
-   rim -- it stays interactive (see .ice-cube.placed below) so it can be
-   dragged back out to the ice box the same way. */
+   rim and goes fully inert (see .ice-cube.placed below) -- that ice
+   decision is final, it can no longer be reselected or dragged back out. */
 .ice-cube {
   position: absolute;
   cursor: grab;
@@ -156,7 +156,15 @@
 }
 
 .ice-cube.placed {
-  cursor: grab;
+  cursor: default;
+  /* Fully inert once placed -- see the big comment above and the matching
+     one in MilkSelection.js's own ice-cube JSX for why (no longer
+     reselectable/draggable). Belt-and-suspenders alongside that JSX no
+     longer attaching any pointer handlers to a placed cube at all -- this
+     is what stops it from even being *clickable* (and therefore
+     focusable, since a click still focuses a tabIndex="-1" element in most
+     browsers) in the first place. */
+  pointer-events: none;
 }
 
 /* Same shape-hugging focus glow as .glass-cup, tuned a little tighter/
