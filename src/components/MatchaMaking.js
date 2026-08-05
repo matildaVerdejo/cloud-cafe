@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import './MatchaMaking.css';
 import { useFlatFocusNav } from '../gameloop/useFlatFocusNav';
 import { getActionFromKeyEvent, shouldDebounceEnter } from '../gameloop/pal';
-import { playLiquidPouring, playMatchaWhisking } from '../gameloop/sfx';
+import { playButtonClick, playLiquidPouring, playMatchaWhisking, playMatchaPowderPour } from '../gameloop/sfx';
 import ProgressBar from './ProgressBar';
 import OrderReceiptButton from './OrderReceiptButton';
 import { scoreMatchaMaking } from '../gameloop/scoring';
@@ -1533,6 +1533,7 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
     if (!tempConfirmed || kettleStage !== 'idle') return;
     if (shouldDebounceEnter(e)) return;
     e.preventDefault();
+    playButtonClick();
     beginKettleDump();
   };
 
@@ -1545,6 +1546,7 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
     if (!bowlPowder || !bowlWater || whiskStage !== 'idle') return;
     if (shouldDebounceEnter(e)) return;
     e.preventDefault();
+    playButtonClick();
     beginWhiskMix();
   };
 
@@ -1634,6 +1636,7 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
     if (whiskStage !== 'done' || bowlStage !== 'idle') return;
     if (shouldDebounceEnter(e)) return;
     e.preventDefault();
+    playButtonClick();
     beginBowlCarry();
   };
 
@@ -1671,6 +1674,7 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
     if (action !== 'Enter') return;
     if (shouldDebounceEnter(e)) return;
     e.preventDefault();
+    playButtonClick();
     setSelectedTin((prev) => (prev === item.key ? null : item.key));
   };
 
@@ -1722,6 +1726,11 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
   //                (unmounted -- see the JSX below) for the rest of this
   //                tin selection.
   const [bigSpoonStage, setBigSpoonStage] = useState('idle');
+  // The "matcha powder pour" Audio instance currently playing for the
+  // spoon's dump (see playMatchaPowderPour below) -- held in a ref, same
+  // reasoning/shape as pourAudioRef above, so it can be cut short the
+  // moment BIG_SPOON_POUR_MS ends rather than playing out past the pour.
+  const spoonPourAudioRef = useRef(null);
 
   // Seventh highlight beat: picks up the instant the spoon itself appears
   // (scoopConfirmed flipping true is exactly what mounts it -- see the JSX
@@ -1881,14 +1890,28 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
       return () => clearTimeout(t);
     }
     if (bigSpoonStage === 'pouring') {
+      // "matcha powder pour" SFX -- fires once right as the powder
+      // actually lands, same "on the 'pouring' transition, not 'moving'"
+      // timing every other pour SFX here uses. Cut short (not left to
+      // finish on its own) the moment BIG_SPOON_POUR_MS elapses below, and
+      // also on cleanup (e.g. unmounting mid-pour).
+      spoonPourAudioRef.current = playMatchaPowderPour();
       // grade (selectedTin at the moment of the dump) is what
       // WHISKED_LIQUID_IMAGES gets keyed off of once whiskStage reaches
       // 'done' -- captured here rather than read live off selectedTin later,
       // since selectedTin could in principle change/reset well before the
       // whisking minigame actually finishes.
       setBowlPowder({ color: scoopColor, grade: selectedTin });
-      const t = setTimeout(() => setBigSpoonStage('done'), BIG_SPOON_POUR_MS);
-      return () => clearTimeout(t);
+      const t = setTimeout(() => {
+        spoonPourAudioRef.current?.pause();
+        spoonPourAudioRef.current = null;
+        setBigSpoonStage('done');
+      }, BIG_SPOON_POUR_MS);
+      return () => {
+        clearTimeout(t);
+        spoonPourAudioRef.current?.pause();
+        spoonPourAudioRef.current = null;
+      };
     }
     return undefined;
   }, [bigSpoonStage, scoopColor, selectedTin]);
@@ -1966,6 +1989,7 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
     if (action !== 'Enter') return;
     if (shouldDebounceEnter(e)) return;
     e.preventDefault();
+    playButtonClick();
     beginDump();
   };
 
@@ -2346,7 +2370,10 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
           data-focusable
           aria-pressed={heaterOn}
           aria-label={heaterOn ? 'Turn heater off' : 'Turn heater on'}
-          onClick={() => setHeaterOn((prev) => !prev)}
+          onClick={() => {
+            playButtonClick();
+            setHeaterOn((prev) => !prev);
+          }}
           style={{
             left: `${HEATER_BUTTON_BOX.left}%`,
             top: `${HEATER_BUTTON_BOX.top}%`,

@@ -1,6 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import './ProgressBar.css';
 import { getActionFromKeyEvent } from '../gameloop/pal';
+import { playButtonClick } from '../gameloop/sfx';
 
 // Single source of truth for step order/labels -- App.js imports this same
 // list (as STEP_KEYS) for its own navigation logic, so the bar and the
@@ -86,7 +87,10 @@ const ProgressBar = ({
       e.preventDefault();
       e.stopImmediatePropagation();
       if (action === 'Right') {
-        if (!disableAdvance) onAdvance();
+        if (!disableAdvance) {
+          playButtonClick();
+          onAdvance();
+        }
       } else if (activeIndex > 0) {
         onNavigate(PROGRESS_STEPS[activeIndex - 1].key);
       }
@@ -144,7 +148,10 @@ const ProgressBar = ({
                 aria-current={isCurrent ? 'step' : undefined}
                 onClick={() => {
                   if (isCurrent) {
-                    if (!disableAdvance) onAdvance();
+                    if (!disableAdvance) {
+                      playButtonClick();
+                      onAdvance();
+                    }
                   } else {
                     onNavigate(step.key);
                   }

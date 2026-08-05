@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import './ToppingsStation.css';
 import { useFlatFocusNav } from '../gameloop/useFlatFocusNav';
 import { getActionFromKeyEvent, shouldDebounceEnter } from '../gameloop/pal';
-import { playLiquidPouring } from '../gameloop/sfx';
+import { playButtonClick, playLiquidPouring } from '../gameloop/sfx';
 import ProgressBar from './ProgressBar';
 import OrderReceiptButton from './OrderReceiptButton';
 import { getMilkBoxFor, getMatchaBoxFor, TABLE_SIZE, CUP_TYPES, getIceCupSlotPos, ICE_CUP_SIZE } from './MilkSelection';
@@ -1384,6 +1384,7 @@ const ToppingsStation = ({
     if (action !== 'Enter') return;
     if (shouldDebounceEnter(e)) return;
     e.preventDefault();
+    playButtonClick();
     if (canPourSyrup) {
       beginSyrupPour(item.key);
       return;
@@ -1493,6 +1494,7 @@ const ToppingsStation = ({
     if (action !== 'Enter') return;
     if (shouldDebounceEnter(e)) return;
     e.preventDefault();
+    playButtonClick();
     if (canPourFoam) {
       beginFoamPour(item.key);
       return;
@@ -1603,6 +1605,7 @@ const ToppingsStation = ({
     if (action !== 'Enter') return;
     if (shouldDebounceEnter(e)) return;
     e.preventDefault();
+    playButtonClick();
     if (canPourPowder) {
       beginPowderPour(item.key);
       return;
@@ -1634,6 +1637,7 @@ const ToppingsStation = ({
     if (action !== 'Enter') return;
     if (shouldDebounceEnter(e)) return;
     e.preventDefault();
+    playButtonClick();
     beginLeafPlace();
   };
 
@@ -1741,6 +1745,7 @@ const ToppingsStation = ({
     if (shouldDebounceEnter(e)) return;
     e.preventDefault();
     if (canSendToFinal) {
+      playButtonClick();
       beginSendToFinal();
     }
   };

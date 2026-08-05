@@ -1,6 +1,7 @@
 import React, { useRef } from 'react';
 import './FinalCombination.css';
 import { useFlatFocusNav } from '../gameloop/useFlatFocusNav';
+import { playButtonClick } from '../gameloop/sfx';
 import ProgressBar from './ProgressBar';
 import ScoreCard from './ScoreCard';
 import { getMilkBoxFor, getMatchaBoxFor, CUP_TYPES } from './MilkSelection';
@@ -308,7 +309,10 @@ const FinalCombination = ({
             className="start-next-order-button"
             data-focusable
             tabIndex={0}
-            onClick={onAdvance}
+            onClick={() => {
+              playButtonClick();
+              onAdvance();
+            }}
           >
             Start order {customerNumber + 1}
           </button>

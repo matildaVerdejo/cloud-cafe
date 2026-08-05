@@ -12,6 +12,7 @@ const BUTTON_CLICK_OFF_SRC = './ButtonClickOff.mp3';
 const LIQUID_POUR_SRC = './LiquidPour.wav';
 const ICE_CUBE_DROP_SRC = './IceCubeDrop.wav';
 const MATCHA_WHISKING_SRC = './MatchaWhisking.wav';
+const MATCHA_POWDER_POUR_SRC = './MatchaPowderPour.wav';
 
 // Current "Sound" volume (0-1) -- covers every clip played through this
 // module (button clicks, character ordering voice lines, and whatever else
@@ -111,4 +112,17 @@ export function playMatchaWhisking() {
   audio.loop = true;
   audio.play().catch(() => {});
   return audio;
+}
+
+// Plays when the big spoon actually dumps its scoop of matcha powder into
+// the bowl in Matcha Making -- fires once right as bigSpoonStage flips into
+// its 'pouring' stage (the same moment the falling-powder .spoon-pour effect
+// and the bowl's own mound both start), same "on the 'pouring' transition,
+// not 'moving'" timing every other pour SFX in this module uses.
+//
+// Returns the Audio instance (same reasoning as playLiquidPouring) so the
+// caller can cut it short the moment BIG_SPOON_POUR_MS elapses, since the
+// clip isn't guaranteed to match that duration exactly.
+export function playMatchaPowderPour() {
+  return playClip(MATCHA_POWDER_POUR_SRC);
 }

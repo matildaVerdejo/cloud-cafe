@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import './MilkSelection.css';
 import { useFlatFocusNav } from '../gameloop/useFlatFocusNav';
 import { getActionFromKeyEvent, shouldDebounceEnter } from '../gameloop/pal';
-import { playLiquidPouring, playIceCubeDrop } from '../gameloop/sfx';
+import { playButtonClick, playLiquidPouring, playIceCubeDrop } from '../gameloop/sfx';
 import ProgressBar from './ProgressBar';
 import OrderReceiptButton from './OrderReceiptButton';
 import {
@@ -1037,6 +1037,7 @@ const MilkSelection = ({
     if (action !== 'Enter') return;
     if (shouldDebounceEnter(e)) return;
     e.preventDefault();
+    playButtonClick();
     // Once the cup qualifies to be sent on (canSendDrink), Enter sends it
     // instead of toggling shelf <-> table -- same "the meaningful action
     // takes over from the mundane default" reasoning as the milk bottles'
@@ -1094,6 +1095,7 @@ const MilkSelection = ({
     if (shouldDebounceEnter(e)) return;
     if (cupSendStage !== 'idle') return;
     e.preventDefault();
+    playButtonClick();
     resetCupContents();
     setActiveCup(type);
     setCupSpot('table');
@@ -1205,6 +1207,7 @@ const MilkSelection = ({
     if (shouldDebounceEnter(e)) return;
     if (icePlaced[index]) {
       e.preventDefault();
+      playButtonClick();
       setIcePlaced((prev) => {
         const next = [...prev];
         next[index] = false;
@@ -1214,6 +1217,7 @@ const MilkSelection = ({
     }
     if (cupSpot !== 'table') return;
     e.preventDefault();
+    playButtonClick();
     playIceCubeDrop();
     setIcePlaced((prev) => {
       const next = [...prev];
@@ -1573,6 +1577,7 @@ const MilkSelection = ({
     if (action !== 'Enter') return;
     if (shouldDebounceEnter(e)) return;
     e.preventDefault();
+    playButtonClick();
     if (canPourMilk) {
       beginPour(item.key);
       return;
@@ -1626,6 +1631,7 @@ const MilkSelection = ({
     if (shouldDebounceEnter(e)) return;
     if (!canPourMatcha) return;
     e.preventDefault();
+    playButtonClick();
     beginPour('bowl');
   };
 
