@@ -379,27 +379,66 @@ function App() {
     setCurrentPage('ordering');
   };
 
+  // Per request: the next station is locked until the current one's own
+  // task is actually done, not just "the player pressed the advance
+  // gesture" -- each case below is the same carried-over-item state
+  // App.js already tracks for that station's own screen (see each one's
+  // own useState comment above): CustomerOrdering's "Place Order" button
+  // (currentOrder), then each later station's own "carry the bowl/cup to
+  // the lower-right corner" drop-zone (matchaBowl/finishedDrink/
+  // servedDrink). Not a switch on customerNumber or anything time-based --
+  // literally "has that station's own onSendTo*/onPlaceOrder callback
+  // actually fired yet this round." final-combination (and any other page
+  // that isn't one of these four) falls through to the default `true` --
+  // that screen already gates its own advance gesture separately via
+  // hasNextOrder/disableAdvance (see FinalCombination.js), it doesn't need
+  // a second gate here.
+  const canAdvanceFromCurrentStep = () => {
+    switch (currentPage) {
+      case 'ordering':
+        return currentOrder !== null;
+      case 'matcha-making':
+        return matchaBowl !== null;
+      case 'milk-selection':
+        return finishedDrink !== null;
+      case 'toppings':
+        return servedDrink !== null;
+      default:
+        return true;
+    }
+  };
+
   // Progress bar: clicking any step other than the current one jumps
-  // straight there -- forward freely, but per request never backward past
-  // whichever station's already been left behind for a later one (see
-  // maxStepIndexRef's own comment above). This is the single choke point
-  // both ProgressBar's dot-click (moot now that the mouse is disabled
-  // entirely, but still routes through here) and its own Left-arrow
-  // handler (onNavigate(PROGRESS_STEPS[activeIndex - 1].key)) both call,
-  // so locking it here alone covers every path into this function.
+  // straight there -- but only ever backward, to an already-visited
+  // station (per request never backward past whichever station's already
+  // been left behind for a later one either -- see maxStepIndexRef's own
+  // comment above). Moving FORWARD is exclusively handleAdvance's job now
+  // (see its own task-completion gate below, canAdvanceFromCurrentStep) --
+  // blocking any targetIndex ahead of the current step here too closes the
+  // same "skip a station without doing anything" gap on this path as well,
+  // in case a future dot is ever reachable some way other than the
+  // Right-arrow/current-dot gesture (both of which go through handleAdvance,
+  // not this function) -- ProgressBar's dot-click and its own Left-arrow
+  // handler (onNavigate(PROGRESS_STEPS[activeIndex - 1].key)) both call
+  // this, so locking it here alone covers every path into this function.
   const navigateTo = (pageKey) => {
     const targetIndex = STEP_KEYS.indexOf(pageKey);
-    if (targetIndex !== -1 && targetIndex < maxStepIndexRef.current) return;
+    if (targetIndex === -1) return;
+    if (targetIndex < maxStepIndexRef.current || targetIndex > currentStepIndexForLock) return;
     setCurrentPage(pageKey);
   };
 
   // Progress bar: clicking the CURRENT step means "I'm done here" -- advance
   // to the next step, or, from the last step (Serve), complete this
   // customer's order and either start the next one or head back to the
-  // main menu once all 3 are done.
+  // main menu once all 3 are done. Gated on canAdvanceFromCurrentStep --
+  // per request, the next station is locked until the current one's own
+  // task is actually done (placing the order / carrying the bowl-or-cup to
+  // the lower-right corner), not just available on demand.
   const handleAdvance = () => {
     const idx = STEP_KEYS.indexOf(currentPage);
     if (idx === -1) return;
+    if (!canAdvanceFromCurrentStep()) return;
     if (idx < STEP_KEYS.length - 1) {
       setCurrentPage(STEP_KEYS[idx + 1]);
       return;

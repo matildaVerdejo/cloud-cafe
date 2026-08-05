@@ -1017,6 +1017,16 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
           e.preventDefault();
           e.stopImmediatePropagation();
           document.querySelector('.progress-step.current')?.focus();
+        } else if (action === 'Right') {
+          // Trapped (a no-op) -- the whisk is the rightmost item in this
+          // row, so it shouldn't fall through to useFlatFocusNav's generic
+          // spatial fallback, which was jumping Right straight to whatever
+          // ProgressBar dot happened to be nearest (station 5/Serve) once
+          // whisking finished and moved the bowl/dropzone layout around --
+          // same "don't let an unhandled direction escape this row" trap as
+          // guava-powder's/banana-foam's own Right trap in ToppingsStation.js.
+          e.preventDefault();
+          e.stopImmediatePropagation();
         }
         return;
       }
