@@ -247,14 +247,15 @@
 }
 
 /* Tints the total pill by how the round actually went -- failing (<60),
-   middling (60-79), good (80+), see scoreTier in ScoreCard.js. Same pastel
-   feel as the rest of this card (soft tinted background, not a saturated
-   alert color) just shifted reddish/yellowish/greenish per tier instead of
-   always the same green/brown regardless of score. --good's colors match
-   .score-card-total's own plain defaults above almost exactly (just a
-   faint mint tint on the background instead of plain white) so a good
-   score doesn't visually change much from how this pill always used to
-   look -- only fail/mid are a real departure. */
+   middling (60-79), good (80+), see scoreTier/colorRevealed in
+   ScoreCard.js (colorRevealed is what actually gates when this class gets
+   applied -- not immediately on mount, see that state's own comment). Same
+   pastel feel as the rest of this card (soft tinted background, not a
+   saturated alert color) just shifted reddish/yellowish/greenish per tier
+   instead of always the same green/brown regardless of score. --good is a
+   noticeably richer/more saturated pastel green than the plain near-white
+   default above (was too faint a tint to read as a real "good" color) per
+   request. */
 .score-card-total--fail {
   color: #7a3430;
   background: rgba(250, 222, 217, 0.92);
@@ -268,7 +269,7 @@
 }
 
 .score-card-total--good {
-  color: #2f4a28;
-  background: rgba(234, 250, 241, 0.92);
-  border-color: #2f4a28;
+  color: #1f4a28;
+  background: #bdecc9;
+  border-color: #3f8a4f;
 }

@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import './ScoreCard.css';
+import { computeOverallScore } from '../gameloop/scoring';
 
 // Replaces the old hardcoded AnnieOrder1.png receipt + per-section badge
 // overlay on FinalCombination -- see that file's own removed SCORE_SECTIONS
@@ -38,6 +39,38 @@ const REVEAL_DURATION_MS = 2400;
 // started yet sit dimmed (see .score-card-row-wrap.pending in ScoreCard.css)
 // so it's clear more are still coming.
 const REVEAL_STAGGER_MS = 750;
+
+// The moment the total pill itself finishes counting up -- exported so
+// FinalCombination.js can time its own celebration overlay (see
+// CelebrationOverlay.js) to appear right as the reveal actually finishes,
+// instead of guessing at a hardcoded delay that could drift out of sync
+// with these two constants above. Mirrors the exact delay/duration math the
+// total's own useCountUp call below uses.
+export const SCORE_REVEAL_TOTAL_MS = CATEGORIES.length * REVEAL_STAGGER_MS + REVEAL_DURATION_MS;
+
+// How long the total pill's own background/border/color transition (see
+// .score-card-total's own `transition` in ScoreCard.css) takes to settle
+// once its tier color actually switches on. Exported alongside
+// SCORE_COLOR_REVEAL_MS/STICKER_REVEAL_DELAY_MS below so FinalCombination.js
+// can time the reaction sticker's own slam-in to happen only once the color
+// change has visibly finished, not mid-transition.
+const SCORE_COLOR_TRANSITION_MS = 300;
+
+// The moment the total pill switches from its neutral default look to its
+// actual tier color (fail/mid/good) -- see the colorRevealed state below.
+// Deliberately the same instant the total finishes counting up
+// (SCORE_REVEAL_TOTAL_MS) rather than colored from the very start, so
+// "the score section changes color" reads as a real, noticeable beat in
+// the reveal sequence instead of something that was already true the whole
+// time the numbers were still counting up.
+export const SCORE_COLOR_REVEAL_MS = SCORE_REVEAL_TOTAL_MS;
+
+// When FinalCombination.js should let the reaction sticker slam onto the
+// screen -- after the total pill's color has actually finished changing
+// (SCORE_COLOR_REVEAL_MS + the transition's own duration), plus a small
+// beat so the two feel like separate, sequential events rather than
+// happening in the same instant.
+export const STICKER_REVEAL_DELAY_MS = SCORE_COLOR_REVEAL_MS + SCORE_COLOR_TRANSITION_MS + 200;
 
 function easeInOutQuad(t) {
   return t < 0.5 ? 2 * t * t : 1 - (-2 * t + 2) ** 2 / 2;
@@ -153,35 +186,41 @@ const ScoreCard = ({ customerNumber, characterName, orderTakingScore, matchaScor
   const [openKey, setOpenKey] = useState(null);
   const toggle = (key) => setOpenKey((prev) => (prev === key ? null : key));
 
-  // Total is the plain average of whichever categories are actually scored
-  // yet -- every one of them should be, by the time this screen is ever
-  // reached (each is captured at the station that produces it, well before
-  // Serving), but this stays defensive rather than assuming all four are
-  // non-null, the same "don't assume, read the real state" caution the rest
-  // of this codebase already takes with e.g. incomingDrink.
-  const scoredPercents = CATEGORIES.map((cat) => scoresByKey[cat.key]?.percent).filter(
-    (p) => typeof p === 'number'
-  );
-  const total =
-    scoredPercents.length > 0
-      ? Math.round(scoredPercents.reduce((sum, p) => sum + p, 0) / scoredPercents.length)
-      : null;
+  // Total/tier both come from the shared computeOverallScore helper (see
+  // gameloop/scoring.js) rather than being recomputed inline here -- that's
+  // the exact same average FinalCombination.js's own celebration-overlay
+  // check uses (see CATEGORIES.length * REVEAL_STAGGER_MS above), so the
+  // two can never drift out of sync with each other. Colors the
+  // score-card-total pill by tier (see .score-card-total--fail/--mid/--good
+  // in ScoreCard.css) -- still the same pastel palette the rest of this
+  // card uses, just a reddish/yellowish/greenish tint depending on how the
+  // round actually went, instead of always the same green/brown. null
+  // (nothing scored yet) intentionally gets no tier -- see the plain
+  // '#8a7a6a'-bordered default rule in the CSS for that case.
+  const { total, tier: scoreTier } = computeOverallScore({
+    orderTakingScore,
+    matchaScore,
+    mixingScore,
+    toppingsScore,
+  });
   // Starts only once every row above it has finished its own staggered
   // reveal (CATEGORIES.length full row slots' worth of delay), so the total
   // reads as the last domino in the same one-at-a-time sequence rather than
   // counting up alongside the rows.
   const { value: animatedTotal } = useCountUp(total, { delay: CATEGORIES.length * REVEAL_STAGGER_MS });
-  // Grades the total itself into one of three tiers -- failing (<60),
-  // middling (60-79), good (80+) -- same "common letter-grade-ish cutoffs"
-  // reasoning most percent-based grading uses, since nothing in this project
-  // defines an official passing threshold. Colors the score-card-total pill
-  // accordingly (see .score-card-total--fail/--mid/--good in ScoreCard.css)
-  // -- still the same pastel palette the rest of this card uses, just a
-  // reddish/yellowish/greenish tint depending on the tier, instead of always
-  // the same green/brown regardless of how the round actually went. null
-  // (nothing scored yet) intentionally gets no tier -- see the plain
-  // '#8a7a6a'-bordered default rule in the CSS for that case.
-  const scoreTier = total === null ? null : total < 60 ? 'fail' : total < 80 ? 'mid' : 'good';
+  // The total pill's tier color only actually switches on at
+  // SCORE_COLOR_REVEAL_MS (see that constant's own comment above) -- before
+  // then it sits in its plain neutral default look (no --fail/--mid/--good
+  // class), same as while nothing's scored yet. Lets .score-card-total's
+  // own CSS transition carry the color change as a real, visible beat
+  // instead of it just being true from the very first paint.
+  const [colorRevealed, setColorRevealed] = useState(false);
+  useEffect(() => {
+    setColorRevealed(false);
+    if (!scoreTier) return undefined;
+    const timeoutId = setTimeout(() => setColorRevealed(true), SCORE_COLOR_REVEAL_MS);
+    return () => clearTimeout(timeoutId);
+  }, [scoreTier]);
 
   // Zero-padded "0N/03" badge -- replaces the old plain-gray "Order N of 3"
   // line per request, moved into the card's own upper-right corner instead
@@ -213,7 +252,7 @@ const ScoreCard = ({ customerNumber, characterName, orderTakingScore, matchaScor
           />
         ))}
       </div>
-      <div className={`score-card-total${scoreTier ? ` score-card-total--${scoreTier}` : ''}`}>
+      <div className={`score-card-total${colorRevealed && scoreTier ? ` score-card-total--${scoreTier}` : ''}`}>
         Score: {total !== null ? `${animatedTotal}/100` : '—'}
       </div>
     </div>

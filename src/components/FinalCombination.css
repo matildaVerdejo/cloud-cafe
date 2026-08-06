@@ -58,6 +58,71 @@
   }
 }
 
+/* Reaction sticker -- propped on the counter to the left of the drink (see
+   PLATE_CENTER_X/PLATE_SURFACE_Y in FinalCombination.js for where the
+   drink itself actually sits; this is a fixed box rather than computed
+   relative to the drink's own per-cup-type width/position, since a sticker
+   sitting loosely beside the plate doesn't need to track the drink's exact
+   edge the way e.g. the ice cubes need to track the cup's own interior).
+   object-fit: contain (rather than the shared-canvas crop the ordering
+   portraits use) since the three source PNGs per character aren't a
+   matched set the way those are -- see REACTION_STICKERS' own comment in
+   FinalCombination.js. object-position: bottom + bottom-anchored box keeps
+   every sticker's own base sitting on the same counter line regardless of
+   its individual aspect ratio, same "anchor the edge that touches a
+   surface, not the center" idea BOTTLE_BOTTOM uses in MilkSelection.js. */
+.serving-reaction-sticker {
+  position: absolute;
+  left: 10%;
+  top: 22%;
+  width: 17%;
+  height: 30%;
+  object-fit: contain;
+  object-position: bottom;
+  pointer-events: none;
+  /* Thick white "sticker" outline -- twelve zero-blur drop-shadows spaced
+     evenly around a circle (3px radius) trace a solid white ring around
+     the art's own alpha silhouette, the standard CSS trick for this since
+     there's no actual border to draw around an irregularly-shaped PNG. The
+     13th, blurred drop-shadow at the end is the same soft "resting on the
+     counter" shadow this always had, layered on top of the outline. */
+  filter: drop-shadow(3px 0 0 #fff) drop-shadow(2.6px 1.5px 0 #fff) drop-shadow(1.5px 2.6px 0 #fff)
+    drop-shadow(0 3px 0 #fff) drop-shadow(-1.5px 2.6px 0 #fff) drop-shadow(-2.6px 1.5px 0 #fff)
+    drop-shadow(-3px 0 0 #fff) drop-shadow(-2.6px -1.5px 0 #fff) drop-shadow(-1.5px -2.6px 0 #fff)
+    drop-shadow(0 -3px 0 #fff) drop-shadow(1.5px -2.6px 0 #fff) drop-shadow(2.6px -1.5px 0 #fff)
+    drop-shadow(0 4px 8px rgba(0, 0, 0, 0.25));
+  animation: servingReactionStickerSlam 0.6s both;
+  animation-timing-function: cubic-bezier(0.36, 1.65, 0.6, 1);
+}
+
+/* A bouncy "slammed onto the counter" entrance -- drops in oversized from
+   above, overshoots past its resting scale a couple of times before
+   settling, rather than the gentle fade/scale-in every other reveal in this
+   project uses. The cubic-bezier above (a "back"-style ease with a
+   pronounced overshoot) does most of the bounce on its own; the extra
+   keyframe stops below add a second, smaller wobble on top of that so it
+   reads as a real impact rather than a single spring settle. */
+@keyframes servingReactionStickerSlam {
+  0% {
+    opacity: 0;
+    transform: scale(2.4) translateY(-70px) rotate(-14deg);
+  }
+  55% {
+    opacity: 1;
+    transform: scale(0.92) translateY(4px) rotate(5deg);
+  }
+  75% {
+    transform: scale(1.06) translateY(-3px) rotate(-3deg);
+  }
+  90% {
+    transform: scale(0.98) translateY(1px) rotate(1deg);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0) rotate(0deg);
+  }
+}
+
 /* The finished drink's glass, set down on the plate (see FINAL_DRINK_SPOT/
    incomingDrink in FinalCombination.js) -- a plain positioned image, same
    "trivial leaf utility class kept as its own local copy rather than

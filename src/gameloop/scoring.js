@@ -223,6 +223,26 @@ function pct(checks) {
   return Math.round((totalCredit / checks.length) * 100);
 }
 
+// ---- Overall score / tier --------------------------------------------
+// Shared by ScoreCard.js (its own total pill) and FinalCombination.js (to
+// know whether to show the celebration overlay) so both always agree on the
+// exact same number/tier instead of each recomputing its own copy of this
+// average and risking drift between them. Plain average of whichever of the
+// four category scores are actually present yet (same "don't assume every
+// one is non-null" defensiveness as ScoreCard.js's own original version of
+// this), tier-bucketed into common letter-grade-ish cutoffs since nothing
+// in this project defines an official passing threshold: fail (<60), mid
+// (60-79), good (80+). null total (nothing scored yet) gets a null tier.
+export function computeOverallScore({ orderTakingScore, matchaScore, mixingScore, toppingsScore }) {
+  const percents = [orderTakingScore, matchaScore, mixingScore, toppingsScore]
+    .map((s) => s?.percent)
+    .filter((p) => typeof p === 'number');
+  if (percents.length === 0) return { total: null, tier: null };
+  const total = Math.round(percents.reduce((sum, p) => sum + p, 0) / percents.length);
+  const tier = total < 60 ? 'fail' : total < 80 ? 'mid' : 'good';
+  return { total, tier };
+}
+
 // ---- Order Taking -----------------------------------------------------
 // Compares the order the player actually built in CustomerOrdering's order
 // form (order) against what the customer's speech bubble asked for

@@ -1,9 +1,11 @@
-import React, { useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import './FinalCombination.css';
 import { useFlatFocusNav } from '../gameloop/useFlatFocusNav';
 import { playButtonClick } from '../gameloop/sfx';
+import { computeOverallScore } from '../gameloop/scoring';
 import ProgressBar from './ProgressBar';
-import ScoreCard from './ScoreCard';
+import ScoreCard, { SCORE_REVEAL_TOTAL_MS, STICKER_REVEAL_DELAY_MS } from './ScoreCard';
+import CelebrationOverlay from './CelebrationOverlay';
 import { getMilkBoxFor, getMatchaBoxFor, getIceCupSlotPos, getIceCubeSize, CUP_TYPES } from './MilkSelection';
 import {
   getSyrupBoxFor,
@@ -22,6 +24,24 @@ import {
 // key ('annie' | 'otto' | 'katie'), so this is what turns that key into the
 // "<Name> Order" title ScoreCard.js's own score-card-title now shows.
 const CUSTOMER_CHARACTER_NAME = { annie: 'Annie', otto: 'Otto', katie: 'Katie' };
+
+// One "reaction sticker" per character per score tier -- fail -> angry,
+// mid -> annoyed, good -> happy, same three tiers computeOverallScore
+// (gameloop/scoring.js) already buckets the round's total into for
+// ScoreCard's own total-pill coloring, just reused here for which sticker
+// shows instead of which color does. Files are the three emotion PNGs per
+// character (Annie/Katie/Otto), each already trimmed to its own alpha
+// bounding box -- rendered with object-fit: contain (see .serving-reaction-
+// sticker in FinalCombination.css) rather than the shared-canvas crop
+// CustomerOrdering.js's own portraits use, since these don't need to match
+// each other pixel-for-pixel the way three same-pose ordering portraits do
+// -- a sticker propped next to the plate reads fine at its own natural
+// aspect ratio.
+const REACTION_STICKERS = {
+  annie: { fail: './AnnieAngry.png', mid: './AnnieAnnoyed.png', good: './AnnieHappy.png' },
+  katie: { fail: './KatieAngry.png', mid: './KatieAnnoyed.png', good: './KatieHappy.png' },
+  otto: { fail: './OttoAngry.png', mid: './OttoAnnoyed.png', good: './OttoHappy.png' },
+};
 
 // Where the finished drink (see incomingDrink below), carried over from
 // ToppingsStation's own "Send to Serving" drop-zone, comes to rest on top
@@ -89,6 +109,49 @@ const FinalCombination = ({
 }) => {
   const containerRef = useRef(null);
   useFlatFocusNav(containerRef);
+
+  // ---- Celebration overlay (see CelebrationOverlay.js) ---------------------
+  // Shown once the round's overall score lands in the "good" tier (80+, see
+  // computeOverallScore in gameloop/scoring.js -- the exact same helper
+  // ScoreCard.js's own total pill uses, so this can never disagree with
+  // what the card itself is showing). Timed to appear right as ScoreCard's
+  // own staggered count-up reveal actually finishes (SCORE_REVEAL_TOTAL_MS,
+  // exported from ScoreCard.js) rather than popping in immediately alongside
+  // the rest of this screen -- the sparkles are the payoff at the end of the
+  // reveal, not competing with it. Reset back to false (and the timer
+  // re-armed) any time the tier changes, which in practice only really
+  // matters going from one customer's round to the next.
+  const { tier: scoreTier } = computeOverallScore({ orderTakingScore, matchaScore, mixingScore, toppingsScore });
+  // Which reaction sticker (see REACTION_STICKERS above) actually shows,
+  // combining that same tier with this round's own customerCharacter (see
+  // order above) -- null (nothing rendered) until both are known, same
+  // "don't assume, read the real state" caution the rest of this file
+  // already takes with e.g. incomingDrink.
+  const reactionSticker = order?.customerCharacter ? REACTION_STICKERS[order.customerCharacter]?.[scoreTier] ?? null : null;
+  const [showCelebration, setShowCelebration] = useState(false);
+  useEffect(() => {
+    setShowCelebration(false);
+    if (scoreTier !== 'good') return undefined;
+    const timeoutId = setTimeout(() => setShowCelebration(true), SCORE_REVEAL_TOTAL_MS);
+    return () => clearTimeout(timeoutId);
+  }, [scoreTier]);
+  // Reaction sticker doesn't mount until STICKER_REVEAL_DELAY_MS (imported
+  // from ScoreCard.js) -- that's timed to land right after the score
+  // card's own total pill finishes changing color (see that constant's own
+  // comment), so the sticker reads as a reaction to the color, not
+  // something that was just sitting there the whole time. Gated on
+  // mounting the <img> itself (rather than always rendering it and toggling
+  // a class) so its own CSS "slam" entrance animation (see
+  // .serving-reaction-sticker in FinalCombination.css) genuinely restarts
+  // from the beginning at that moment instead of needing an animation-delay
+  // guess.
+  const [showSticker, setShowSticker] = useState(false);
+  useEffect(() => {
+    setShowSticker(false);
+    if (!reactionSticker) return undefined;
+    const timeoutId = setTimeout(() => setShowSticker(true), STICKER_REVEAL_DELAY_MS);
+    return () => clearTimeout(timeoutId);
+  }, [reactionSticker]);
 
   // ---- Carried-over drink from Toppings Station (see incomingDrink above)
   // Which cup type this actually is -- ToppingsStation's own
@@ -160,6 +223,20 @@ const FinalCombination = ({
           alt="Serving counter with an empty plate, ready to serve the finished drink"
           className="serving-art"
         />
+
+        {/* Reaction sticker -- one of the three emotion PNGs for whichever
+            character placed this order (see REACTION_STICKERS above),
+            picked by the round's own overall score tier: angry for a
+            failing total, annoyed for a middling one, happy for a good one.
+            Purely decorative (aria-hidden, no interaction), propped on the
+            counter to the left of the drink -- see .serving-reaction-
+            sticker in FinalCombination.css for its own positioning. Doesn't
+            mount until showSticker flips true (see that state's own
+            comment above) -- appears with a "slam" entrance right after the
+            score card's own total pill finishes changing color. */}
+        {showSticker && reactionSticker && (
+          <img src={reactionSticker} alt="" aria-hidden="true" draggable={false} className="serving-reaction-sticker" />
+        )}
 
         {/* The finished drink, carried over from Toppings Station and set
             down on the plate -- purely decorative (aria-hidden, no drag/
@@ -331,6 +408,14 @@ const FinalCombination = ({
           mixingScore={mixingScore}
           toppingsScore={toppingsScore}
         />
+
+        {/* Full-screen sparkle burst for a "good" (80+) total -- see the
+            showCelebration effect above for exactly when this actually
+            mounts. Rendered last (of the screen's own content, before
+            ProgressBar) so it paints on top of everything above it, same
+            "later in DOM order + no z-index conflicts" reasoning the rest
+            of this project already relies on. */}
+        {showCelebration && <CelebrationOverlay />}
 
         <ProgressBar
           activeStep={activeStep}

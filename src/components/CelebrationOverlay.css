@@ -1,0 +1,88 @@
+/* Covers whatever positioned ancestor it's rendered into (FinalCombination's
+   own .final-combination-content, itself filling .final-combination-
+   container -- see FinalCombination.js) -- inset: 0 rather than a fixed
+   1920x1080 size so it always matches that container's own current scale.
+   z-index clears every other layer on that screen (nothing else in
+   FinalCombination.js sets one above single digits) so sparkles read on
+   top of everything, including the score card itself. pointer-events: none
+   the whole way down (this layer and every particle inside it) so it never
+   blocks the Start Order button or ScoreCard's own row buttons underneath. */
+.celebration-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 50;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+/* Bigger 8-point stars via clip-path (no image asset, no emoji glyph -- see
+   CelebrationOverlay.js's own comment on why) -- background-color AND a
+   matching drop-shadow glow are both set per-star inline (see the
+   component), so each star casts its own colored light rather than reading
+   as a flat cutout. Starts invisible/collapsed and the keyframe below pops
+   it in big, holds a twinkle, then fades back out, looping for as long as
+   this overlay stays mounted (see showCelebration in FinalCombination.js
+   for how long that actually is). animation-delay/duration are also set
+   per-star inline so the whole burst reads as scattered rather than a
+   single pulsing grid. */
+.celebration-star {
+  position: absolute;
+  clip-path: polygon(50% 0%, 61% 35%, 100% 50%, 61% 65%, 50% 100%, 39% 65%, 0% 50%, 39% 35%);
+  opacity: 0;
+  transform: scale(0) rotate(0deg) translateY(0);
+  animation-name: celebrationStarTwinkle;
+  animation-timing-function: ease-in-out;
+  animation-iteration-count: infinite;
+}
+
+@keyframes celebrationStarTwinkle {
+  0% {
+    opacity: 0;
+    transform: scale(0) rotate(0deg) translateY(10px);
+  }
+  15% {
+    opacity: 1;
+    transform: scale(1.15) rotate(45deg) translateY(0);
+  }
+  40% {
+    opacity: 1;
+    transform: scale(1.3) rotate(110deg) translateY(-12px);
+  }
+  65% {
+    opacity: 0.65;
+    transform: scale(0.9) rotate(160deg) translateY(-24px);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(0) rotate(220deg) translateY(-36px);
+  }
+}
+
+/* The actual "glitter" layer -- small, fast, plain round flecks (rather
+   than a star shape) in white/gold, denser and quicker than the stars
+   above so the two layers read as two distinct kinds of sparkle instead of
+   the same shape just repeated at a smaller size. box-shadow (rather than
+   filter: drop-shadow, which the stars use) is enough of a glow for a
+   circle this small and is cheaper to animate across this many elements at
+   once. */
+.celebration-glitter {
+  position: absolute;
+  border-radius: 50%;
+  opacity: 0;
+  transform: scale(0);
+  animation-name: celebrationGlitterTwinkle;
+  animation-timing-function: ease-in-out;
+  animation-iteration-count: infinite;
+}
+
+@keyframes celebrationGlitterTwinkle {
+  0%,
+  100% {
+    opacity: 0;
+    transform: scale(0);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.4);
+  }
+}
