@@ -7,18 +7,26 @@
    is intentionally NOT fixed (auto, capped by max-height + overflow-y below)
    since expanding a category's detail list can make the card taller than any
    one fixed box would comfortably fit -- scrolls internally instead of
-   pushing into the start-next-order-button/ProgressBar below it. */
+   pushing into the start-next-order-button/ProgressBar below it.
+   Narrowed (was 32%) and lowered (top was 6%) per request so it sits right
+   next to the finished drink (which lands roughly mid-screen vertically --
+   see PLATE_SURFACE_Y in FinalCombination.js) instead of up in the far
+   corner. Background/border recolored from the old plain cream-and-brown
+   look to the same mint-to-pink gradient + pink border CustomerOrdering's
+   own order-builder modal uses (.order-modal in CustomerOrdering.css) per
+   request, so the score sheet reads as the same "product" as the order-
+   taking window it's grading. */
 .score-card {
   position: absolute;
-  left: 65%;
-  top: 6%;
-  width: 32%;
-  max-height: 76%;
+  left: 61%;
+  top: 16%;
+  width: 29%;
+  max-height: 68%;
   overflow-y: auto;
   box-sizing: border-box;
-  padding: min(14px, 0.73vw);
-  background: rgba(255, 250, 243, 0.94);
-  border: min(3px, 0.16vw) solid #8a7a6a;
+  padding: min(14px, 0.73vw) min(34px, 1.8vw);
+  background: linear-gradient(160deg, #eafaf1 0%, #fdeef6 100%);
+  border: min(3px, 0.16vw) solid rgba(232, 170, 202, 0.65);
   border-radius: min(16px, 0.83vw);
   box-shadow: 0 6px 16px rgba(0, 0, 0, 0.18);
   font-family: 'Pixelify Sans', cursive;
@@ -37,20 +45,30 @@
   }
 }
 
-.score-card-order-number {
-  margin: 0 0 min(2px, 0.1vw);
-  text-align: center;
-  font-size: min(13px, 0.68vw);
+/* "0N/03" badge -- replaces the old plain-gray, centered "Order N of 3" line
+   above the title (.score-card-order-number, now removed) per request:
+   moved into the card's own upper-right corner instead, and recolored from
+   gray (#8a7a6a) to the same green (#5a8a4f) the rest of this card's own
+   accents already use (.score-card-row-percent/.score-card-detail-list's
+   border/etc) so it reads as "part of the card's own writing" rather than a
+   separate muted label. .score-card is itself position: absolute, so it's
+   already a valid containing block for this without needing its own
+   position: relative. */
+.score-card-order-badge {
+  position: absolute;
+  top: min(10px, 0.55vw);
+  right: min(16px, 0.9vw);
+  margin: 0;
+  font-size: min(30px, 1.6vw);
   font-weight: 700;
   letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: #8a7a6a;
+  color: #2f4a28;
 }
 
 .score-card-title {
-  margin: 0 0 min(10px, 0.55vw);
+  margin: min(14px, 0.73vw) 0 min(34px, 1.8vw);
   text-align: center;
-  font-size: min(20px, 1.05vw);
+  font-size: min(33px, 1.77vw);
   font-weight: 700;
   color: #2f4a28;
 }
@@ -58,12 +76,23 @@
 .score-card-rows {
   display: flex;
   flex-direction: column;
-  gap: min(8px, 0.42vw);
+  gap: min(11px, 0.58vw);
 }
 
 .score-card-row-wrap {
   display: flex;
   flex-direction: column;
+  opacity: 1;
+  transition: opacity 0.25s ease;
+}
+
+/* Dimmed until this row's own staggered reveal actually starts (see
+   `started`/delay in ScoreCard.js's own useCountUp/ScoreCardRow) -- makes
+   the one-at-a-time count-up read as a real sequence (this one hasn't been
+   revealed yet) rather than everything just quietly sitting at 0% until its
+   turn. */
+.score-card-row-wrap.pending {
+  opacity: 0.35;
 }
 
 /* Plain <button> (not a custom keydown handler) so Enter/Space on a focused
@@ -71,22 +100,42 @@
    CustomerOrdering.js's own Dropdown toggle buttons rely on. data-focusable
    is what plugs it into this screen's existing useFlatFocusNav spatial nav. */
 .score-card-row {
+  position: relative;
+  overflow: hidden;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: min(8px, 0.42vw);
+  gap: min(10px, 0.53vw);
   width: 100%;
   box-sizing: border-box;
-  padding: min(8px, 0.42vw) min(12px, 0.63vw);
+  padding: min(12px, 0.63vw) min(16px, 0.84vw);
   background: #ffffff;
-  border: min(2px, 0.11vw) solid #c9bcae;
+  border: min(2px, 0.11vw) solid rgba(197, 225, 208, 0.9);
   border-radius: min(999px, 2vw);
   font-family: inherit;
-  font-size: min(15px, 0.79vw);
+  font-size: min(22px, 1.15vw);
   font-weight: 700;
   color: #4a3f36;
   cursor: pointer;
   transition: filter 0.15s ease, transform 0.15s ease, border-color 0.15s ease;
+}
+
+/* Thermometer-style fill -- grows left-to-right in lockstep with the row's
+   own animated percent text (see useCountUp/ScoreCardRow in ScoreCard.js),
+   both driven by the exact same animated number so they always finish
+   moving together. Sits behind the label/percent text (z-index below their
+   own, see .score-card-row-label/.score-card-row-percent) and behind the
+   row's own overflow: hidden + inherited border-radius above, so it never
+   pokes out past the pill's own rounded ends even mid-animation. No CSS
+   transition of its own on width -- the JS side already updates it every
+   animation frame, a second transition layered on top would just add lag. */
+.score-card-row-fill {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  width: 0%;
+  background: rgba(90, 138, 79, 0.22);
+  pointer-events: none;
 }
 
 .score-card-row:hover:not(:disabled) {
@@ -110,25 +159,30 @@
 }
 
 .score-card-row-label {
+  position: relative;
+  z-index: 1;
   white-space: nowrap;
+  color: #2f4a28;
 }
 
 .score-card-row-percent {
-  color: #5a8a4f;
+  position: relative;
+  z-index: 1;
+  color: #2f4a28;
 }
 
 .score-card-detail-list {
   list-style: none;
   margin: 0;
-  padding: min(8px, 0.42vw) min(12px, 0.63vw);
-  background: #f5efe6;
+  padding: min(11px, 0.58vw) min(16px, 0.84vw);
+  background: #f5fbf7;
   border: min(2px, 0.11vw) solid #5a8a4f;
   border-top: none;
   border-bottom-left-radius: min(10px, 0.52vw);
   border-bottom-right-radius: min(10px, 0.52vw);
   display: flex;
   flex-direction: column;
-  gap: min(6px, 0.31vw);
+  gap: min(8px, 0.42vw);
   animation: scoreCardDetailOpen 0.15s ease-out both;
 }
 
@@ -146,8 +200,8 @@
 .score-card-detail-item {
   display: flex;
   align-items: flex-start;
-  gap: min(6px, 0.31vw);
-  font-size: min(13px, 0.68vw);
+  gap: min(8px, 0.42vw);
+  font-size: min(18px, 0.95vw);
   font-weight: 400;
   line-height: 1.35;
 }
@@ -178,15 +232,43 @@
 }
 
 .score-card-total {
-  margin-top: min(10px, 0.55vw);
+  margin-top: min(14px, 0.73vw);
   box-sizing: border-box;
   text-align: center;
-  font-size: min(19px, 0.91vw);
+  font-size: min(26px, 1.3vw);
   font-weight: 700;
   color: #2f4a28;
   background: rgba(255, 255, 255, 0.92);
-  border: min(3px, 0.14vw) solid #8a7a6a;
+  border: min(3px, 0.14vw) solid #2f4a28;
   border-radius: 999px;
-  padding: min(8px, 0.38vw) 0;
+  padding: min(11px, 0.53vw) 0;
   box-shadow: 0 4px 10px rgba(0, 0, 0, 0.15);
+  transition: background 0.3s ease, border-color 0.3s ease, color 0.3s ease;
+}
+
+/* Tints the total pill by how the round actually went -- failing (<60),
+   middling (60-79), good (80+), see scoreTier in ScoreCard.js. Same pastel
+   feel as the rest of this card (soft tinted background, not a saturated
+   alert color) just shifted reddish/yellowish/greenish per tier instead of
+   always the same green/brown regardless of score. --good's colors match
+   .score-card-total's own plain defaults above almost exactly (just a
+   faint mint tint on the background instead of plain white) so a good
+   score doesn't visually change much from how this pill always used to
+   look -- only fail/mid are a real departure. */
+.score-card-total--fail {
+  color: #7a3430;
+  background: rgba(250, 222, 217, 0.92);
+  border-color: #b5544a;
+}
+
+.score-card-total--mid {
+  color: #6b5220;
+  background: rgba(255, 241, 209, 0.92);
+  border-color: #c79a34;
+}
+
+.score-card-total--good {
+  color: #2f4a28;
+  background: rgba(234, 250, 241, 0.92);
+  border-color: #2f4a28;
 }

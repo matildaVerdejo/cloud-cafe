@@ -756,6 +756,11 @@ const CustomerOrdering = ({ activeStep, customerNumber, onNavigate, onAdvance, o
       iceCubes,
       baseMilk,
       toppings: toppings.map((t) => t.value),
+      // Threaded through App.js's own currentOrder state all the way to
+      // FinalCombination/ScoreCard, so the score sheet's title can read
+      // "<Name> Order" for whichever of the three characters (see
+      // CUSTOMER_CHARACTERS above) this round's customer happened to be.
+      customerCharacter,
     };
     onPlaceOrder?.(order);
     // Grades this order against the customer's own spoken order (see

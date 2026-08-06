@@ -231,44 +231,51 @@ function pct(checks) {
 // objects comes from. Called from CustomerOrdering's own placeOrder, the one
 // place both objects are ever in scope together.
 export function scoreOrderTaking(order, spokenOrder) {
+  // detail strings are only ever shown for incorrect checks now -- ScoreCard
+  // itself hides the detail sentence for anything correct (just the label +
+  // green check, no explanation needed for a right answer -- see
+  // ScoreCard.js). Order Taking's own checks are specifically about what got
+  // written into the order form, so these read as "wrote down X instead of
+  // Y" (X = what the order form actually has, Y = what the customer's
+  // spokenOrder actually asked for) rather than the more generic "wanted/
+  // got" phrasing the other three categories' checks use (those are about
+  // physical station actions, not a written-down order field).
   const checks = [
     {
       key: 'grade',
       label: 'Matcha grade',
       correct: order.matchaGrade === spokenOrder.grade,
-      detail: `Customer asked for ${GRADE_LABEL[spokenOrder.grade]}, order says ${GRADE_LABEL[order.matchaGrade]}.`,
+      detail: `Wrote down ${GRADE_LABEL[order.matchaGrade]} instead of ${GRADE_LABEL[spokenOrder.grade]}.`,
     },
     {
       key: 'teaspoons',
       label: 'Matcha amount',
       correct: order.teaspoons === spokenOrder.teaspoons,
-      detail: `Customer asked for ${spokenOrder.teaspoons} tsp, order says ${order.teaspoons} tsp.`,
+      detail: `Wrote down ${order.teaspoons} tsp instead of ${spokenOrder.teaspoons} tsp.`,
     },
     {
       key: 'cup',
       label: 'Cup type',
       correct: order.cupType === spokenOrder.cup,
-      detail: `Customer asked for a ${CUP_LABEL[spokenOrder.cup]} cup, order says ${CUP_LABEL[order.cupType]}.`,
+      detail: `Wrote down ${CUP_LABEL[order.cupType]} instead of ${CUP_LABEL[spokenOrder.cup]}.`,
     },
     {
       key: 'ice',
       label: 'Ice count',
       correct: order.iceCubes === spokenOrder.ice,
-      detail: `Customer asked for ${spokenOrder.ice} ice, order says ${order.iceCubes} ice.`,
+      detail: `Wrote down ${order.iceCubes} ice instead of ${spokenOrder.ice}.`,
     },
     {
       key: 'base',
       label: 'Milk / base',
       correct: order.baseMilk === spokenOrder.milk,
-      detail: `Customer asked for ${BASE_LABEL[spokenOrder.milk]}, order says ${BASE_LABEL[order.baseMilk]}.`,
+      detail: `Wrote down ${BASE_LABEL[order.baseMilk]} instead of ${BASE_LABEL[spokenOrder.milk]}.`,
     },
     {
       key: 'toppings',
       label: 'Toppings',
       correct: sameToppingSet(order.toppings, spokenOrder.toppings),
-      detail: `Customer asked for: ${toppingListText(spokenOrder.toppings)}. Order has: ${toppingListText(
-        order.toppings
-      )}.`,
+      detail: `Wrote down ${toppingListText(order.toppings)} instead of ${toppingListText(spokenOrder.toppings)}.`,
     },
   ];
   return { percent: pct(checks), checks };
@@ -318,42 +325,29 @@ export function scoreMatchaMaking({ selectedTin, scoopFillPercent, tempFillPerce
       key: 'grade',
       label: 'Matcha grade',
       correct: gotGrade === order?.matchaGrade,
-      detail: `Order calls for ${GRADE_LABEL[order?.matchaGrade]}, scooped from the ${GRADE_LABEL[gotGrade] ?? '—'} tin.`,
+      detail: `Wanted ${GRADE_LABEL[order?.matchaGrade]}, used ${GRADE_LABEL[gotGrade] ?? '—'}.`,
     },
     {
       key: 'teaspoons',
       label: 'Matcha amount',
       correct: teaspoonExact,
       credit: teaspoonCredit,
-      detail: teaspoonExact
-        ? `Caught the gauge right on the ${order?.teaspoons} tsp line.`
-        : `Order calls for ${order?.teaspoons} tsp -- caught the gauge closer to ${gotTeaspoons} tsp, ${
-            scoopFillPercent > targetFill ? 'a bit over' : 'a bit under'
-          } (${Math.round(teaspoonCredit * 100)}% credit for how close it was).`,
+      // Only ever shown when not exact -- see the ScoreCard.js comment on
+      // why correct checks skip their own detail sentence entirely now.
+      detail: `Wanted ${order?.teaspoons} tsp, landed near ${gotTeaspoons} tsp.`,
     },
     {
       key: 'temp',
       label: 'Water temperature',
       correct: tempExact,
       credit: tempCreditValue,
-      detail: tempExact
-        ? 'Caught the water right on the exact temperature line.'
-        : tempInGreenWindow
-        ? `Caught it inside the target window, but a touch ${
-            tempTooHot ? 'over' : 'under'
-          } the exact line (${Math.round(tempCreditValue * 100)}% credit).`
-        : `Missed the target window, running too ${tempTooHot ? 'hot' : 'cold'} (${Math.round(
-            tempCreditValue * 100
-          )}% credit).`,
+      detail: tempInGreenWindow ? `A touch too ${tempTooHot ? 'hot' : 'cold'}.` : `Too ${tempTooHot ? 'hot' : 'cold'}.`,
     },
     {
       key: 'whisk',
       label: 'Whisking',
       correct: spillCount === 0,
-      detail:
-        spillCount === 0
-          ? 'Whisked clean, no spills.'
-          : `Spilled ${spillCount} time${spillCount === 1 ? '' : 's'} while whisking.`,
+      detail: `Spilled ${spillCount}x while whisking.`,
     },
   ];
   return { percent: pct(checks), checks };
@@ -377,19 +371,19 @@ export function scoreMixingDrink({ cupType, iceCubes, milkType, order }) {
       key: 'cup',
       label: 'Cup type',
       correct: cupType === order?.cupType,
-      detail: `Order calls for a ${CUP_LABEL[order?.cupType]} cup, used ${CUP_LABEL[cupType] ?? '—'}.`,
+      detail: `Wanted ${CUP_LABEL[order?.cupType]}, used ${CUP_LABEL[cupType] ?? '—'}.`,
     },
     {
       key: 'ice',
       label: 'Ice count',
       correct: iceCubes === order?.iceCubes,
-      detail: `Order calls for ${order?.iceCubes} ice, used ${iceCubes} ice.`,
+      detail: `Wanted ${order?.iceCubes} ice, used ${iceCubes}.`,
     },
     {
       key: 'base',
       label: 'Milk / base',
       correct: milkType === order?.baseMilk,
-      detail: `Order calls for ${BASE_LABEL[order?.baseMilk]}, used ${BASE_LABEL[milkType] ?? '—'}.`,
+      detail: `Wanted ${BASE_LABEL[order?.baseMilk]}, used ${BASE_LABEL[milkType] ?? '—'}.`,
     },
   ];
   return { percent: pct(checks), checks };
@@ -431,7 +425,7 @@ export function scoreToppings({ syrupKey, foamKey, powderKey, mintLeavesApplied,
       key: `wanted-${value}`,
       label: TOPPING_LABEL[value] ?? value,
       correct: wasApplied,
-      detail: wasApplied ? 'Added, as requested.' : 'Requested, but never added.',
+      detail: 'Missing.',
     });
   });
   applied
@@ -441,7 +435,7 @@ export function scoreToppings({ syrupKey, foamKey, powderKey, mintLeavesApplied,
         key: `extra-${value}`,
         label: TOPPING_LABEL[value] ?? value,
         correct: false,
-        detail: "Added, but the customer didn't ask for this.",
+        detail: 'Not requested.',
       });
     });
   // Graded like MatchaMaking's own 'whisk' check (correct only with zero
@@ -452,10 +446,7 @@ export function scoreToppings({ syrupKey, foamKey, powderKey, mintLeavesApplied,
       key: 'syrup-pour',
       label: 'Syrup pour',
       correct: syrupSpillCount === 0,
-      detail:
-        syrupSpillCount === 0
-          ? 'Poured clean, no spills.'
-          : `Spilled ${syrupSpillCount} time${syrupSpillCount === 1 ? '' : 's'} while pouring.`,
+      detail: `Spilled ${syrupSpillCount}x while pouring.`,
     });
   }
   if (checks.length === 0) {

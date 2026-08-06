@@ -16,6 +16,13 @@ import {
   POWDER_FLECK_OFFSETS_LIQUID,
 } from './ToppingsStation';
 
+// Display name per customer character key -- CustomerOrdering.js's own
+// CUSTOMER_CHARACTERS only has src/alt (image concerns), not a plain display
+// name, and order.customerCharacter (see below) only ever carries the raw
+// key ('annie' | 'otto' | 'katie'), so this is what turns that key into the
+// "<Name> Order" title ScoreCard.js's own score-card-title now shows.
+const CUSTOMER_CHARACTER_NAME = { annie: 'Annie', otto: 'Otto', katie: 'Katie' };
+
 // Where the finished drink (see incomingDrink below), carried over from
 // ToppingsStation's own "Send to Serving" drop-zone, comes to rest on top
 // of the empty plate in Serving.png -- purely decorative here (no drag/
@@ -56,6 +63,12 @@ const FinalCombination = ({
   customerNumber,
   onNavigate,
   onAdvance,
+  // This round's placed order (App.js's own currentOrder) -- only actually
+  // needed here for its customerCharacter field (see placeOrder in
+  // CustomerOrdering.js), so ScoreCard's title can name whichever character
+  // this round's customer was, same "read the real state" reasoning as
+  // incomingDrink itself.
+  order,
   incomingDrink,
   // Whether there's actually a next order this session (App.js's own
   // customerNumber < ORDERS_PER_SESSION) -- true for the first two of
@@ -312,6 +325,7 @@ const FinalCombination = ({
             threaded down through App.js the same way incomingDrink is. */}
         <ScoreCard
           customerNumber={customerNumber}
+          characterName={CUSTOMER_CHARACTER_NAME[order?.customerCharacter] ?? null}
           orderTakingScore={orderTakingScore}
           matchaScore={matchaScore}
           mixingScore={mixingScore}

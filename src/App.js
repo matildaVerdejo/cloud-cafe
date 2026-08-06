@@ -544,6 +544,7 @@ function App() {
           <div className="page-slide">
             <FinalCombination
               activeStep="final-combination"
+              order={currentOrder}
               incomingDrink={servedDrink}
               hasNextOrder={customerNumber < ORDERS_PER_SESSION}
               orderTakingScore={orderTakingScore}
