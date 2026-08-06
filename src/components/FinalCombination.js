@@ -4,7 +4,7 @@ import { useFlatFocusNav } from '../gameloop/useFlatFocusNav';
 import { playButtonClick } from '../gameloop/sfx';
 import ProgressBar from './ProgressBar';
 import ScoreCard from './ScoreCard';
-import { getMilkBoxFor, getMatchaBoxFor, getIceCupSlotPos, ICE_CUP_SIZE, CUP_TYPES } from './MilkSelection';
+import { getMilkBoxFor, getMatchaBoxFor, getIceCupSlotPos, getIceCubeSize, CUP_TYPES } from './MilkSelection';
 import {
   getSyrupBoxFor,
   getFoamBoxFor,
@@ -180,14 +180,23 @@ const FinalCombination = ({
                 forwards them straight through from Milk Selection's own
                 iceCubes count -- see that station's own beginSendToFinal
                 comment) -- same "don't silently drop them" fix, and the
-                same getIceCupSlotPos/ICE_CUP_SIZE reuse, as that screen's
+                same getIceCupSlotPos/getIceCubeSize reuse, as that screen's
                 own decorative ice-cube block. Purely decorative here, same
                 as everything else on this screen -- no drag/Enter
                 interaction, nothing left to do with the drink once it's
                 served. Rendered before the milk fill below, same paint-
                 order reasoning as every other screen's own ice cubes. */}
             {Array.from({ length: incomingDrink.iceCubes ?? 0 }).map((_, index) => {
-              const iceSlotPos = getIceCupSlotPos(index, finalDrinkSpot, finalDrinkSize, CUP_TYPES[finalCupType].bodyFrac);
+              const iceCubeSize = getIceCubeSize(finalCupType);
+              const iceSlotPos = getIceCupSlotPos(
+                index,
+                finalDrinkSpot,
+                finalDrinkSize,
+                CUP_TYPES[finalCupType].bodyFrac,
+                CUP_TYPES[finalCupType].iceYOffsetFrac,
+                CUP_TYPES[finalCupType].iceSpreadScale,
+                iceCubeSize
+              );
               return (
                 <img
                   key={index}
@@ -199,8 +208,8 @@ const FinalCombination = ({
                   style={{
                     left: `${iceSlotPos.left}%`,
                     top: `${iceSlotPos.top}%`,
-                    width: `${ICE_CUP_SIZE.width}%`,
-                    height: `${ICE_CUP_SIZE.height}%`,
+                    width: `${iceCubeSize.width}%`,
+                    height: `${iceCubeSize.height}%`,
                     pointerEvents: 'none',
                   }}
                 />

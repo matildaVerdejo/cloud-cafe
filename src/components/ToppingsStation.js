@@ -5,7 +5,7 @@ import { getActionFromKeyEvent, shouldDebounceEnter } from '../gameloop/pal';
 import { playButtonClick, playLiquidPouring } from '../gameloop/sfx';
 import ProgressBar from './ProgressBar';
 import OrderReceiptButton from './OrderReceiptButton';
-import { getMilkBoxFor, getMatchaBoxFor, TABLE_SIZE, CUP_TYPES, getIceCupSlotPos, ICE_CUP_SIZE } from './MilkSelection';
+import { getMilkBoxFor, getMatchaBoxFor, TABLE_SIZE, CUP_TYPES, getIceCupSlotPos, getIceCubeSize } from './MilkSelection';
 import { WHISK_FLIP_DEG } from './MatchaMaking';
 import { scoreToppings } from '../gameloop/scoring';
 
@@ -2339,7 +2339,7 @@ const ToppingsStation = ({
                 dropped the moment the drink reached this screen. Milk
                 Selection's own beginSendDrink now also hands off an
                 iceCubes count (see its own comment), and getIceCupSlotPos/
-                ICE_CUP_SIZE are reused directly from there (both exported
+                getIceCubeSize are reused directly from there (both exported
                 for exactly this) so the cubes land in the same seven fixed
                 cup-relative spots they already use, positioned off
                 incomingDrinkRenderPos/incomingDrinkSize like every other
@@ -2352,7 +2352,16 @@ const ToppingsStation = ({
                 the player's ice decisions are already locked in by this
                 screen. */}
             {Array.from({ length: incomingDrink.iceCubes ?? 0 }).map((_, index) => {
-              const iceSlotPos = getIceCupSlotPos(index, incomingDrinkRenderPos, incomingDrinkSize, CUP_TYPES[incomingCupType].bodyFrac);
+              const iceCubeSize = getIceCubeSize(incomingCupType);
+              const iceSlotPos = getIceCupSlotPos(
+                index,
+                incomingDrinkRenderPos,
+                incomingDrinkSize,
+                CUP_TYPES[incomingCupType].bodyFrac,
+                CUP_TYPES[incomingCupType].iceYOffsetFrac,
+                CUP_TYPES[incomingCupType].iceSpreadScale,
+                iceCubeSize
+              );
               return (
                 <img
                   key={index}
@@ -2363,8 +2372,8 @@ const ToppingsStation = ({
                   style={{
                     left: `${iceSlotPos.left}%`,
                     top: `${iceSlotPos.top}%`,
-                    width: `${ICE_CUP_SIZE.width}%`,
-                    height: `${ICE_CUP_SIZE.height}%`,
+                    width: `${iceCubeSize.width}%`,
+                    height: `${iceCubeSize.height}%`,
                     pointerEvents: 'none',
                   }}
                 />

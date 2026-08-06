@@ -190,6 +190,12 @@ export const CUP_TYPES = {
     shelfSize: PLASTIC_SHELF_SIZE,
     tableSpot: PLASTIC_CUP_SPOTS.table,
     tableSize: PLASTIC_TABLE_SIZE,
+    // Only the plastic cup needs this -- ICE_CUP_SLOT_FRACTIONS' y values
+    // were tuned against the glass cup's own taper (see the comment on
+    // getIceCupSlotPos below) and land noticeably too high once rendered
+    // against the plastic cup's own art/proportions. This nudges ice cubes
+    // down by this fraction of the cup's own height, glass/mug untouched.
+    iceYOffsetFrac: 0.05,
   },
   mug: {
     src: './MugCup.png',
@@ -202,6 +208,13 @@ export const CUP_TYPES = {
     // Left undefined for glass/plastic so getMilkBoxFor/getIceCupSlotPos's
     // own default parameter (the full box, no rescaling) applies instead.
     bodyFrac: MUG_CUP_BODY_FRAC,
+    // Ice cubes read too small, too clustered, and sit too high once
+    // rendered against the mug's own (much stockier/shorter) proportions --
+    // these three only apply to the mug, glass/plastic untouched. See
+    // getIceCupSlotPos/getIceCubeSize below for how each is actually used.
+    iceYOffsetFrac: 0.01,
+    iceSizeScale: 1.15,
+    iceSpreadScale: 1.4,
   },
 };
 
@@ -505,7 +518,32 @@ const ICE_BOX_SPOTS = [
   { left: 12.93, top: 77.13 },
 ];
 const ICE_BOX_SIZE = { width: 5.03, height: 9.196 };
-export const ICE_CUP_SIZE = { width: 4, height: 4.11 };
+// width/height are percentages of the container's own width/height
+// respectively (1920x1080 -- see .mixing-stage's aspect-ratio in
+// MilkSelection.css), which are NOT the same pixel scale as each other, so
+// matching IceCube.png's true on-screen aspect ratio to the ice box's own
+// (ICE_BOX_SIZE) takes converting through actual pixels rather than just
+// picking width/height percentages that "look" proportionate. This used to
+// be { width: 4, height: 4.11 } -- nearly a 1:1 percentage ratio -- which
+// in real pixels (4% of 1920 x 4.11% of 1080 = 76.8 x 44.4) came out
+// visibly flattened/squished compared to the box's own true ~0.97 (nearly
+// square) aspect ratio. These values instead preserve that same true
+// aspect ratio while keeping roughly the same on-screen area as before, so
+// placed cubes read as a smaller, undistorted version of the box art
+// rather than a stretched one.
+export const ICE_CUP_SIZE = { width: 3.3, height: 6.05 };
+
+// Scales ICE_CUP_SIZE up/down per cup type -- only the mug sets
+// iceSizeScale (its cubes read too small at the glass-tuned base size, see
+// CUP_TYPES.mug.iceSizeScale), everything else falls through to the
+// default (unscaled) size. Kept as its own helper, rather than inlined at
+// each call site, so getIceCupSlotPos's own cubeSize param and the JSX's
+// render width/height always agree on the exact same size.
+export function getIceCubeSize(cupType) {
+  const scale = CUP_TYPES[cupType]?.iceSizeScale || 1;
+  if (scale === 1) return ICE_CUP_SIZE;
+  return { width: ICE_CUP_SIZE.width * scale, height: ICE_CUP_SIZE.height * scale };
+}
 // Cluster near the bottom of the glass instead of floating at the rim --
 // y values follow the taper of GlassCup.png (verified against a stretched
 // preview of the art). Five cubes form a front row along the glass floor;
@@ -513,13 +551,13 @@ export const ICE_CUP_SIZE = { width: 4, height: 4.11 };
 // cubes (rather than spread out to the sides, which is what used to poke
 // them slightly outside the glass's tapered walls).
 const ICE_CUP_SLOT_FRACTIONS = [
-  { x: 0.28, y: 0.68 },
-  { x: 0.72, y: 0.68 },
+  { x: 0.43, y: 0.715 },
+  { x: 0.57, y: 0.715 },
   { x: 0.30, y: 0.756 },
   { x: 0.40, y: 0.789 },
   { x: 0.50, y: 0.80 },
   { x: 0.60, y: 0.789 },
-  { x: 0.70, y: 0.756 },
+  { x: 0.70, y: 0.766 },
 ];
 
 // Takes the cup's own *current* position AND size (cupPos/cupSize, passed
@@ -539,18 +577,47 @@ const ICE_CUP_SLOT_FRACTIONS = [
 // into the mug's own narrower body region instead of its full box (which
 // also has to fit the handle), so ice cubes land inside the mug's actual
 // opening instead of drifting into that empty handle space. The y
-// fraction is left untouched either way (only bodyFrac.left/right narrow
-// the horizontal placement -- there's no equivalent vertical squeeze here,
-// same "not pixel-perfect, a reasonable approximation" caveat as always).
-export function getIceCupSlotPos(index, cupPos, cupSize, bodyFrac = { left: 0, right: 1 }) {
-  const frac = ICE_CUP_SLOT_FRACTIONS[index % ICE_CUP_SLOT_FRACTIONS.length];
+// fraction itself is left untouched by bodyFrac (only left/right narrow
+// the horizontal placement -- there's no equivalent horizontal-only
+// squeeze concept vertically).
+//
+// yOffsetFrac -- same idea as bodyFrac but vertical and additive rather
+// than a rescale: ICE_CUP_SLOT_FRACTIONS' y values were only ever tuned
+// against the glass cup's own taper (see CUP_TYPES/activeCup in the
+// component), so this shifts cubes down by this fraction of the cup's own
+// height for whichever cup type needs the correction (currently plastic
+// and mug -- see CUP_TYPES.plastic/mug.iceYOffsetFrac). Defaults to 0 (no
+// shift), same "reasonable approximation, not pixel-perfect" caveat as
+// bodyFrac above.
+//
+// spreadScale -- pulls/pushes every cube's x fraction toward/away from the
+// cluster's own horizontal center (0.5) by this factor, so a >1 value
+// spaces cubes further apart without needing a whole second
+// ICE_CUP_SLOT_FRACTIONS table. Only the mug currently sets this (its
+// cubes read too clustered together at the glass-tuned spacing -- see
+// CUP_TYPES.mug.iceSpreadScale); defaults to 1 (no change).
+//
+// cubeSize -- defaults to ICE_CUP_SIZE, but callers pass a per-cup-type
+// scaled size (see getIceCubeSize below) so the returned left/top still
+// centers correctly on whatever size the cube will actually render at.
+export function getIceCupSlotPos(
+  index,
+  cupPos,
+  cupSize,
+  bodyFrac = { left: 0, right: 1 },
+  yOffsetFrac = 0,
+  spreadScale = 1,
+  cubeSize = ICE_CUP_SIZE
+) {
+  const rawFrac = ICE_CUP_SLOT_FRACTIONS[index % ICE_CUP_SLOT_FRACTIONS.length];
+  const frac = { x: 0.5 + (rawFrac.x - 0.5) * spreadScale, y: rawFrac.y };
   const bodyLeft = cupPos.left + bodyFrac.left * cupSize.width;
   const bodyWidth = (bodyFrac.right - bodyFrac.left) * cupSize.width;
   const centerX = bodyLeft + frac.x * bodyWidth;
-  const centerY = cupPos.top + frac.y * cupSize.height;
+  const centerY = cupPos.top + (frac.y + yOffsetFrac) * cupSize.height;
   return {
-    left: centerX - ICE_CUP_SIZE.width / 2,
-    top: centerY - ICE_CUP_SIZE.height / 2,
+    left: centerX - cubeSize.width / 2,
+    top: centerY - cubeSize.height / 2,
   };
 }
 
@@ -1152,7 +1219,17 @@ const MilkSelection = ({
     // if it hasn't been placed yet, or its cup slot if it has, so grabbing
     // a placed cube picks it up from the cup instead of jumping back to
     // the box.
-    const base = icePlaced[index] ? getIceCupSlotPos(index, cupRenderPos, cupRenderSize, CUP_TYPES[activeCup].bodyFrac) : ICE_BOX_SPOTS[index];
+    const base = icePlaced[index]
+      ? getIceCupSlotPos(
+          index,
+          cupRenderPos,
+          cupRenderSize,
+          CUP_TYPES[activeCup].bodyFrac,
+          CUP_TYPES[activeCup].iceYOffsetFrac,
+          CUP_TYPES[activeCup].iceSpreadScale,
+          getIceCubeSize(activeCup)
+        )
+      : ICE_BOX_SPOTS[index];
     e.currentTarget.setPointerCapture(e.pointerId);
     iceDragStartRef.current = {
       pointerX: e.clientX,
@@ -1827,8 +1904,20 @@ const MilkSelection = ({
           // an unplaced cube still sitting in the box is unaffected.
           if (placed && cupSendStage === 'sent') return null;
           const dragging = iceDrag?.index === index;
-          const pos = dragging ? iceDrag : placed ? getIceCupSlotPos(index, cupRenderPos, cupRenderSize, CUP_TYPES[activeCup].bodyFrac) : boxSpot;
-          const size = placed ? ICE_CUP_SIZE : ICE_BOX_SIZE;
+          const pos = dragging
+            ? iceDrag
+            : placed
+            ? getIceCupSlotPos(
+                index,
+                cupRenderPos,
+                cupRenderSize,
+                CUP_TYPES[activeCup].bodyFrac,
+                CUP_TYPES[activeCup].iceYOffsetFrac,
+                CUP_TYPES[activeCup].iceSpreadScale,
+                getIceCubeSize(activeCup)
+              )
+            : boxSpot;
+          const size = placed ? getIceCubeSize(activeCup) : ICE_BOX_SIZE;
           const leaving = placed && cupSendStage === 'vanishing';
           return (
             <img
