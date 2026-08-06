@@ -406,8 +406,16 @@ export function scoreMixingDrink({ cupType, iceCubes, milkType, order }) {
 //   foamKey: ToppingsStation's own cupFoam?.key ('matcha-cold-foam' | 'reg-cold-foam' | 'banana-foam' | null).
 //   powderKey: ToppingsStation's own cupPowder?.key ('guava-powder' | 'matcha-powder' | null).
 //   mintLeavesApplied: ToppingsStation's own cupMintLeaf boolean.
+//   syrupSpillCount: ToppingsStation's own syrupMessUpCountRef.current -- the
+//     raw count of every mess-up during the syrup pour's own balance
+//     minigame (ball drifted out of the green zone), same "raw ref count,
+//     not the capped spills array length" reasoning as scoreMatchaMaking's
+//     own spillCount. Only actually graded (see the 'syrup-pour' check
+//     below) when syrupKey is set -- no syrup poured means nothing to grade
+//     here, same as every other check in this file only applying when its
+//     own underlying action actually happened.
 //   order: the placed order from CustomerOrdering.
-export function scoreToppings({ syrupKey, foamKey, powderKey, mintLeavesApplied, order }) {
+export function scoreToppings({ syrupKey, foamKey, powderKey, mintLeavesApplied, syrupSpillCount, order }) {
   const applied = [
     syrupKey,
     foamKey ? FOAM_KEY_TO_ORDER[foamKey] ?? foamKey : null,
@@ -436,6 +444,20 @@ export function scoreToppings({ syrupKey, foamKey, powderKey, mintLeavesApplied,
         detail: "Added, but the customer didn't ask for this.",
       });
     });
+  // Graded like MatchaMaking's own 'whisk' check (correct only with zero
+  // mess-ups) -- but, unlike whisking (which always happens once per
+  // round), this only shows up at all if a syrup was actually poured.
+  if (syrupKey) {
+    checks.push({
+      key: 'syrup-pour',
+      label: 'Syrup pour',
+      correct: syrupSpillCount === 0,
+      detail:
+        syrupSpillCount === 0
+          ? 'Poured clean, no spills.'
+          : `Spilled ${syrupSpillCount} time${syrupSpillCount === 1 ? '' : 's'} while pouring.`,
+    });
+  }
   if (checks.length === 0) {
     checks.push({
       key: 'none',

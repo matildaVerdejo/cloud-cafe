@@ -323,11 +323,15 @@ const TOPPING_LABEL_GAP = -0.5;
 // specific to syrup: the bottle does a full 180deg flip (reusing
 // MatchaMaking's own WHISK_FLIP_DEG -- a syrup bottle tips all the way
 // upside-down to pour, not a partial tilt like the milk bottles) rather
-// than staying upright, and while it's flipped the player can nudge it
-// left/right (see the pourOffset state and its own capture-phase keydown
-// effect in the component below) to aim the stream, purely for feel -- it
-// doesn't change where the syrup ends up (see .cup-syrup-fill below,
-// always anchored to the same spot regardless of aim).
+// than staying upright, and while it's flipped a balance minigame runs
+// (see SYRUP_MIX_BAR_WIDTH and the physics effect further down) -- keep a
+// small ball inside the green zone using Left/Right or it spills syrup onto
+// the counter and costs points (see scoreToppings' own syrup-pour check).
+// The bottle/falling stream still visually nudge left/right same as before,
+// just now as a side effect of the ball's own live position rather than a
+// separate purely-cosmetic control -- it still doesn't change where the
+// syrup fill itself ends up (see .cup-syrup-fill below, always anchored to
+// the same spot regardless).
 //
 // The two syrups sink to the BOTTOM of the drink rather than sitting on
 // top (matcha's own spot) -- .cup-syrup-fill (ToppingsStation.css) is a
@@ -356,9 +360,16 @@ function isOverIncomingCup(leftPct, topPct) {
 }
 
 const SYRUP_MOVE_MS = 350; // time to glide to the hover spot
-const SYRUP_POUR_MS = 2200; // how long 'pouring' holds (long enough to actually use the left/right aim) before gliding back home
-const SYRUP_MOVE_STEP = 2; // % nudge per Left/Right press while pouring
-const SYRUP_MOVE_RANGE = 8; // max % the bottle (and stream) can be nudged off-center in either direction
+// How long 'pouring' holds -- the whole balance-minigame window (see
+// SYRUP_MIX_BAR_WIDTH below) -- before gliding back home. Matches
+// MatchaMaking's own WHISK_MIX_DURATION_MS exactly, per request: same game
+// feel/length as the whisking challenge, not a shorter syrup-specific pour.
+const SYRUP_POUR_MS = 10000;
+// Max % the bottle (and stream) can be nudged off-center in either
+// direction -- no longer a manual per-keypress step (see SYRUP_MIX_BAR_WIDTH
+// below), just the clamp range the balance minigame's ball position gets
+// mapped into.
+const SYRUP_MOVE_RANGE = 8;
 const SYRUP_SNAP_FRACTION = 0.5; // same "drop close to home, it snaps the rest of the way" idea as Milk Selection's BOTTLE_SNAP_FRACTION
 const SYRUP_CLICK_MAX_MOVE_PCT = 1; // below this much movement, a pointer-down -> up is a click, not a drag
 
@@ -373,6 +384,97 @@ const SYRUP_STREAM_COLORS = {
   // "one palette, one source of truth" idea as the other two.
   'honey-syrup': 'rgba(214, 158, 46, 0.92)',
 };
+
+// ---- Syrup pour balance minigame ------------------------------------------
+// Same "keep a ball inside the green zone using Left/Right, or it drifts off
+// and spills" challenge as MatchaMaking's own whisking minigame (see that
+// file's own big comment above MIX_BAR_WIDTH for the full physics model and
+// why "held" is tracked via a grace window rather than keyup) -- reused here
+// for syrup specifically, not foam/powder, per request, since syrup is the
+// one topping pair here that's an actual poured liquid. Per request, this is
+// meant to feel IDENTICAL to the whisking challenge, not just similar --
+// every physics constant below is a straight copy of MatchaMaking's own
+// MIX_* value (not independently tuned), and SYRUP_POUR_MS above now equals
+// WHISK_MIX_DURATION_MS exactly, so the pour holds open for the same 10s
+// window whisking does. REPLACES the old purely-cosmetic Left/Right aim
+// effect (pourOffset stepped by a fixed SYRUP_MOVE_STEP per keypress, with
+// no gameplay effect) -- pourOffset is now DERIVED from the ball's own
+// position every tick instead (see the physics effect in the component
+// below), so the falling stream/flipped bottle still visually track
+// Left/Right, just as a side effect of the real minigame now.
+const SYRUP_MIX_BAR_WIDTH = 20; // % of container -- narrower than MatchaMaking's own MIX_BAR_WIDTH (26) to fit comfortably above this station's smaller drink (purely a layout fit, not a physics constant, so this one's NOT a straight copy)
+const SYRUP_MIX_BAR_HEIGHT = 3.2;
+// Extra clearance above SYRUP_HOVER_GAP's own hovering/flipped bottle,
+// which sits at this same moment right above the drink -- keeps the bar
+// from overlapping it.
+const SYRUP_MIX_BAR_CLEARANCE = 7;
+function getSyrupMixBarPos() {
+  return {
+    left: INCOMING_DRINK_SPOT.left + INCOMING_DRINK_SIZE.width / 2 - SYRUP_MIX_BAR_WIDTH / 2,
+    top: INCOMING_DRINK_SPOT.top - SYRUP_MIX_BAR_HEIGHT - SYRUP_MIX_BAR_CLEARANCE,
+  };
+}
+// Matches MatchaMaking's own MIX_ZONE_WIDTH_FRAC exactly -- see this
+// section's own big comment above for why these are straight copies now.
+const SYRUP_MIX_ZONE_WIDTH_FRAC = 0.26;
+const SYRUP_MIX_ZONE_LEFT_FRAC = (1 - SYRUP_MIX_ZONE_WIDTH_FRAC) / 2;
+const SYRUP_MIX_BALL_WIDTH_FRAC = 0.06; // matches MatchaMaking's own MIX_BALL_WIDTH_FRAC
+const SYRUP_MIX_HOLD_ACCEL = 150; // matches MatchaMaking's own MIX_HOLD_ACCEL
+const SYRUP_MIX_HOLD_GRACE_MS = 150; // matches MatchaMaking's own MIX_HOLD_GRACE_MS
+const SYRUP_MIX_DRIFT_AMPLITUDE = 34; // matches MatchaMaking's own MIX_DRIFT_AMPLITUDE
+const SYRUP_MIX_DRIFT_ANGULAR_FREQ = 1.3; // matches MatchaMaking's own MIX_DRIFT_ANGULAR_FREQ
+const SYRUP_MIX_FRICTION_HALF_LIFE_S = 0.35; // matches MatchaMaking's own MIX_FRICTION_HALF_LIFE_S
+const SYRUP_MIX_SPILL_INTERVAL_MS = 550; // matches MatchaMaking's own MIX_SPILL_INTERVAL_MS
+
+// ---- Syrup spill blobs -- one per mess-up (up to SYRUP_SPILL_STAGE_COUNT),
+// on whichever side of the drink the ball actually drifted toward -- same
+// escalating-puddle-trail idea as MatchaMaking's own PNG-based spill
+// puddles (see its RIGHT_SPILL_BASE/LEFT_SPILL_BASE/SPILL_SLOT_STEP, which
+// SYRUP_RIGHT_SPILL_BASE/SYRUP_LEFT_SPILL_BASE/SYRUP_SPILL_SLOT_STEP below
+// mirror). Per request, these reuse that SAME Spill1-4.png hand-drawn art
+// (the 'cafe-grade' set -- the original, unrecolored art MatchaMaking's own
+// classic-grade/ceremonial-grade sets are themselves derived from) rather
+// than a shape drawn here from scratch, just tinted to whichever syrup is
+// actually pouring (SYRUP_STREAM_COLORS) instead of matcha's own green.
+// Recoloring an arbitrary PNG to a runtime color isn't something a plain
+// <img> can do -- the trick is rendering a <div> with the PNG set as a CSS
+// mask (mask-image) instead of a src, and a background-color behind that
+// mask: the mask clips the div down to exactly the art's own opaque shape,
+// and the background-color shows through only inside that shape, in
+// whatever color gets set inline per spill (see .syrup-spill-puddle in
+// ToppingsStation.css for the mask properties themselves).
+const SYRUP_SPILL_STAGE_COUNT = 4;
+const SYRUP_SPILL_IMAGES = ['./Spill1.png', './Spill2.png', './Spill3.png', './Spill4.png'];
+// Each PNG's own native pixel size -- copied directly from MatchaMaking.js's
+// own SPILL_IMAGE_DIMS (measured off these exact same source files) so the
+// mask isn't stretched/distorted away from its real shape.
+const SYRUP_SPILL_IMAGE_DIMS = [
+  { width: 102, height: 85 },
+  { width: 123, height: 136 },
+  { width: 275, height: 206 },
+  { width: 238, height: 193 },
+];
+// Rendered height (as a % of the container), one per stage -- copied
+// directly from MatchaMaking.js's own SPILL_STAGE_HEIGHTS/SPILL_STAGE_
+// ROTATIONS for the exact same "escalating size/rotation per stage" look,
+// same "identical feel" request the minigame's own physics constants
+// already follow. SYRUP_SPILL_DIMS derives width from height the same
+// width-from-height aspect-ratio conversion this project uses throughout
+// (see BOTTLE_WIDTH's comment in MilkSelection.js).
+const SYRUP_SPILL_STAGE_HEIGHTS = [5, 6.2, 7.5, 9];
+const SYRUP_SPILL_STAGE_ROTATIONS = [-8, 10, -6, 5];
+const SYRUP_SPILL_DIMS = SYRUP_SPILL_STAGE_HEIGHTS.map((heightPercent, i) => ({
+  height: heightPercent,
+  width: (heightPercent * (SYRUP_SPILL_IMAGE_DIMS[i].width / SYRUP_SPILL_IMAGE_DIMS[i].height)) / (16 / 9),
+}));
+const SYRUP_RIGHT_SPILL_BASE = { leftFrac: 1.08, topFrac: 0.82 };
+const SYRUP_LEFT_SPILL_BASE = { leftFrac: -0.08, topFrac: 0.82 };
+const SYRUP_SPILL_SLOT_STEP = { leftFrac: 0.05, topFrac: 0.07 };
+// Once all SYRUP_SPILL_STAGE_COUNT blobs are down, further mess-ups grow
+// them together instead of stacking indefinitely -- same SPILL_GROWTH_STEP/
+// SPILL_GROWTH_CAP idea as MatchaMaking's own spillGrowth.
+const SYRUP_SPILL_GROWTH_STEP = 0.08;
+const SYRUP_SPILL_GROWTH_CAP = 1.5;
 
 // The bottom portion of the milk box's own shape (see getMilkBoxFor in
 // MilkSelection.js) -- covers the bottom SYRUP_HEIGHT_FRAC of it, anchored
@@ -1125,9 +1227,10 @@ const ToppingsStation = ({
   //                 to the hover-over-cup spot and flipping upside-down.
   //   'pouring'  -- arrived; cupSyrup is set (the fill appears) and it holds
   //                 the flip for SYRUP_POUR_MS -- during which Left/Right
-  //                 nudges pourOffset (see the effect below) -- before
-  //                 gliding back home and returning to 'idle' on its own,
-  //                 same reusable-not-one-time-use item as the milk bottles.
+  //                 plays the balance minigame (see SYRUP_MIX_BAR_WIDTH/the
+  //                 physics effect further down) -- before gliding back home
+  //                 and returning to 'idle' on its own, same reusable-not-
+  //                 one-time-use item as the milk bottles.
   const [pourStage, setPourStage] = useState('idle');
   const [pouringKey, setPouringKey] = useState(null); // 'guava-syrup' | 'mint-syrup' | 'honey-syrup' | null
   // The "liquid pour" Audio instance currently playing for this syrup pour
@@ -1135,16 +1238,40 @@ const ToppingsStation = ({
   // Selection's own pourAudioRef, purely so it can be cut short the moment
   // SYRUP_POUR_MS ends rather than playing out past the pour itself.
   const pourAudioRef = useRef(null);
-  // Horizontal nudge (see SYRUP_MOVE_STEP/SYRUP_MOVE_RANGE above), reset to
-  // 0 at the start of every pour. Purely cosmetic -- see the big comment on
-  // getSyrupBoxFor above for why it doesn't move where the syrup actually
-  // lands.
+  // Horizontal nudge (see SYRUP_MOVE_RANGE above), reset to 0 at the start
+  // of every pour and, since the balance minigame replaced the old manual
+  // aim, now derived every tick from the ball's own live position (see the
+  // physics effect further down) rather than stepped by keypresses
+  // directly. Still purely cosmetic for where the fill itself lands -- see
+  // the big comment on getSyrupBoxFor above for why it doesn't move where
+  // the syrup actually ends up.
   const [pourOffset, setPourOffset] = useState(0);
   // The drink's own persistent "has syrup been poured in" state -- doesn't
   // reset on its own (only a fresh pour re-sets it), same "second pour just
   // restarts this rather than accumulating" caveat as Milk Selection's
   // cupMilk/cupMatcha. { key: 'guava-syrup' | 'mint-syrup' | 'honey-syrup' } | null.
   const [cupSyrup, setCupSyrup] = useState(null);
+
+  // ---- Syrup pour balance minigame state -- see the big comment on
+  // SYRUP_MIX_BAR_WIDTH above. Same ref-driven-direct-DOM-writes shape
+  // MatchaMaking's own mixBallRef/mixPositionRef/mixVelocityRef use for the
+  // ball itself (smooth 60fps physics without a React re-render every
+  // frame); spills/spillGrowth stay as real state since they only update a
+  // handful of times per pour and actually need to mount new elements.
+  const syrupBallRef = useRef(null);
+  const syrupBallPositionRef = useRef(0); // % along the bar, left edge of the ball
+  const syrupBallVelocityRef = useRef(0); // %/second
+  const [syrupSpills, setSyrupSpills] = useState([]); // [{ side, left, top }]
+  // Mirrors syrupSpills, same "tick() needs a synchronous read" reasoning as
+  // MatchaMaking's own spillsRef.
+  const syrupSpillsRef = useRef([]);
+  const [syrupSpillGrowth, setSyrupSpillGrowth] = useState(0);
+  // Raw count of every mess-up during the CURRENT (or most recently
+  // finished) syrup pour -- reset at the start of each fresh pour attempt
+  // (see the physics effect below), read once the drink is actually sent on
+  // to Serving (see beginSendToFinal's own scoreToppings call further down)
+  // so the syrup-pour check there grades this exact attempt.
+  const syrupMessUpCountRef = useRef(0);
 
   // ---- Matcha-cold-foam/reg-cold-foam: pick up, pour on top of the drink,
   // or snap back home -- identical shape to the syrup state just above, see
@@ -1305,31 +1432,149 @@ const ToppingsStation = ({
     return undefined;
   }, [pourStage, pouringKey, toppingItems]);
 
-  // Left/Right aim while pouring -- a capture-phase window listener (rather
-  // than a plain onKeyDown on the bottle) so it runs and can
-  // stopImmediatePropagation() BEFORE useFlatFocusNav's own bubble-phase
-  // window listener gets a chance to treat Left/Right as "move focus to the
-  // nearest focusable element" instead -- that hook attaches its listener
-  // unconditionally at mount (bubble phase, the default), so without this
-  // capture-phase intercept every Left/Right press during a pour would just
-  // shift keyboard focus around the screen rather than nudging the stream.
-  // Only attached while an actual syrup pour is in progress, and removed
-  // the instant it isn't, so ordinary D-pad navigation is completely
-  // unaffected the rest of the time.
+  // ---- Syrup pour balance minigame physics -- runs for the whole
+  // 'pouring' stage, same overall shape as MatchaMaking's own
+  // whiskStage === 'mixing' physics effect (a single requestAnimationFrame
+  // loop, ball position written straight to the DOM via syrupBallRef every
+  // frame rather than through React state -- see that file's own big
+  // comment for why) -- just scoped to SYRUP_POUR_MS instead of WHISK_MIX_
+  // DURATION_MS, and spilling plain colored blobs (SYRUP_RIGHT_SPILL_BASE/
+  // SYRUP_LEFT_SPILL_BASE above) instead of PNG puddles. This REPLACES the
+  // old plain Left/Right-steps-pourOffset-directly effect that used to live
+  // here -- pourOffset is now derived from the ball's own live position
+  // every tick (see the tick() closure below) instead, so the falling
+  // stream/flipped bottle still visually track Left/Right, just as a side
+  // effect of the real minigame now, not a separate cosmetic-only control.
+  // Same capture-phase + stopImmediatePropagation reasoning the old effect
+  // already had (BEFORE useFlatFocusNav's own bubble-phase window listener
+  // can treat Left/Right as "move focus" instead), only attached while an
+  // actual syrup pour is in progress.
   useEffect(() => {
     if (pourStage !== 'pouring' || !pouringKey) return undefined;
-    const handleAimKeyDown = (e) => {
+
+    const ballWidthPercent = SYRUP_MIX_BALL_WIDTH_FRAC * 100;
+    const maxPosition = 100 - ballWidthPercent;
+    // Starts centered in the bar, same "a beat before the drift matters"
+    // reasoning as MatchaMaking's own mixPositionRef reset.
+    syrupBallPositionRef.current = 50 - ballWidthPercent / 2;
+    syrupBallVelocityRef.current = 0;
+    syrupMessUpCountRef.current = 0;
+    syrupSpillsRef.current = [];
+    setSyrupSpills([]);
+    setSyrupSpillGrowth(0);
+    setPourOffset(0);
+
+    const zoneLeftPercent = SYRUP_MIX_ZONE_LEFT_FRAC * 100;
+    const zoneRightPercent = zoneLeftPercent + SYRUP_MIX_ZONE_WIDTH_FRAC * 100;
+
+    // Timestamps (performance.now()-space) of the most recent qualifying
+    // keydown for each direction -- same MIX_HOLD_GRACE_MS-style "held"
+    // smoothing as MatchaMaking's own physics effect.
+    let leftHeldUntil = 0;
+    let rightHeldUntil = 0;
+
+    const handleKeyDown = (e) => {
       const action = getActionFromKeyEvent(e);
       if (action !== 'Left' && action !== 'Right') return;
       e.preventDefault();
       e.stopImmediatePropagation();
-      setPourOffset((prev) => {
-        const next = prev + (action === 'Right' ? SYRUP_MOVE_STEP : -SYRUP_MOVE_STEP);
-        return Math.min(SYRUP_MOVE_RANGE, Math.max(-SYRUP_MOVE_RANGE, next));
-      });
+      const until = performance.now() + SYRUP_MIX_HOLD_GRACE_MS;
+      if (action === 'Right') {
+        rightHeldUntil = until;
+      } else {
+        leftHeldUntil = until;
+      }
     };
-    window.addEventListener('keydown', handleAimKeyDown, { capture: true });
-    return () => window.removeEventListener('keydown', handleAimKeyDown, { capture: true });
+    window.addEventListener('keydown', handleKeyDown, { capture: true });
+
+    const startTime = performance.now();
+    let lastTime = startTime;
+    let lastSpillAt = -Infinity;
+    let rafId;
+
+    const tick = (now) => {
+      const dt = Math.min((now - lastTime) / 1000, 0.05);
+      lastTime = now;
+      const elapsedMs = now - startTime;
+
+      if (now < rightHeldUntil) syrupBallVelocityRef.current += SYRUP_MIX_HOLD_ACCEL * dt;
+      if (now < leftHeldUntil) syrupBallVelocityRef.current -= SYRUP_MIX_HOLD_ACCEL * dt;
+
+      const drift = SYRUP_MIX_DRIFT_AMPLITUDE * Math.sin((elapsedMs / 1000) * SYRUP_MIX_DRIFT_ANGULAR_FREQ);
+      syrupBallVelocityRef.current += drift * dt;
+      syrupBallVelocityRef.current *= 0.5 ** (dt / SYRUP_MIX_FRICTION_HALF_LIFE_S);
+      syrupBallPositionRef.current += syrupBallVelocityRef.current * dt;
+
+      // Soft bounce off the ends, same reasoning as MatchaMaking's own
+      // mixPositionRef clamp.
+      if (syrupBallPositionRef.current <= 0) {
+        syrupBallPositionRef.current = 0;
+        syrupBallVelocityRef.current = Math.abs(syrupBallVelocityRef.current) * 0.3;
+      } else if (syrupBallPositionRef.current >= maxPosition) {
+        syrupBallPositionRef.current = maxPosition;
+        syrupBallVelocityRef.current = -Math.abs(syrupBallVelocityRef.current) * 0.3;
+      }
+
+      const ballEl = syrupBallRef.current;
+      if (ballEl) {
+        ballEl.style.left = `${syrupBallPositionRef.current}%`;
+        const ballCenter = syrupBallPositionRef.current + ballWidthPercent / 2;
+        const inZone = ballCenter >= zoneLeftPercent && ballCenter <= zoneRightPercent;
+        ballEl.classList.toggle('in-zone', inZone);
+
+        // The stream/bottle's own cosmetic aim now follows the ball itself
+        // -- see this effect's own big comment above for why. Maps the
+        // ball's center (0-100 along the bar) onto the same
+        // -SYRUP_MOVE_RANGE..+SYRUP_MOVE_RANGE range the old manual-step
+        // version already used, so nothing downstream (syrupPourLeft, the
+        // dragged-bottle render position) needed to change.
+        const normalized = (ballCenter - 50) / 50;
+        const offset = Math.max(-SYRUP_MOVE_RANGE, Math.min(SYRUP_MOVE_RANGE, normalized * SYRUP_MOVE_RANGE));
+        setPourOffset(offset);
+
+        // Sloppy pouring (ball outside the green zone) spills syrup out
+        // onto the counter on whichever side it drifted toward --
+        // retriggers every SYRUP_MIX_SPILL_INTERVAL_MS for as long as the
+        // ball stays out, same "keeps looking messy, not a one-shot splash"
+        // reasoning as MatchaMaking's own spill logic. The first
+        // SYRUP_SPILL_STAGE_COUNT mess-ups each add another colored blob;
+        // every mess-up after that just grows the blobs already down
+        // instead (see SYRUP_SPILL_GROWTH_STEP above).
+        if (!inZone && elapsedMs - lastSpillAt >= SYRUP_MIX_SPILL_INTERVAL_MS) {
+          lastSpillAt = elapsedMs;
+          const side = ballCenter < zoneLeftPercent ? 'left' : 'right';
+          syrupMessUpCountRef.current += 1;
+          if (syrupMessUpCountRef.current <= SYRUP_SPILL_STAGE_COUNT) {
+            const sameSideBefore = syrupSpillsRef.current.filter((s) => s.side === side).length;
+            const base = side === 'right' ? SYRUP_RIGHT_SPILL_BASE : SYRUP_LEFT_SPILL_BASE;
+            const leftFrac =
+              side === 'right'
+                ? base.leftFrac + sameSideBefore * SYRUP_SPILL_SLOT_STEP.leftFrac
+                : base.leftFrac - sameSideBefore * SYRUP_SPILL_SLOT_STEP.leftFrac;
+            const topFrac = base.topFrac + sameSideBefore * SYRUP_SPILL_SLOT_STEP.topFrac;
+            const entry = {
+              side,
+              left: INCOMING_DRINK_SPOT.left + leftFrac * INCOMING_DRINK_SIZE.width,
+              top: INCOMING_DRINK_SPOT.top + topFrac * INCOMING_DRINK_SIZE.height,
+            };
+            syrupSpillsRef.current = [...syrupSpillsRef.current, entry];
+            setSyrupSpills(syrupSpillsRef.current);
+          } else {
+            setSyrupSpillGrowth((g) => g + 1);
+          }
+        }
+      }
+
+      if (elapsedMs < SYRUP_POUR_MS) {
+        rafId = requestAnimationFrame(tick);
+      }
+    };
+    rafId = requestAnimationFrame(tick);
+
+    return () => {
+      cancelAnimationFrame(rafId);
+      window.removeEventListener('keydown', handleKeyDown, { capture: true });
+    };
   }, [pourStage, pouringKey]);
 
   const handleSyrupPointerDown = (item) => (e) => {
@@ -1684,6 +1929,12 @@ const ToppingsStation = ({
         foamKey: cupFoam?.key,
         powderKey: cupPowder?.key,
         mintLeavesApplied: cupMintLeaf,
+        // syrupMessUpCountRef.current -- the balance minigame's own raw
+        // mess-up count from whichever syrup pour actually landed (see that
+        // ref's own comment further up) -- read here at the handoff, same
+        // "last moment this screen's own state still exists" reasoning as
+        // everything else this call already reads.
+        syrupSpillCount: syrupMessUpCountRef.current,
         order,
       })
     );
@@ -1767,6 +2018,10 @@ const ToppingsStation = ({
   const syrupPourTop = pouringSyrupItem && pouringSyrupPos ? pouringSyrupPos.top + pouringSyrupItem.height : 0;
   const syrupPourHeight = incomingSyrupBox ? Math.max(incomingSyrupBox.top - syrupPourTop, 1) : 0;
   const syrupPourColor = pouringKey ? SYRUP_STREAM_COLORS[pouringKey] : SYRUP_STREAM_COLORS['guava-syrup'];
+  // Balance minigame bar's own fixed position -- see getSyrupMixBarPos'
+  // own comment above for why this doesn't need to track the drink's live
+  // render position the way syrupPourLeft/Top above conceptually could.
+  const syrupMixBarPos = getSyrupMixBarPos();
 
   // ---- Falling foam stream -- same idea as the syrup stream above, just
   // landing at the foam box's own top edge (incomingFoamBox) instead.
@@ -2284,6 +2539,101 @@ const ToppingsStation = ({
             <span className="spoon-pour-grain spoon-pour-grain-4" style={{ background: syrupPourColor }} />
           </div>
         )}
+        {/* Syrup pour balance minigame -- only up while a syrup's actually
+            'pouring' (see the physics effect above). Reuses MatchaMaking.
+            css's .mix-bar/.mix-bar-zone/.mix-ball/.mix-bar-highlight/
+            .mix-bar-hint classes directly (already loaded globally, since
+            App.js imports MatchaMaking.js regardless of which page is
+            showing) rather than re-declaring the same gray-bar/green-zone
+            look a third time -- same reasoning ToppingsStation.js already
+            uses for reusing MilkSelection.css's fill classes. The ball's
+            left position and in-zone glow are both written directly to
+            syrupBallRef's DOM node every animation frame rather than
+            through React props here, same "only needs to exist, not
+            re-render" reasoning as MatchaMaking's own mixBallRef.
+            aria-hidden throughout -- the pouring bottle's own focusable
+            element is what a screen reader user would be interacting with
+            instead. */}
+        {pourStage === 'pouring' && pouringKey && (
+          <>
+            <div
+              className="mix-bar mix-bar-highlight"
+              aria-hidden="true"
+              style={{
+                left: `${syrupMixBarPos.left}%`,
+                top: `${syrupMixBarPos.top}%`,
+                width: `${SYRUP_MIX_BAR_WIDTH}%`,
+                height: `${SYRUP_MIX_BAR_HEIGHT}%`,
+              }}
+            >
+              <span
+                className="mix-bar-zone"
+                style={{
+                  left: `${SYRUP_MIX_ZONE_LEFT_FRAC * 100}%`,
+                  width: `${SYRUP_MIX_ZONE_WIDTH_FRAC * 100}%`,
+                }}
+              />
+              <span
+                ref={syrupBallRef}
+                className="mix-ball"
+                // Initial left matches exactly where the physics effect
+                // itself resets syrupBallPositionRef to (50 - half the
+                // ball's own width) -- same "no flash at the wrong spot for
+                // one frame" reasoning as MatchaMaking's own mix-ball.
+                style={{
+                  left: `${50 - (SYRUP_MIX_BALL_WIDTH_FRAC * 100) / 2}%`,
+                  width: `${SYRUP_MIX_BALL_WIDTH_FRAC * 100}%`,
+                }}
+              />
+            </div>
+            <p
+              className="mix-bar-hint"
+              style={{ left: `${syrupMixBarPos.left + SYRUP_MIX_BAR_WIDTH / 2}%`, top: `${syrupMixBarPos.top - 11}%` }}
+            >
+              Use your arrow keys to balance the ball inside the green area and pour without spilling.
+            </p>
+          </>
+        )}
+        {/* Syrup spill blobs -- one per mess-up during the syrup pour above
+            (see syrupSpills/syrupSpillGrowth in that physics effect), using
+            the same Spill1-4.png hand-drawn art MatchaMaking's own puddles
+            do (see the big comment on SYRUP_SPILL_IMAGES above for the
+            mask-image tinting trick), tinted to match whichever syrup was
+            actually pouring (SYRUP_STREAM_COLORS) rather than matcha's own
+            green. Each stays on screen once it appears (same "the mess
+            visibly builds up, doesn't fade" choice as MatchaMaking's own
+            puddles) and, per that same precedent, keeps sitting there even
+            once the pour itself finishes -- no pourStage gate here,
+            syrupSpills only ever gets populated during an actual pour and
+            only ever reset at the start of a fresh one (see that effect
+            above), so rendering whenever it's non-empty is sufficient on
+            its own. */}
+        {syrupSpills.length > 0 &&
+          (() => {
+            const spillColor = SYRUP_STREAM_COLORS[cupSyrup?.key ?? pouringKey ?? 'guava-syrup'];
+            const spillGrowthScale = 1 + Math.min(syrupSpillGrowth * SYRUP_SPILL_GROWTH_STEP, SYRUP_SPILL_GROWTH_CAP - 1);
+            return syrupSpills.map((spill, i) => {
+              const dims = SYRUP_SPILL_DIMS[i];
+              const maskUrl = `url(${SYRUP_SPILL_IMAGES[i]})`;
+              return (
+                <span
+                  key={i}
+                  aria-hidden="true"
+                  className="syrup-spill-puddle"
+                  style={{
+                    left: `${spill.left}%`,
+                    top: `${spill.top}%`,
+                    width: `${dims.width}%`,
+                    height: `${dims.height}%`,
+                    background: spillColor,
+                    WebkitMaskImage: maskUrl,
+                    maskImage: maskUrl,
+                    transform: `translate(-50%, -50%) rotate(${SYRUP_SPILL_STAGE_ROTATIONS[i]}deg) scale(${spillGrowthScale})`,
+                  }}
+                />
+              );
+            });
+          })()}
         {/* Falling foam stream -- same idea as the syrup stream above, see
             the big comment on FOAM_STREAM_COLORS/getFoamHoverPos in this
             file. Only shown during the actual 'pouring' stage. */}

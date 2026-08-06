@@ -328,3 +328,37 @@
   }
 }
 
+/* Syrup pour balance minigame's spill blobs (see SYRUP_RIGHT_SPILL_BASE/
+   SYRUP_LEFT_SPILL_BASE and syrupSpills in ToppingsStation.js) -- the same
+   Spill1-4.png hand-drawn art MatchaMaking's own puddles use, tinted to
+   whichever syrup is actually pouring instead of matcha's own green. A
+   plain <img src="Spill1.png"> can't be recolored at runtime, so this is a
+   plain <span> instead, with the PNG set as a CSS mask (mask-image, set
+   inline per-blob in the JSX since it differs per stage) rather than an
+   img src -- the mask clips this element down to exactly the art's own
+   opaque silhouette, and background (also set inline, off SYRUP_STREAM_
+   COLORS) is what actually shows through inside that shape. -webkit-
+   prefixed versions of every mask property are included alongside the
+   unprefixed ones since Safari/WebKit-based CTV WebViews still require
+   them. Reuses MatchaMaking.css's own bowlSpillPuddleIn pop-in keyframe
+   directly (already loaded globally, same reasoning ToppingsStation.js's
+   own JSX comment gives for reusing that file's .mix-bar/.mix-ball
+   classes) rather than redeclaring the same "small -> slightly overshot ->
+   settled" animation a second time. z-index/pointer-events/filter mirror
+   MatchaMaking.css's own .bowl-spill-puddle for the same reasons (sits
+   above the fills, ignores pointer events, gets a soft drop-shadow so it
+   reads as sitting on the counter rather than pasted flat onto it). */
+.syrup-spill-puddle {
+  position: absolute;
+  pointer-events: none;
+  z-index: 4;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  mask-position: center;
+  -webkit-mask-size: contain;
+  mask-size: contain;
+  filter: drop-shadow(0 3px 4px rgba(0, 0, 0, 0.3));
+  animation: bowlSpillPuddleIn 0.35s ease-out both;
+}
+
