@@ -300,12 +300,19 @@ function App() {
   }, []);
 
   // ---- Back key policy (single PAL-driven path) ---------------------------
-  // Top-level menu (main, or the exit-confirm dialog on top of it) routes to
-  // exit UX then close. Every other screen's Back walks one step back
-  // through STEP_KEYS (stepping out of 'ordering' returns to main). The
-  // on-screen Back buttons are gone now (replaced by the ProgressBar, which
-  // supports jumping to any step, forward or back) -- this is just the
-  // remote/keyboard Back key's fallback path.
+  // Per request, Back/Backspace no longer does any in-game step navigation
+  // at all -- it's exclusively the "would you like to exit?" gesture now,
+  // from every screen (previously it walked one step back through
+  // STEP_KEYS from most screens, only asking to exit from the main menu).
+  // Station-to-station backward navigation still lives entirely on the
+  // ProgressBar (jumping to any already-completed step's dot) -- this key
+  // no longer offers a shortcut for that. showExitConfirm/showSettings
+  // still get their own dedicated Back handling first (cancel the dialog /
+  // close the popover, same as before) since those are momentary overlays,
+  // not steps in the game itself, and Splash still just skips straight to
+  // Main the same way the start button/auto-timeout do (nothing to
+  // meaningfully "exit" from a loading beat that isn't really loading
+  // anything -- see SplashScreen.js).
   useEffect(() => {
     const handleKeyDown = (e) => {
       const action = getActionFromKeyEvent(e);
@@ -324,33 +331,11 @@ function App() {
         setShowSettings(false); // Back closes the Settings popover, same as the exit dialog above
         return;
       }
-      // Splash isn't really "loading" (nothing to wait on -- see
-      // SplashScreen.js), so Back here just skips it the same way the
-      // start button/auto-timeout do, rather than falling into the
-      // idx <= 0 branch below (which would also fire a MENU_RETURN ad
-      // opportunity -- appropriate for returning from a finished session,
-      // not for skipping the very first beat of a fresh one).
       if (currentPageRef.current === 'splash') {
         setCurrentPage('main');
         return;
       }
-      if (currentPageRef.current === 'main') {
-        setShowExitConfirm(true);
-        return;
-      }
-      const idx = STEP_KEYS.indexOf(currentPageRef.current);
-      if (idx <= 0) {
-        setCurrentPage('main');
-        setCustomerNumber(1);
-        sendAdOpportunity('MENU_RETURN');
-      } else if (idx - 1 >= maxStepIndexRef.current) {
-        // Only actually steps back if that previous station somehow isn't
-        // locked yet (idx is normally exactly maxStepIndexRef.current, so
-        // idx - 1 is normally always < it -- see maxStepIndexRef's own
-        // comment above) -- per request, a station already left behind for
-        // a later one can't be revisited, Backspace included.
-        setCurrentPage(STEP_KEYS[idx - 1]);
-      }
+      setShowExitConfirm(true);
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);

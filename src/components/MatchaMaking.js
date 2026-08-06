@@ -879,35 +879,6 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
   const whiskRef = useRef(null);
   const bowlRef = useRef(null);
 
-  // Backspace (mapped to the 'Back' action, see pal.js) is repurposed
-  // within this station: it never steps back to the previous station from
-  // here -- instead it's the key that stops the two timed challenges (the
-  // scoop gauge and the heater's temp gauge, see handleScoopKeyDown/
-  // handleBarKeyDown further down, both of which check for 'Back' and
-  // stopPropagation once they act on it). This effect is the blanket half
-  // of that: for every OTHER case (nothing focused that owns a challenge,
-  // e.g. a tin, the whisk, the order button), Backspace still shouldn't
-  // fall through to App.js's global Back handler and step back out of this
-  // station, so it's swallowed here. Deliberately left NOT swallowed while
-  // the Settings popover is open (checked live via the DOM, same idiom
-  // used elsewhere in this file for the gear/popover) -- that's a
-  // different Back behavior entirely (closing an overlay, not navigating
-  // stations) and should keep working exactly as it does on every other
-  // screen. Being a child of App.js, this always attaches its own window
-  // listener before App.js's own Back effect does (React commits child
-  // effects before parent effects), so it gets first crack at the keypress
-  // whenever it does swallow it.
-  useEffect(() => {
-    const handleBackDown = (e) => {
-      if (getActionFromKeyEvent(e) !== 'Back') return;
-      if (document.querySelector('.settings-popover')) return;
-      e.preventDefault();
-      e.stopImmediatePropagation();
-    };
-    window.addEventListener('keydown', handleBackDown);
-    return () => window.removeEventListener('keydown', handleBackDown);
-  }, []);
-
   // This station's own explicit keyboard nav graph, per request -- same
   // "exact fixed graph, not generic spatial nearest-neighbor matching"
   // approach as Customer Ordering's order-form nav and Settings' own
@@ -1264,20 +1235,18 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
     tempBarHideTimerRef.current = setTimeout(() => setTempBarVisible(false), TEMP_BAR_LINGER_MS);
   };
 
-  // Stops the gauge on Backspace, not Enter -- Enter/Space stay reserved
-  // for *selecting* items (the heater button's own native onClick, the
-  // tin/whisk/order button handlers, etc.); Backspace is repurposed here
-  // (and on the scoop gauge below) specifically for these two "stop the
-  // running challenge" actions. Both keydown handlers also stopPropagation
-  // so this Backspace never reaches the blanket Back-swallowing listener
-  // near the top of this component, let alone App.js's global Back
-  // handler -- it should only ever stop the gauge, never navigate away.
+  // Stops the gauge on Enter, same "confirm/select" gesture every other
+  // item in this game already uses -- this (and the scoop gauge below)
+  // used to be stopped on Backspace instead, but per request Backspace/Back
+  // is no longer used for playing any challenge in this game at all; it's
+  // exclusively the "would you like to exit?" prompt now (see App.js's own
+  // Back handler), from every screen, so it needed to stop being
+  // overloaded as a per-station "stop the running challenge" gesture here.
   const handleBarKeyDown = (e) => {
     const action = getActionFromKeyEvent(e);
-    if (action !== 'Back') return;
+    if (action !== 'Enter') return;
     if (shouldDebounceEnter(e)) return;
     e.preventDefault();
-    e.stopPropagation();
     stopBar();
   };
 
@@ -1844,17 +1813,14 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
     );
   };
 
-  // Stops the slider on Backspace, not Enter -- same split as the heater
-  // gauge's handleBarKeyDown above (see its comment): Enter/Space stay for
-  // *selecting* items, Backspace is reserved for stopping a running
-  // challenge. stopPropagation keeps this from also reaching the blanket
-  // Back-swallowing listener (and App.js's global Back handler) above.
+  // Stops the slider on Enter, same "confirm/select" gesture the heater
+  // gauge's own handleBarKeyDown above now uses -- see that handler's own
+  // comment for why Backspace/Back is no longer used for this.
   const handleScoopKeyDown = (e) => {
     const action = getActionFromKeyEvent(e);
-    if (action !== 'Back') return;
+    if (action !== 'Enter') return;
     if (shouldDebounceEnter(e)) return;
     e.preventDefault();
-    e.stopPropagation();
     stopScoop();
   };
 
@@ -2406,7 +2372,7 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
               data-focusable
               tabIndex={0}
               role="button"
-              aria-label="Temperature gauge. Press Backspace to lock in the current temperature."
+              aria-label="Temperature gauge. Press Enter to lock in the current temperature."
               onKeyDown={handleBarKeyDown}
               onClick={stopBar}
               style={{
@@ -2516,7 +2482,7 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
                   data-focusable
                   tabIndex={0}
                   role="button"
-                  aria-label="Scoop gauge. Press Backspace to stop the slider at the current line."
+                  aria-label="Scoop gauge. Press Enter to stop the slider at the current line."
                   onKeyDown={handleScoopKeyDown}
                   onClick={stopScoop}
                   style={{
