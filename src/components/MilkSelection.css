@@ -440,6 +440,15 @@
   );
 }
 
+/* End scale reads --milk-fill-scale (see the inline style set on
+   .cup-milk-fill in MilkSelection.js, keyed off MILK_FILL_SCALE_BY_ZONE
+   there) so an underfilled/overfilled pour visibly renders shorter/taller
+   than a correctly-filled one, rather than every pour always growing to
+   exactly the same full height regardless of how the gauge landed. Falls
+   back to 1 (a plain full cup) so anything that sets .cup-milk-fill without
+   the custom property -- there shouldn't be any left, but this is a cheap
+   guard -- still renders the original fixed height instead of collapsing to
+   0. */
 @keyframes cupMilkGrow {
   0% {
     opacity: 0;
@@ -447,8 +456,186 @@
   }
   100% {
     opacity: 1;
-    transform: scaleY(1);
+    transform: scaleY(var(--milk-fill-scale, 1));
   }
+}
+
+/* Overfill spill puddles -- see MILK_SPILL_MAX_COUNT/MILK_SPILL_SPOTS/
+   milkSpillCountFor's own big comment in MilkSelection.js. Each puddle is a
+   single element: a solid --puddle-color fill (set inline per-puddle, from
+   MILK_STREAM_COLORS) plus a soft radial-gradient highlight layered on top,
+   approximating the same "glossy puddle" read as MatchaMaking's own
+   SPILL_IMAGES_BY_GRADE art without needing new per-milk-type PNGs. Squashed
+   into an ellipse (see the height set inline in MilkSelection.js, 70% of its
+   own width) rather than a perfect circle, closer to how a real spill
+   flattens out. --puddle-rotate is folded into the keyframe's own 100%
+   transform (see milkSpillIn below) rather than a plain inline `transform`,
+   since a CSS animation's own transform overrides whatever's set inline for
+   as long as (and, with `both`, after) it runs. */
+.milk-spill-puddle {
+  position: absolute;
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 6;
+  background-image: radial-gradient(ellipse at 32% 28%, rgba(255, 255, 255, 0.55) 0%, rgba(255, 255, 255, 0) 42%);
+  background-color: var(--puddle-color, #cfcac2);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.22);
+  animation: milkSpillIn 0.25s ease-out both;
+}
+
+@keyframes milkSpillIn {
+  0% {
+    opacity: 0;
+    transform: scale(0.5) rotate(var(--puddle-rotate, 0deg));
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) rotate(var(--puddle-rotate, 0deg));
+  }
+}
+
+/* ---- Milk pour hold-to-fill gauge ---------------------------------------
+   See MILK_FILL_DURATION_MS/milkPourZoneFor/MILK_GAUGE_SECTION_COLORS in
+   MilkSelection.js for the mechanic itself. Plain flex column: SVG arc+
+   needle on top, circular button (the real focus target) overlapping its
+   bottom edge, hint text below -- same font/color/text-shadow conventions
+   as .cup-label and the other station screens' own gauge hints (e.g.
+   MatchaMaking.css's .heater-temp-bar-hint).
+   left/top (set inline in MilkSelection.js) are the anchor POINT -- the
+   widget's own bottom-center -- not a top-left corner; translate(-50%,-100%)
+   is what actually pins that point there regardless of the widget's own
+   rendered height, so it always sits flush above whatever it's anchored to
+   (the cup's own top edge -- see milkGaugeCenterLeft/milkGaugeAnchorTop's
+   own comment in MilkSelection.js) no matter how tall the hint text or
+   button end up being. Entrance animation is opacity-only for the same
+   reason -- a translateY entrance would fight this static positioning
+   transform. */
+.milk-pour-gauge {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  transform: translate(-50%, -100%);
+  z-index: 25;
+  animation: milkGaugeIn 0.15s ease-out both;
+}
+
+@keyframes milkGaugeIn {
+  0% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+.milk-pour-arc {
+  width: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+
+/* Gray casing arc -- same body/border gray pairing MatchaMaking's own
+   .heater-temp-bar/.scoop-bar use (background #b7b2ac, border
+   rgba(110, 105, 100, 0.7)), just expressed as two concentric SVG strokes
+   instead of a CSS background+border, since this bar is curved rather than
+   a straight rectangle. This one path is the darker border-gray tone, drawn
+   at a wider stroke-width than the 7 color segments on top of it (see
+   .milk-pour-arc-segment below) so a few units of it show as a frame on
+   both the inner and outer edge of the colored sections -- same "gray-
+   bordered rectangular bar" read as those other two gauges, just bent into
+   an arc. */
+.milk-pour-arc-casing {
+  fill: none;
+  stroke: #6e6964;
+  stroke-width: 16;
+  stroke-linecap: butt;
+}
+
+/* The 7 flat color sections (see MILK_GAUGE_SECTION_COLORS in
+   MilkSelection.js) -- butt caps (not round) on every segment, including
+   the two outermost ones, so the whole run of 7 reads as one continuous
+   rectangular-cross-section bar with hard color cuts between sections,
+   rather than 7 separate pill shapes. stroke color comes from the inline
+   `stroke` prop set per-segment in the JSX, not from this rule. */
+.milk-pour-arc-segment {
+  fill: none;
+  stroke-width: 11;
+  stroke-linecap: butt;
+}
+
+/* No transition -- the needle's angle is recomputed every animation frame by
+   the rAF loop in MilkSelection.js while the gauge is held, so a CSS
+   transition would just lag one frame behind the live reading instead of
+   tracking it. Lighter gray per request (was #4a4642) -- still reads
+   clearly against both the light counter background and the bar's own
+   darker casing-gray, just a step lighter than either. */
+.milk-pour-needle {
+  stroke: #96908a;
+  stroke-width: 4;
+  stroke-linecap: round;
+}
+
+.milk-pour-pivot {
+  fill: #96908a;
+}
+
+/* Smaller and gray now (per request) -- same body/border gray pairing as
+   the casing arc above (and MatchaMaking's own heater/scoop gauge bodies)
+   rather than the cream/green button this replaced, so the whole gauge
+   reads as one matched-material set of "challenge hardware" instead of two
+   different color languages. margin-top pulls it up to overlap/tuck against
+   the arc's own bottom edge, tightening the gap between them (see
+   MILK_ARC_RADIUS's own comment in MilkSelection.js for the other half of
+   "the bar sits lower/closer to the button" -- a smaller radius/viewBox). */
+.milk-pour-button {
+  pointer-events: auto;
+  width: 22%;
+  aspect-ratio: 1;
+  margin-top: -14%;
+  border-radius: 50%;
+  background: #b7b2ac;
+  border: min(5px, 0.26vw) solid rgba(110, 105, 100, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: inset 0 1px 2px rgba(255, 255, 255, 0.35), inset 0 -1px 2px rgba(0, 0, 0, 0.2),
+    0 2px 6px rgba(0, 0, 0, 0.3);
+  cursor: pointer;
+}
+
+.milk-pour-button:focus {
+  outline: none;
+  box-shadow: inset 0 1px 2px rgba(255, 255, 255, 0.35), inset 0 -1px 2px rgba(0, 0, 0, 0.2),
+    0 0 0 4px rgba(255, 255, 255, 0.75), 0 2px 6px rgba(0, 0, 0, 0.3);
+}
+
+/* Bigger and visibly thicker than the plain glyph this replaced (an SVG
+   chevron with its own stroke-width, rather than relying on a font's
+   weight) -- lighter gray than .milk-pour-button's own #b7b2ac body so the
+   arrow still reads clearly against it. */
+.milk-pour-arrow {
+  width: 68%;
+  height: 68%;
+  overflow: visible;
+}
+
+.milk-pour-arrow path {
+  stroke: #ddd8d0;
+  stroke-width: 3.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.milk-pour-hint {
+  margin: 6px 0 0;
+  font-family: 'Pixelify Sans', cursive;
+  font-weight: 600;
+  font-size: min(17px, 0.95vw);
+  color: #5c4a3a;
+  text-align: center;
+  text-shadow: 0 0 4px rgba(255, 255, 255, 0.95), 0 0 12px rgba(255, 255, 255, 0.6);
+  white-space: nowrap;
 }
 
 /* Carried-over matcha bowl (see incomingBowl/bowlIsBig in MilkSelection.js)

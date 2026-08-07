@@ -21,10 +21,11 @@
 // used before this file replaced it) -- and checks is a list of { key,
 // label, correct, detail, credit? } for the score card's own per-category
 // expand/collapse view. Most checks are plain all-or-nothing (credit is
-// omitted, and pct() below just reads 1/0 off `correct` instead) -- the two
+// omitted, and pct() below just reads 1/0 off `correct` instead) -- the
 // exceptions today are Matcha Making's own teaspoons and water-temperature
-// checks (see scoreMatchaMaking), both graduated 0-1 credit instead, since
-// "how close were you" is a real, continuous thing on those two minigames'
+// checks (see scoreMatchaMaking) and Mixing Drink's own milk-pour-amount
+// check (see scoreMixingDrink), all three graduated 0-1 credit instead,
+// since "how close were you" is a real, continuous thing on each of those
 // gauges rather than a simple hit-or-miss.
 //
 // No known gaps left of the "order form can ask for something the station
@@ -373,6 +374,44 @@ export function scoreMatchaMaking({ selectedTin, scoopFillPercent, tempFillPerce
   return { percent: pct(checks), checks };
 }
 
+// ---- Graduated milk-pour credit -------------------------------------------
+// Per request: the new hold-to-fill milk pour gauge (MilkSelection.js's own
+// MILK_FILL_DURATION_MS/milkPourZoneFor) shouldn't be all-or-nothing either
+// -- releasing right in the middle of the yellow band is full credit,
+// releasing further off (into green/underfilled or red/overfilled) costs
+// progressively more, same graduated shape as tempCredit above rather than a
+// flat pass/fail. MILK_ZONE_GREEN_END/MILK_ZONE_RED_START are this file's own
+// small copy of MilkSelection.js's identically-named constants -- same "own
+// copy rather than importing a sibling screen's layout constants" convention
+// TEMP_ZONE_LEFT/RIGHT above already documents. They're derived off
+// MilkSelection.js's own MILK_GAUGE_SECTIONS (7) the same way that file
+// derives them, rather than copied as bare numbers, so this stays in sync
+// with wherever the bar's actual 4th (yellow) section boundary sits instead
+// of drifting if that ever changes. MILK_EXACT_LINE/MILK_ZONE_HALF_WIDTH are
+// derived from them the same way TEMP_EXACT_LINE/TEMP_ZONE_HALF_WIDTH are
+// derived from TEMP_ZONE_LEFT/RIGHT.
+const MILK_GAUGE_SECTIONS = 7;
+const MILK_ZONE_GREEN_END = (100 / MILK_GAUGE_SECTIONS) * 3;
+const MILK_ZONE_RED_START = (100 / MILK_GAUGE_SECTIONS) * 4;
+const MILK_EXACT_LINE = (MILK_ZONE_GREEN_END + MILK_ZONE_RED_START) / 2;
+const MILK_ZONE_HALF_WIDTH = (MILK_ZONE_RED_START - MILK_ZONE_GREEN_END) / 2;
+const MILK_GREEN_FLOOR_CREDIT = 0.75;
+// Wider fuzz guard than SCOOP_EXACT_EPSILON/TEMP_EXACT_EPSILON above -- this
+// reading comes from a requestAnimationFrame loop timing a held key against
+// MILK_FILL_DURATION_MS (see pal.js's heldDurationMs), not a live CSS pixel/
+// transform measurement, so it's noisier frame-to-frame than either of those
+// two gauges' own readings; a dead-on release could still land a percentage
+// point or so off the mathematical center.
+const MILK_EXACT_EPSILON = 1;
+
+function milkPourCredit(distance) {
+  if (distance <= MILK_ZONE_HALF_WIDTH) {
+    return 1 - (distance / MILK_ZONE_HALF_WIDTH) * (1 - MILK_GREEN_FLOOR_CREDIT);
+  }
+  const overshoot = distance - MILK_ZONE_HALF_WIDTH;
+  return Math.max(0, MILK_GREEN_FLOOR_CREDIT * (1 - overshoot / MILK_ZONE_HALF_WIDTH));
+}
+
 // ---- Mixing Drink ---------------------------------------------------------
 // Grades Milk Selection's own contribution -- cup type, ice count, and
 // milk/base -- against the placed order. Called from MilkSelection's own
@@ -384,8 +423,22 @@ export function scoreMatchaMaking({ selectedTin, scoopFillPercent, tempFillPerce
 //   cupType: Milk Selection's own activeCup state ('glass' | 'plastic').
 //   iceCubes: Milk Selection's own icePlaced.filter(Boolean).length.
 //   milkType: Milk Selection's own cupMilk?.type.
+//   milkFillPercent: Milk Selection's own milkFillPercent state (0-100, same
+//     percent-space MILK_ZONE_GREEN_END/RED_START above use) -- wherever the
+//     pour gauge's needle landed the instant the player released it, frozen
+//     the same "rAF loop just stops updating it" way MatchaMaking's own
+//     tempFillPercent freezes on stopBar. null when no milk was ever poured
+//     (cupMilk itself never got set), in which case the check below just
+//     reads as "no reading" rather than crediting/blaming a specific side.
 //   order: the placed order from CustomerOrdering.
-export function scoreMixingDrink({ cupType, iceCubes, milkType, order }) {
+export function scoreMixingDrink({ cupType, iceCubes, milkType, milkFillPercent, order }) {
+  // Graduated the same way scoreMatchaMaking's own teaspoons/temperature
+  // checks are -- see milkPourCredit's own comment above.
+  const milkPourDistance = typeof milkFillPercent === 'number' ? Math.abs(milkFillPercent - MILK_EXACT_LINE) : null;
+  const milkPourCreditValue = milkPourDistance === null ? 0 : milkPourCredit(milkPourDistance);
+  const milkPourExact = milkPourDistance !== null && milkPourDistance <= MILK_EXACT_EPSILON;
+  const milkPourInBand = milkPourDistance !== null && milkPourDistance <= MILK_ZONE_HALF_WIDTH;
+  const milkPourTooMuch = typeof milkFillPercent === 'number' && milkFillPercent > MILK_EXACT_LINE;
   const checks = [
     {
       key: 'cup',
@@ -404,6 +457,18 @@ export function scoreMixingDrink({ cupType, iceCubes, milkType, order }) {
       label: 'Milk / base',
       correct: milkType === order?.baseMilk,
       detail: `Wanted ${BASE_LABEL[order?.baseMilk]}, used ${BASE_LABEL[milkType] ?? '—'}.`,
+    },
+    {
+      key: 'milk-pour',
+      label: 'Milk pour amount',
+      correct: milkPourExact,
+      credit: milkPourCreditValue,
+      detail:
+        milkPourDistance === null
+          ? 'No milk was poured.'
+          : milkPourInBand
+          ? `A touch ${milkPourTooMuch ? 'over' : 'under'}filled.`
+          : `${milkPourTooMuch ? 'Overfilled and spilled' : 'Underfilled'}.`,
     },
   ];
   return { percent: pct(checks), checks };

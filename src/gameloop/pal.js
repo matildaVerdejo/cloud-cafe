@@ -59,3 +59,71 @@ export function shouldDebounceEnter(e) {
   lastEnterAt = now;
   return false;
 }
+
+// ---- Held input (TV remotes) ----------------------------------------------
+// For held/continuous input (charge-up gauges, movement, aiming -- anything
+// that reads "press and hold, act on release") the debounce helper above is
+// the wrong tool: it exists to collapse a repeating keydown into a single
+// one-shot activation, not to track how long a key has been down.
+//
+// Per the GameLoop TV keycode held-input policy: TV remotes emit repeated
+// `keydown` while a key is physically held, but deliver `keyup` unreliably
+// (often late, sometimes never). Held input must therefore be derived from a
+// keydown heartbeat + release watchdog, not from waiting for keyup. Each
+// repeated keydown refreshes a per-action "last seen" timestamp; the action
+// is considered released once no repeat has arrived for RELEASE_WATCHDOG_MS
+// (comfortably longer than any OS/remote key-repeat interval). keyup, when it
+// does arrive, is consumed only as an optional early-release hint via
+// trackKeyUp -- nothing here ever depends on it firing.
+//
+// Feature code doesn't read the two Maps below directly -- call trackKeyDown/
+// trackKeyUp from a keydown/keyup listener scoped to whatever's currently
+// listening for the hold (e.g. MilkSelection.js's pour gauge, only while its
+// own 'measuring' stage is mounted), then poll isHeld/heldDurationMs from a
+// requestAnimationFrame loop to drive a live reading.
+const RELEASE_WATCHDOG_MS = 600;
+const heldSince = new Map(); // action -> timestamp the current hold actually started
+const heldLastSeen = new Map(); // action -> timestamp of the most recent keydown heartbeat
+
+// Call from a keydown listener for every keydown (including OS repeats) --
+// repeats are exactly what keeps a hold alive here, unlike shouldDebounceEnter
+// above which exists to swallow them.
+export function trackKeyDown(e) {
+  const action = getActionFromKeyEvent(e);
+  if (!action) return;
+  const now = Date.now();
+  if (!heldSince.has(action)) heldSince.set(action, now);
+  heldLastSeen.set(action, now);
+}
+
+// Call from a keyup listener. Optional early-release hint only -- ends the
+// hold immediately when the event does arrive, but isHeld's own watchdog
+// below is what actually guarantees release on hardware that never fires it.
+export function trackKeyUp(e) {
+  const action = getActionFromKeyEvent(e);
+  if (!action) return;
+  heldSince.delete(action);
+  heldLastSeen.delete(action);
+}
+
+// True while the logical action is considered held: a keydown heartbeat has
+// arrived within the last RELEASE_WATCHDOG_MS. Lazily clears both maps once
+// the watchdog window elapses, so a caller that stops polling mid-hold (e.g.
+// unmounting the gauge) doesn't leave a stale "held" entry behind for a key
+// that was never explicitly released.
+export function isHeld(action, now = Date.now()) {
+  const lastSeen = heldLastSeen.get(action);
+  if (lastSeen === undefined) return false;
+  if (now - lastSeen > RELEASE_WATCHDOG_MS) {
+    heldSince.delete(action);
+    heldLastSeen.delete(action);
+    return false;
+  }
+  return true;
+}
+
+// Milliseconds of sustained hold for the action, 0 if not currently held.
+export function heldDurationMs(action, now = Date.now()) {
+  if (!isHeld(action, now)) return 0;
+  return now - heldSince.get(action);
+}

@@ -116,3 +116,22 @@ design — everything is keyboard/D-pad driven, matching a real TV remote.
   command timeout); the full module graph (`App.js` and every new
   `src/gameloop/*` file) was verified with an esbuild JSX bundle pass
   instead. Run `npm start` and `npm run build` locally to confirm.
+- The Milk Selection screen's hold-to-fill milk pour gauge (`src/gameloop/
+  pal.js`'s `trackKeyDown`/`isHeld`/`heldDurationMs`, wired up in
+  `MilkSelection.js`) was built and bundle-verified in the same
+  no-full-build environment above, so its *sizing/placement* (gauge width,
+  offset from the cup) and the feel of `MILK_FILL_DURATION_MS`'s sweep speed
+  are un-playtested — check both on a real 1920×1080 iframe/TV and against
+  actual remote key-repeat behavior, not just desktop keyboard `keydown`
+  repeat, and tune if the yellow band reads as too easy/hard to catch.
+  One placement bug already found and fixed this way (not by eye): an
+  earlier version anchored the gauge above the *bottle's* own hover box
+  instead of the cup's, which pushed it above the 1920×1080 canvas's top
+  edge (`.milk-selection-container` clips overflow) and made the whole
+  widget invisible — confirmed purely by walking the box-math
+  (`BOTTLE_HEIGHT`/`getBottleHoverPos`/`CUP_SPOTS.table.top`), not by
+  rendering it. It's now anchored off the cup's own box instead, which
+  keeps it on-canvas but means it likely overlaps the lower part of the
+  bottle's art while pouring — worth a look on-screen to see whether that
+  overlap reads fine or needs the bottle's own z-index/opacity adjusted
+  during 'measuring'.
