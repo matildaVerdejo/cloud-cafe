@@ -1067,6 +1067,21 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
   // down, by selectedTin).
   const [showOrderHint, setShowOrderHint] = useState(true);
 
+  // First-order-only continuation of Customer Ordering's own walkthrough
+  // spotlight (see showProgressPhase/showSpotlight in CustomerOrdering.js
+  // for the earlier beats) -- lands on this screen already pink-tinted,
+  // exempting only the Order receipt button (top-right, see
+  // spotlightExempt on <OrderReceiptButton> below) instead of the
+  // ProgressBar this time, and clears on the exact same rising edge that
+  // retires showOrderHint above: once the player's opened the drawer AND
+  // closed it again. Reuses that flag directly rather than tracking its
+  // own separate one-way state, since the two lifecycles are identical by
+  // design. customerNumber === 1 keeps this off for the 2nd/3rd rounds,
+  // same as every other beat in this walkthrough -- they still get the
+  // plain flashing highlight/hint text showOrderHint already drives, just
+  // without the pink tint over everything else.
+  const showStationSpotlight = customerNumber === 1 && showOrderHint;
+
   // Used to send focus to the first matcha tin once showOrderHint retired
   // -- removed per request, now that this station has its own explicit,
   // deterministic keyboard nav graph (see the big keydown effect below)
@@ -1311,6 +1326,24 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
   // should stay up through the whole glide-to-the-bowl beat and only clear
   // once the water's actually landed.
   const showKettleHint = !tempBarVisible && !bowlWater;
+
+  // Fifth walkthrough beat, first order only -- see the big comment on
+  // showTinSpotlight/showScoopSpotlight/showSpoonSpotlight further up.
+  // Reuses showKettleHint's own boundary, exempting the kettle itself
+  // instead of a hint label + flashing halo.
+  const showKettleSpotlight = customerNumber === 1 && showKettleHint;
+
+  // Sixth beat -- covers the actual pour, once the kettle's reached the
+  // bowl and water starts falling (kettleStage 'pouring', the same instant
+  // bowlWater is set -- see that stage's own effect further down). Ends the
+  // moment kettleStage resets to 'idle' again (pour finished), which is
+  // also exactly when showWhiskHint's own conditions first become true --
+  // see that flag further down for the next beat. Exempts the kettle, the
+  // falling-water effect (.spoon-pour, reused from the matcha spoon's own
+  // pour -- see the JSX further down), and the bowl itself plus its
+  // powder/water contents, so the whole "water landing in the bowl" moment
+  // stays visible rather than being cut off by the tint mid-pour.
+  const showKettlePourSpotlight = customerNumber === 1 && kettleStage === 'pouring';
   // This used to also be bumped once per pour and used as bowl-water's React
   // `key`, so a repeat pour got a fresh mount and the grow animation reliably
   // replayed. Dropped entirely -- confirmed (via a live DOM count during
@@ -1543,6 +1576,20 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
   // 'idle'), same "flash until acted on" shape as every earlier beat.
   const showBowlHint = whiskStage === 'done' && bowlStage === 'idle';
 
+  // Ninth walkthrough beat, first order only -- reuses showBowlHint's own
+  // boundary, exempting the bowl (see MOVABLE_ITEMS' isBowl handling
+  // further down) and the whole ProgressBar (see spotlightExempt passed to
+  // <ProgressBar> further down, OR'd together with showStationAdvanceSpotlight
+  // below so the bar stays exempt continuously across both of this
+  // screen's last two beats) instead of a hint label + flashing halo.
+  const showBowlCarrySpotlight = customerNumber === 1 && showBowlHint;
+
+  // Tenth and final walkthrough beat -- reuses the SAME boundary this
+  // screen's own final highlight beat already uses (bowlStage === 'sent',
+  // see highlightCurrentStep on <ProgressBar> further down), exempting the
+  // whole ProgressBar instead of its plain currentStepHint label.
+  const showStationAdvanceSpotlight = customerNumber === 1 && bowlStage === 'sent';
+
   useEffect(() => {
     if (bowlStage === 'carrying') {
       const t = setTimeout(() => setBowlStage('vanishing'), BOWL_CARRY_MOVE_MS);
@@ -1708,6 +1755,49 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
   // down) -- there's no need to keep flashing once they've already acted.
   const showSpoonHint = scoopConfirmed && bigSpoonStage === 'idle';
 
+  // First-order-only walkthrough, continued from Customer Ordering and
+  // showStationSpotlight above -- three more beats, one per remaining step
+  // on this station, each swapping the spotlight's own exempt target as the
+  // player works through the tins -> scoop gauge -> spoon-into-bowl chain.
+  // All pink, same as every other beat in this whole walkthrough (an
+  // earlier pass tried a green tint for the scoop-gauge beat specifically,
+  // per an since-reversed request -- back to plain pink like the rest).
+  // All three reuse an EXISTING state boundary that already exactly matches
+  // the target's own on-screen lifecycle, rather than tracking a separate
+  // one-way flag each -- the underlying UI already appears/disappears at
+  // precisely the right moments for this to just tag along:
+  //   - showTinSpotlight: same window as showTinHint above (order hint's
+  //     retired, no tin picked yet). Exempts the three tins.
+  //   - showScoopSpotlight: selectedTin is set but scoopConfirmed hasn't
+  //     flipped yet -- the exact same span the whole measuring assembly
+  //     (bar/fill/slider/reference spoons, see the JSX below) stays
+  //     mounted for, including the post-stop linger before the reading
+  //     locks in. Exempts the scoop bar.
+  //   - showSpoonSpotlight: scoopConfirmed is true and the big spoon hasn't
+  //     finished its pour yet (bigSpoonStage !== 'done') -- the exact same
+  //     span the big spoon itself is mounted for. Exempts the big spoon,
+  //     the bowl, AND the bowl-powder mound that grows in as it pours (see
+  //     .bowl-powder further down) -- that one's easy to miss since it only
+  //     exists once the pour's actually started, well after this phase
+  //     itself begins. Deliberately keyed off scoopConfirmed (not the
+  //     earlier moment the player stops the slider) since the spoon this
+  //     phase is supposed to exempt doesn't actually exist in the DOM until
+  //     then -- ending this phase any earlier would leave a gap with
+  //     nothing exempted at all.
+  // A fourth beat, showHeaterSpotlight, lives further down (right by
+  // showHeaterHint, which it reuses the exact same boundary of) since that
+  // one depends on state declared later in the component.
+  // Each phase's own arrow+label callout (further down in the JSX) shares
+  // these same booleans, and each one's presence also suppresses that
+  // step's OLD plain-text hint (matcha-tin-hint/scoop-bar-hint/big-spoon-
+  // hint) so the two don't show at once -- same "new pink-styled callout
+  // replaces the old text hint for the first order only" treatment
+  // showStationSpotlight already uses for the Order button above; orders
+  // 2/3 (customerNumber !== 1) still get exactly those old hints, untouched.
+  const showTinSpotlight = customerNumber === 1 && showTinHint;
+  const showScoopSpotlight = customerNumber === 1 && !!selectedTin && !scoopConfirmed;
+  const showSpoonSpotlight = customerNumber === 1 && scoopConfirmed && bigSpoonStage !== 'done';
+
   // The bowl's own persistent "what's in it" state -- deliberately *not*
   // reset when selectedTin changes (unlike the state above), so closing the
   // tin selector or picking a different tin doesn't erase matcha that's
@@ -1722,6 +1812,25 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
   // starts whisking (beginWhiskMix moves whiskStage off 'idle'), same
   // "flash until acted on" shape as every earlier beat.
   const showWhiskHint = Boolean(bowlPowder) && Boolean(bowlWater) && kettleStage === 'idle' && whiskStage === 'idle';
+
+  // Seventh and final walkthrough beat, first order only -- reuses
+  // showWhiskHint's own boundary, exempting the whisk itself instead of a
+  // hint label + flashing halo.
+  const showWhiskSpotlight = customerNumber === 1 && showWhiskHint;
+
+  // Eighth and final walkthrough beat, first order only -- picks up the
+  // instant the player actually selects the whisk (showWhiskSpotlight above
+  // retires the same instant, since whiskStage leaving 'idle' is exactly
+  // what ends showWhiskHint too), covering both the brief glide-into-the-
+  // bowl beat ('moving') and the whole balance minigame ('mixing'). No
+  // further beat follows this one -- it just clears once whiskStage reaches
+  // 'done'. Exempts the bowl and its contents (bowl-powder/bowl-water,
+  // same as showKettlePourSpotlight/showWhiskSpotlight above), the whisk
+  // itself, the stirring swirl effect, the balance-minigame bar, and any
+  // spill puddles, so the whole minigame -- everything the player actually
+  // needs to see to play it -- stays visible while the rest of the counter
+  // tints.
+  const showMixSpotlight = customerNumber === 1 && (whiskStage === 'moving' || whiskStage === 'mixing');
 
   const bigSpoonDragStartRef = useRef({ pointerX: 0, pointerY: 0, left: 0, top: 0 });
   const bigSpoonRef = useRef(null);
@@ -1888,6 +1997,26 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
   // button onClick flips heaterOn -- see the JSX below) -- same "flash
   // until acted on" shape as every earlier beat.
   const showHeaterHint = bigSpoonStage === 'done' && !heaterOn;
+
+  // Fourth walkthrough beat, first order only -- see the big comment on
+  // showTinSpotlight/showScoopSpotlight/showSpoonSpotlight above. Reuses
+  // showHeaterHint's own boundary directly (same rising/falling edge: pour
+  // finished, heater not on yet), exempting the heater button itself
+  // instead of a hint label + flashing halo.
+  const showHeaterSpotlight = customerNumber === 1 && showHeaterHint;
+
+  // Continuation of the fourth beat -- once the heater's actually switched
+  // on, the spotlight stays up but its exempt target grows to also cover
+  // the temp gauge itself (see heaterOn && tempBarVisible's own render
+  // condition further down, the exact same span this matches). The heater
+  // button STAYS exempt through this too (see the combined condition on
+  // .heater-button's own className further down) since it's still on
+  // screen and still a valid thing to look at, not just the new gauge.
+  // Ends the same instant the gauge itself would normally disappear
+  // (tempBarVisible flipping false, after stopBar's own post-catch
+  // linger) -- see showKettleSpotlight further down for the beat right
+  // after this one.
+  const showTempBarSpotlight = customerNumber === 1 && heaterOn && tempBarVisible;
 
   // Sends focus to the bowl the moment the pour finishes (bigSpoonStage
   // settling on 'done'). Not a "guided next step" nudge like the ones that
@@ -2332,7 +2461,13 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
           type="button"
           className={`heater-button${heaterOn ? ' on' : ''}${
             tempZone === 'target' ? ' zone-green' : tempZone === 'over' ? ' zone-red' : ''
-          }${showHeaterHint ? ' heater-button-highlight' : ''}`}
+          }${showHeaterHint ? ' heater-button-highlight' : ''}${
+            // Stays exempt through BOTH the pre-heater-on beat and the
+            // temp-gauge beat right after it -- the button itself is still
+            // valid to look at throughout, only the gauge gets added
+            // alongside it once heaterOn flips true.
+            showHeaterSpotlight || showTempBarSpotlight ? ' matcha-spotlight-exempt' : ''
+          }`}
           data-focusable
           aria-pressed={heaterOn}
           aria-label={heaterOn ? 'Turn heater off' : 'Turn heater on'}
@@ -2347,13 +2482,35 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
             height: `${HEATER_BUTTON_BOX.height}%`,
           }}
         />
-        {showHeaterHint && (
+        {/* Suppressed for the first order specifically -- the new callout
+            below takes over this job while showHeaterSpotlight is up.
+            Orders 2/3 never set it, so they keep this exactly as before. */}
+        {showHeaterHint && !showHeaterSpotlight && (
           <p
             className="heater-button-hint"
             style={{ left: `${HEATER_HINT_LEFT}%`, top: `${HEATER_HINT_TOP}%` }}
           >
             Use Enter to heat up water.
           </p>
+        )}
+        {/* Fourth and final walkthrough callout on this screen -- arrow
+            FIRST this time, pointing left at the heater button, with the
+            label following to its right (opposite order from
+            .matcha-order-callout/.matcha-scoop-callout above, whose targets
+            both sit to their own right instead). Gone the instant
+            showHeaterSpotlight ends (heater switched on). */}
+        {showHeaterSpotlight && (
+          <div className="matcha-heater-callout">
+            <svg
+              className="matcha-heater-callout-arrow"
+              viewBox="0 0 40 24"
+              preserveAspectRatio="none"
+              aria-hidden="true"
+            >
+              <polygon points="2,12 38,2 38,22" />
+            </svg>
+            <p className="matcha-heater-callout-text">Move left and select the button to turn the kettle on</p>
+          </div>
         )}
         {heaterOn && tempBarVisible && (
           <>
@@ -2368,7 +2525,7 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
               ref={barRef}
               className={`heater-temp-bar${fillActive ? ' on' : ''}${
                 barRunning ? ' heater-temp-bar-highlight' : ''
-              }`}
+              }${showTempBarSpotlight ? ' matcha-spotlight-exempt' : ''}`}
               data-focusable
               tabIndex={0}
               role="button"
@@ -2398,13 +2555,42 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
                   comment above. */}
               <span className="heater-temp-bar-exact-line" style={{ left: `${TEMP_BAR_EXACT_LINE}%` }} />
             </div>
-            {barRunning && (
+            {/* Suppressed for the first order specifically -- the new
+                callout below takes over this job while barRunning AND
+                showTempBarSpotlight are both up. Orders 2/3 never set the
+                latter, so they keep this exactly as before. */}
+            {barRunning && !showTempBarSpotlight && (
               <p
                 className="heater-temp-bar-hint"
                 style={{ left: `${TEMP_BAR_BOX.left}%`, top: `${TEMP_BAR_BOX.top + TEMP_BAR_BOX.height + 2}%` }}
               >
                 Use your backspace key to get the right temperature.
               </p>
+            )}
+            {/* Fifth walkthrough callout -- arrow above, pointing up at the
+                gauge, text below (same shape as .ordering-button-callout in
+                CustomerOrdering.css, whose target also sits above it).
+                Tied to barRunning specifically (not the whole
+                showTempBarSpotlight span) so it disappears the instant the
+                player actually stops the gauge, per request, even though
+                the spotlight/exemption itself stays up a little longer
+                through the post-catch linger (see showTempBarSpotlight's
+                own comment). */}
+            {showTempBarSpotlight && barRunning && (
+              <div
+                className="matcha-temp-callout"
+                style={{ left: `${TEMP_BAR_BOX.left}%`, top: `${TEMP_BAR_BOX.top + TEMP_BAR_BOX.height + 2}%` }}
+              >
+                <svg
+                  className="matcha-temp-callout-arrow"
+                  viewBox="0 0 24 40"
+                  preserveAspectRatio="none"
+                  aria-hidden="true"
+                >
+                  <polygon points="12,2 22,36 2,36" />
+                </svg>
+                <p className="matcha-temp-callout-text">Press Enter to stop it at the right temperature</p>
+              </div>
             )}
           </>
         )}
@@ -2413,7 +2599,9 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
             key={item.key}
             src={item.src}
             alt={`${item.alt}. Select it and press Enter to measure a scoop.`}
-            className={`station-item selectable${showTinHint ? ' tin-highlight' : ''}`}
+            className={`station-item selectable${showTinHint ? ' tin-highlight' : ''}${
+              showTinSpotlight ? ' matcha-spotlight-exempt' : ''
+            }`}
             data-focusable
             tabIndex={0}
             style={{
@@ -2444,13 +2632,40 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
             {TIN_LABELS[item.key]}
           </p>
         ))}
-        {showTinHint && (
+        {/* Suppressed for the first order specifically -- showTinSpotlight
+            below puts its own pink-backed, arrow-pointing callout above the
+            tins instead, and showing both at once would just be the same
+            "pick a grade" message said twice. Orders 2/3 never set
+            showTinSpotlight (customerNumber !== 1), so they keep getting
+            this plain text hint exactly as before. */}
+        {showTinHint && !showTinSpotlight && (
           <p
             className="matcha-tin-hint"
             style={{ left: `${TIN_HINT_LEFT}%`, top: `${TIN_HINT_TOP}%` }}
           >
             Use your arrow keys and Enter to pick the matcha grade your customer requested.
           </p>
+        )}
+        {/* First-order-only walkthrough callout -- arrow + short label
+            above the tins, arrow pointing down at them (same "text above,
+            arrow below, pointing down at the thing below it" shape as
+            .ordering-progress-callout in CustomerOrdering.css). Gone the
+            instant showTinSpotlight ends (a grade's actually been picked).
+            Reuses TIN_HINT_LEFT/TOP's own general neighborhood -- above the
+            tins, roughly centered on the cluster -- rather than a
+            freestanding new position. */}
+        {showTinSpotlight && (
+          <div className="matcha-tin-callout" style={{ left: `${TIN_HINT_LEFT}%`, top: `${TIN_HINT_TOP}%` }}>
+            <p className="matcha-tin-callout-text">Move down and choose the right matcha grade</p>
+            <svg
+              className="matcha-tin-callout-arrow"
+              viewBox="0 0 24 40"
+              preserveAspectRatio="none"
+              aria-hidden="true"
+            >
+              <polygon points="12,38 22,4 2,4" />
+            </svg>
+          </div>
         )}
         {selectedTin && (
           <>
@@ -2478,7 +2693,9 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
                     already acted. */}
                 <div
                   ref={scoopBarRef}
-                  className={`scoop-bar${scoopRunning ? ' scoop-bar-highlight' : ''}`}
+                  className={`scoop-bar${scoopRunning ? ' scoop-bar-highlight' : ''}${
+                    showScoopSpotlight ? ' matcha-spotlight-exempt' : ''
+                  }`}
                   data-focusable
                   tabIndex={0}
                   role="button"
@@ -2518,10 +2735,37 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
                   </div>
                   <div ref={scoopSliderRef} className="scoop-bar-slider" aria-hidden="true" />
                 </div>
-                {scoopRunning && (
+                {/* Suppressed for the first order specifically -- the new
+                    green callout below takes over this job while
+                    showScoopSpotlight is up. Orders 2/3 never set it, so
+                    they keep this exactly as before. */}
+                {scoopRunning && !showScoopSpotlight && (
                   <p className="scoop-bar-hint">
                     Use your backspace key to choose the right measurement, be as accurate as possible!
                   </p>
+                )}
+                {/* First-order-only walkthrough callout -- label + arrow
+                    sitting to the LEFT of the scoop gauge, arrow pointing
+                    right at it, same row-layout shape as .matcha-order-
+                    callout above (that one also sits beside its target with
+                    a sideways arrow). Green, not pink -- the one phase in
+                    this walkthrough that isn't -- per request. Gone the
+                    instant showScoopSpotlight ends (a reading's been
+                    confirmed). */}
+                {showScoopSpotlight && (
+                  <div className="matcha-scoop-callout">
+                    <p className="matcha-scoop-callout-text">
+                      Press Enter to stop the lever at the right amount
+                    </p>
+                    <svg
+                      className="matcha-scoop-callout-arrow"
+                      viewBox="0 0 40 24"
+                      preserveAspectRatio="none"
+                      aria-hidden="true"
+                    >
+                      <polygon points="38,12 2,2 2,22" />
+                    </svg>
+                  </div>
                 )}
                 {SCOOP_SPOON_ITEMS.map((item) => (
                   <img
@@ -2561,7 +2805,9 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
                 alt="Measured scoop of matcha. Drag it onto the bowl to tip the powder in, or select it and press Enter."
                 className={`big-spoon${bigSpoonDrag ? ' dragging' : ''}${
                   bigSpoonStage !== 'idle' ? ' settling' : ''
-                }${showSpoonHint ? ' big-spoon-highlight' : ''}`}
+                }${showSpoonHint ? ' big-spoon-highlight' : ''}${
+                  showSpoonSpotlight ? ' matcha-spotlight-exempt' : ''
+                }`}
                 data-focusable
                 tabIndex={0}
                 draggable={false}
@@ -2577,13 +2823,44 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
                 onKeyDown={handleBigSpoonKeyDown}
               />
             )}
-            {showSpoonHint && (
+            {/* Suppressed for the first order specifically -- the new pink
+                callout below takes over this job while showSpoonSpotlight
+                is up. Orders 2/3 never set it, so they keep this exactly as
+                before. */}
+            {showSpoonHint && !showSpoonSpotlight && (
               <p
                 className="big-spoon-hint"
                 style={{ left: `${SPOON_HINT_LEFT}%`, top: `${SPOON_HINT_TOP}%` }}
               >
                 Use Enter to pour the matcha powder on your bowl.
               </p>
+            )}
+            {/* First-order-only walkthrough callout -- text above, arrow
+                below pointing down at the spoon/bowl, same shape as
+                .matcha-tin-callout above. Sits at the same general spot the
+                old big-spoon-hint used (SPOON_HINT_LEFT/TOP), just styled
+                like the rest of this walkthrough instead. Gone the instant
+                showSpoonSpotlight ends (the pour's actually finished,
+                bigSpoonStage reaches 'done'). */}
+            {showSpoonSpotlight && (
+              <div
+                className="matcha-spoon-callout"
+                // Shifted further left than SPOON_HINT_LEFT itself (the old
+                // hint's own anchor, still used as-is for orders 2/3) per
+                // feedback that this callout needed to sit more to the left
+                // once the spoon's actually shown.
+                style={{ left: `${SPOON_HINT_LEFT - 10}%`, top: `${SPOON_HINT_TOP}%` }}
+              >
+                <p className="matcha-spoon-callout-text">Move down to pour the matcha powder</p>
+                <svg
+                  className="matcha-spoon-callout-arrow"
+                  viewBox="0 0 24 40"
+                  preserveAspectRatio="none"
+                  aria-hidden="true"
+                >
+                  <polygon points="12,38 22,4 2,4" />
+                </svg>
+              </div>
             )}
           </>
         )}
@@ -2651,9 +2928,28 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
               }
               className={`station-item movable${dragging ? ' dragging' : ''}${settling ? ' settling' : ''}${
                 pouring ? ' pouring' : ''
-              }${mixing ? ' mixing' : ''}${isKettle && showKettleHint ? ' kettle-highlight' : ''}${
-                isWhisk && showWhiskHint ? ' whisk-highlight' : ''
-              }${isBowl && showBowlHint ? ' bowl-highlight' : ''}${leaving ? ' bowl-vanishing' : ''}`}
+                // kettle-highlight/whisk-highlight (the flashing green
+                // halo, driven by showKettleHint/showWhiskHint) removed per
+                // request -- their own pink-callout replacements
+                // (.matcha-kettle-callout/.matcha-whisk-callout) do that
+                // job for the first order now; orders 2/3 just render
+                // these two plain with no highlight at all, same "only
+                // needs pointing out once" reasoning the Order/heater
+                // buttons already use.
+              }${mixing ? ' mixing' : ''}${isBowl && showBowlHint ? ' bowl-highlight' : ''}${
+                leaving ? ' bowl-vanishing' : ''
+              }${
+                (isBowl &&
+                  (showSpoonSpotlight ||
+                    showKettlePourSpotlight ||
+                    showWhiskSpotlight ||
+                    showMixSpotlight ||
+                    showBowlCarrySpotlight)) ||
+                (isKettle && (showKettleSpotlight || showKettlePourSpotlight)) ||
+                (isWhisk && (showWhiskSpotlight || showMixSpotlight))
+                  ? ' matcha-spotlight-exempt'
+                  : ''
+              }`}
               data-focusable
               tabIndex={0}
               draggable={false}
@@ -2708,7 +3004,26 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
                 // order; bowl-mix-swirl's own z-index (3, see
                 // MatchaMaking.css) stays above this so the swirl effect is
                 // still visible over the whisk while mixing, per request.
-                ...(isWhisk ? { zIndex: 2 } : {}),
+                // Bumped to 26 during showWhiskSpotlight specifically --
+                // this is an INLINE style, which always beats the
+                // .matcha-spotlight-exempt CSS class (className is also
+                // applied below, but inline styles win over any stylesheet
+                // rule regardless of specificity), so the plain class alone
+                // was silently not exempting the whisk at all during that
+                // phase -- it stayed at 2, well under the overlay's 25, and
+                // read as covered even though the className said otherwise.
+                // 27, not the shared exempt class's 26 -- bowl-powder/
+                // bowl-water also become exempt (26) during these same two
+                // phases, and since the whisk is earlier in DOM than both
+                // (rendered here, in the MOVABLE_ITEMS map, well before
+                // bowl-powder/bowl-water further down in the JSX), an equal
+                // z-index would let DOM order win and sink the whisk BELOW
+                // them -- exactly the "whisk hidden between the layers of
+                // mixing" bug this fixes. One point higher preserves the
+                // same bowl-water(26) < whisk(27) < bowl-mix-swirl(28) <
+                // bowl-spill-puddle(29) stack this element normally keeps
+                // via its own resting z-index: 2 below.
+                ...(isWhisk ? { zIndex: showWhiskSpotlight || showMixSpotlight ? 27 : 2 } : {}),
               }}
               onPointerDown={handlePointerDown(item)}
               onPointerMove={handlePointerMove(item)}
@@ -2719,7 +3034,10 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
             />
           );
         })}
-        {showKettleHint && (
+        {/* Suppressed for the first order specifically -- the new callout
+            below takes over this job while showKettleSpotlight is up.
+            Orders 2/3 never set it, so they keep this exactly as before. */}
+        {showKettleHint && !showKettleSpotlight && (
           <p
             className="kettle-hint"
             style={{ left: `${KETTLE_HINT_LEFT}%`, top: `${KETTLE_HINT_TOP}%` }}
@@ -2727,7 +3045,28 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
             Use Enter to pour water in the bowl.
           </p>
         )}
-        {showWhiskHint && (
+        {/* First-order-only walkthrough callout -- text above, arrow below
+            pointing down at the kettle, same shape as .matcha-tin-callout.
+            Gone the instant showKettleSpotlight ends (the water's actually
+            landed -- see showKettlePourSpotlight above, which takes over
+            from here). */}
+        {showKettleSpotlight && (
+          <div className="matcha-kettle-callout" style={{ left: `${KETTLE_HINT_LEFT}%`, top: `${KETTLE_HINT_TOP}%` }}>
+            <p className="matcha-kettle-callout-text">Move up and select the kettle to pour your water</p>
+            <svg
+              className="matcha-kettle-callout-arrow"
+              viewBox="0 0 24 40"
+              preserveAspectRatio="none"
+              aria-hidden="true"
+            >
+              <polygon points="12,38 22,4 2,4" />
+            </svg>
+          </div>
+        )}
+        {/* Suppressed for the first order specifically -- the new callout
+            below takes over this job while showWhiskSpotlight is up.
+            Orders 2/3 never set it, so they keep this exactly as before. */}
+        {showWhiskHint && !showWhiskSpotlight && (
           <p
             className="whisk-hint"
             style={{ left: `${WHISK_HINT_LEFT}%`, top: `${WHISK_HINT_TOP}%` }}
@@ -2735,13 +3074,61 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
             Use Enter to start whisking.
           </p>
         )}
-        {showBowlHint && (
+        {/* First-order-only, final walkthrough callout -- text above, arrow
+            below pointing down at the whisk, same shape as
+            .matcha-tin-callout. No further beat after this one -- it just
+            clears once whisking actually starts. */}
+        {showWhiskSpotlight && (
+          <div
+            className="matcha-whisk-callout"
+            // Shifted further left than WHISK_HINT_LEFT itself (the old
+            // hint's own anchor, still used as-is for orders 2/3) per
+            // feedback that this callout needed to sit more to the left.
+            style={{ left: `${WHISK_HINT_LEFT - 10}%`, top: `${WHISK_HINT_TOP}%` }}
+          >
+            <p className="matcha-whisk-callout-text">Move right and select the chasen to whisk your matcha</p>
+            <svg
+              className="matcha-whisk-callout-arrow"
+              viewBox="0 0 24 40"
+              preserveAspectRatio="none"
+              aria-hidden="true"
+            >
+              <polygon points="12,38 22,4 2,4" />
+            </svg>
+          </div>
+        )}
+        {/* Suppressed for the first order specifically -- the new callout
+            below takes over this job while showBowlCarrySpotlight is up.
+            Orders 2/3 never set it, so they keep this exactly as before. */}
+        {showBowlHint && !showBowlCarrySpotlight && (
           <p
             className="bowl-hint"
             style={{ left: `${bowlPos.left + bowlItem.width / 2}%`, top: `${bowlPos.top - 6}%` }}
           >
             Use Enter to carry your matcha bowl to the next station.
           </p>
+        )}
+        {/* Ninth walkthrough callout -- text above, arrow below pointing
+            down at the bowl, same shape as .matcha-tin-callout. Sits at the
+            same general spot the old plain-text .bowl-hint used. Gone the
+            instant showBowlCarrySpotlight ends (the bowl's actually on its
+            way -- see showStationAdvanceSpotlight above, which takes over
+            from here once it lands). */}
+        {showBowlCarrySpotlight && (
+          <div
+            className="matcha-bowl-callout"
+            style={{ left: `${bowlPos.left + bowlItem.width / 2}%`, top: `${bowlPos.top - 6}%` }}
+          >
+            <p className="matcha-bowl-callout-text">Select the bowl to carry it over to the next station</p>
+            <svg
+              className="matcha-bowl-callout-arrow"
+              viewBox="0 0 24 40"
+              preserveAspectRatio="none"
+              aria-hidden="true"
+            >
+              <polygon points="12,38 22,4 2,4" />
+            </svg>
+          </div>
         )}
         {/* Falling-powder pour effect -- see pourLeft/pourTop/pourHeight
             above -- only while the spoon's actually holding at its
@@ -2750,10 +3137,15 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
             bowl) rather than back up alongside the spoon itself, so it's
             unambiguously later in paint order than the bowl and can't end
             up rendered underneath it. Four grains on staggered delays/
-            offsets so it reads as a fuller stream rather than one dot. */}
+            offsets so it reads as a fuller stream rather than one dot.
+            .spoon-pour's own z-index (20) sits below the walkthrough
+            overlay's (25), so without the exempt class here this whole
+            effect would render invisibly UNDER the pink tint during
+            showSpoonSpotlight -- same bug bowl-powder had before it got its
+            own exempt class. */}
         {bigSpoonStage === 'pouring' && (
           <div
-            className="spoon-pour"
+            className={`spoon-pour${showSpoonSpotlight ? ' matcha-spotlight-exempt' : ''}`}
             aria-hidden="true"
             style={{
               left: `${pourLeft}%`,
@@ -2774,10 +3166,12 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
             anchored to the kettle's spout (kettlePourLeft/kettlePourTop)
             and colored WATER_COLOR instead. Same "only while actually
             holding at the hover spot, rendered after MOVABLE_ITEMS so it
-            can't paint underneath the bowl" reasoning as that one. */}
+            can't paint underneath the bowl" reasoning as that one -- and
+            same exempt-class-needed-or-it's-invisible-under-the-tint
+            reasoning too, this time for showKettlePourSpotlight. */}
         {kettleStage === 'pouring' && (
           <div
-            className="spoon-pour"
+            className={`spoon-pour${showKettlePourSpotlight ? ' matcha-spotlight-exempt' : ''}`}
             aria-hidden="true"
             style={{
               left: `${kettlePourLeft}%`,
@@ -2850,7 +3244,15 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
             state, keyed or not, from one customer's drink into the next. */}
         {bowlPowder && bowlStage !== 'sent' && (
           <div
-            className="bowl-powder"
+            className={`bowl-powder${
+              showSpoonSpotlight ||
+              showKettlePourSpotlight ||
+              showWhiskSpotlight ||
+              showMixSpotlight ||
+              showBowlCarrySpotlight
+                ? ' matcha-spotlight-exempt'
+                : ''
+            }`}
             aria-hidden="true"
             style={{
               left: `${bowlPowderLeft}%`,
@@ -2872,7 +3274,11 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
             this once whisking finishes, same as bowl-powder used to. */}
         {bowlWater && whiskStage !== 'done' && (
           <div
-            className="bowl-water"
+            className={`bowl-water${
+              showKettlePourSpotlight || showWhiskSpotlight || showMixSpotlight
+                ? ' matcha-spotlight-exempt'
+                : ''
+            }`}
             aria-hidden="true"
             style={{
               left: `${bowlWaterLeft}%`,
@@ -2896,7 +3302,7 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
             the actual ball-balancing physics. */}
         {whiskStage === 'mixing' && (
           <div
-            className="bowl-mix-swirl"
+            className={`bowl-mix-swirl${showMixSpotlight ? ' matcha-spotlight-exempt' : ''}`}
             aria-hidden="true"
             style={{
               left: `${bowlWaterLeft}%`,
@@ -2957,7 +3363,7 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
                 action). Naturally goes away the instant mixing ends and the
                 bar unmounts. */}
             <div
-              className="mix-bar mix-bar-highlight"
+              className={`mix-bar mix-bar-highlight${showMixSpotlight ? ' matcha-spotlight-exempt' : ''}`}
               aria-hidden="true"
               style={{
                 left: `${mixBarPos.left}%`,
@@ -2987,12 +3393,45 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
                 }}
               />
             </div>
-            <p
-              className="mix-bar-hint"
-              style={{ left: `${mixBarPos.left + MIX_BAR_WIDTH / 2}%`, top: `${mixBarPos.top - 11}%` }}
-            >
-              Use your arrow keys to balance the ball inside the green area and whisk without spilling.
-            </p>
+            {/* Suppressed for the first order specifically -- the new
+                callout below takes over this job while showMixSpotlight is
+                up. Orders 2/3 never set it, so they keep this exactly as
+                before. */}
+            {!showMixSpotlight && (
+              <p
+                className="mix-bar-hint"
+                style={{ left: `${mixBarPos.left + MIX_BAR_WIDTH / 2}%`, top: `${mixBarPos.top - 11}%` }}
+              >
+                Use your arrow keys to balance the ball inside the green area and whisk without spilling.
+              </p>
+            )}
+            {/* Eighth and final walkthrough callout -- text above, arrow
+                below pointing down at the bar, same shape as
+                .matcha-tin-callout. Sits at the same general spot the old
+                plain-text mix-bar-hint used. No further beat after this one
+                -- it just clears once mixing ends (whiskStage moves on to
+                'done'). */}
+            {showMixSpotlight && (
+              <div
+                className="matcha-mix-callout"
+                // Shifted further up/left than the mixBarPos-derived anchor
+                // itself (the old hint's own position, still used as-is for
+                // orders 2/3) per feedback.
+                style={{ left: `${mixBarPos.left + MIX_BAR_WIDTH / 2 - 8}%`, top: `${mixBarPos.top - 16}%` }}
+              >
+                <p className="matcha-mix-callout-text">
+                  Use your left and right arrows to keep the ball in the green area without spilling
+                </p>
+                <svg
+                  className="matcha-mix-callout-arrow"
+                  viewBox="0 0 24 40"
+                  preserveAspectRatio="none"
+                  aria-hidden="true"
+                >
+                  <polygon points="12,38 22,4 2,4" />
+                </svg>
+              </div>
+            )}
           </>
         )}
         {/* Spill puddles -- one per mess-up during whisking (see
@@ -3029,7 +3468,9 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
                   src={spillImages[i]}
                   alt=""
                   aria-hidden="true"
-                  className="bowl-spill-puddle"
+                  className={`bowl-spill-puddle${
+                    showMixSpotlight || showBowlCarrySpotlight ? ' matcha-spotlight-exempt' : ''
+                  }`}
                   style={{
                     left: `${spill.left}%`,
                     top: `${spill.top}%`,
@@ -3068,19 +3509,46 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
             Make Drink
           </div>
         )}
+        {/* Order receipt button -- the flashing green halo + dashed-border
+            hint label it used to carry (highlight/hintText/hintTextOpen,
+            still supported by OrderReceiptButton itself) are no longer
+            passed here: for the first order, the pink spotlight below plus
+            its own arrow + label callout do that job now, in the same
+            pink-panel-with-arrow style used throughout Customer Ordering's
+            walkthrough; for the 2nd/3rd orders, this button just renders
+            plain with no highlight at all, same "only needs pointing out
+            once" reasoning Customer Ordering's own play button uses. */}
         <OrderReceiptButton
           order={order}
-          highlight={showOrderHint}
-          hintText="Use your Enter key to check back on your customer's order at any time."
-          hintTextOpen="Use your Enter key to close it back up."
+          spotlightExempt={showStationSpotlight}
           onToggle={(nowOpen) => {
-            // Only the *closing* toggle (nowOpen === false) retires this
-            // highlight -- the opening one fires first and shouldn't, since
-            // the player hasn't closed it back up yet (see hintTextOpen
-            // above, which is still telling them to do exactly that).
+            // Only the *closing* toggle (nowOpen === false) retires
+            // showOrderHint/showStationSpotlight -- the opening one fires
+            // first and shouldn't, since the player hasn't closed it back
+            // up yet.
             if (!nowOpen) setShowOrderHint(false);
           }}
         />
+        {/* First-order-only walkthrough callout -- label + arrow sitting to
+            the LEFT of the Order button, arrow pointing right at it, same
+            "arrow at the edge closest to the target, text beside it" shape
+            as .ordering-form-callout in CustomerOrdering.css (that one also
+            sits beside its target with a sideways-pointing arrow rather
+            than above/below it). Gone the instant showStationSpotlight ends
+            (button opened and closed once). */}
+        {showStationSpotlight && (
+          <div className="matcha-order-callout">
+            <p className="matcha-order-callout-text">Move up to the order button to check back at any time</p>
+            <svg
+              className="matcha-order-callout-arrow"
+              viewBox="0 0 40 24"
+              preserveAspectRatio="none"
+              aria-hidden="true"
+            >
+              <polygon points="38,12 2,2 2,22" />
+            </svg>
+          </div>
+        )}
         <ProgressBar
           activeStep={activeStep}
           customerNumber={customerNumber}
@@ -3093,8 +3561,74 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
           // currentStepHint props CustomerOrdering already uses for its own
           // matching beat (see ProgressBar.js/.css).
           highlightCurrentStep={bowlStage === 'sent'}
-          currentStepHint="Use your right arrow key to move on to the base adding station."
+          // Suppressed for the first order specifically -- the new callout
+          // below takes over this job while showStationAdvanceSpotlight is
+          // up. Orders 2/3 never set it, so they keep this exactly as
+          // before.
+          currentStepHint={
+            showStationAdvanceSpotlight ? null : 'Use your right arrow key to move on to the base adding station.'
+          }
+          // Exempts the whole bar from the walkthrough spotlight across
+          // BOTH of this screen's last two beats (showBowlCarrySpotlight,
+          // while the bowl still needs picking up, and
+          // showStationAdvanceSpotlight right after) -- OR'd together so
+          // the bar reads through continuously across that handoff instead
+          // of flickering tinted for a frame in between.
+          spotlightExempt={showBowlCarrySpotlight || showStationAdvanceSpotlight}
         />
+        {/* Tenth and final walkthrough callout -- text above, arrow below
+            pointing down at the bar, same shape as .ordering-progress-
+            callout in CustomerOrdering.css (that one also points down at
+            the bar from directly above it). Gone once the player actually
+            leaves for the milk station (this whole component unmounts
+            then). */}
+        {showStationAdvanceSpotlight && (
+          <div className="matcha-progress-callout">
+            <p className="matcha-progress-callout-text">Use your right arrow to move to the next station</p>
+            <svg
+              className="matcha-progress-callout-arrow"
+              viewBox="0 0 24 40"
+              preserveAspectRatio="none"
+              aria-hidden="true"
+            >
+              <polygon points="12,38 22,4 2,4" />
+            </svg>
+          </div>
+        )}
+        {/* First-order-only walkthrough spotlight -- covers every beat on
+            this screen (all mutually exclusive -- see each flag's own
+            comment above), one shared overlay rather than a separate div
+            per beat since only one is ever up at a time. Same plain
+            flat-color-div-plus-z-index-exemption approach as Customer
+            Ordering's own overlay (see the big comment there for why: no
+            SVG mask, no holes, just a div with a higher-z-index element
+            punched through it). Pink throughout, same as every other beat
+            in this whole walkthrough (an earlier pass tried green for
+            showScoopSpotlight specifically, per an since-reversed request).
+            Rendered LAST (after ProgressBar, not before) so it actually
+            paints over the bar whenever the bar ISN'T the exempt target
+            (showTinSpotlight/showScoopSpotlight/etc, everything before the
+            last two beats) -- .progress-bar-wrap and this overlay share the
+            same z-index (25), and elements at equal z-index stack in DOM
+            order, so this needs to come after it in the tree to end up on
+            top and tint it by default. showBowlCarrySpotlight/
+            showStationAdvanceSpotlight instead bump the bar's OWN z-index
+            above this overlay's (see spotlightExempt on <ProgressBar>), the
+            same higher-z-index-punch-through approach every other exempt
+            element on this screen uses. pointer-events: none so it never
+            blocks input while it's up. */}
+        {(showStationSpotlight ||
+          showTinSpotlight ||
+          showScoopSpotlight ||
+          showSpoonSpotlight ||
+          showHeaterSpotlight ||
+          showTempBarSpotlight ||
+          showKettleSpotlight ||
+          showKettlePourSpotlight ||
+          showWhiskSpotlight ||
+          showMixSpotlight ||
+          showBowlCarrySpotlight ||
+          showStationAdvanceSpotlight) && <div className="matcha-spotlight-overlay" aria-hidden="true" />}
       </div>
     </div>
   );

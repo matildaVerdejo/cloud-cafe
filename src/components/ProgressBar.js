@@ -48,15 +48,18 @@ const ProgressBar = ({
   // at all -- every other screen leaves this false and keeps the original
   // behavior.
   disableAdvance = false,
-  // Opt-in, only ever passed true by CustomerOrdering's own showProgressPhase
-  // (the fourth beat of its first-order walkthrough spotlight) -- adds the
-  // shared .ordering-spotlight-exempt modifier (defined in
-  // CustomerOrdering.css, but a plain global class like every other
-  // className in this project, so it applies here too) so this bar's own
-  // z-index clears that screen's .ordering-spotlight-overlay and reads
-  // through the pink tint untinted, exactly like the character/play button
-  // do during that walkthrough's earlier phases. Every other screen leaves
-  // this false and renders exactly as before.
+  // Opt-in -- passed true by CustomerOrdering's own showProgressPhase (the
+  // fourth beat of its first-order walkthrough spotlight) and by
+  // MatchaMaking's own showBowlCarrySpotlight/showStationAdvanceSpotlight
+  // (its last two beats). Adds the shared .ordering-spotlight-exempt
+  // modifier (defined in CustomerOrdering.css, but a plain global class
+  // like every other className in this project, so it applies from
+  // MatchaMaking.js too even though that file never imports
+  // CustomerOrdering.css) so this bar's own z-index clears whichever
+  // screen's own spotlight overlay is currently up and reads through the
+  // pink tint untinted, exactly like every other exempt element in each
+  // screen's own walkthrough. Every other screen leaves this false and
+  // renders exactly as before.
   spotlightExempt = false,
 }) => {
   const activeIndex = PROGRESS_STEPS.findIndex((step) => step.key === activeStep);

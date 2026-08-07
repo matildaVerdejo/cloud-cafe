@@ -35,6 +35,700 @@
   position: relative;
 }
 
+/* First-order-only walkthrough spotlight -- continues Customer Ordering's
+   own pink-tint walkthrough (see showProgressPhase/.ordering-spotlight-
+   overlay in CustomerOrdering.css for the earlier beats) onto this screen.
+   Same plain flat-color div + z-index-exemption approach, no SVG mask
+   (that approach's own downsides are covered in detail over in
+   CustomerOrdering.css). z-index/color match that overlay exactly so the
+   walkthrough reads as one continuous treatment across both screens rather
+   than two differently-tuned effects. pointer-events: none so it never
+   blocks input. */
+.matcha-spotlight-overlay {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 25;
+  background: rgba(255, 224, 236, 0.6);
+  pointer-events: none;
+}
+
+/* Shared modifier -- applied conditionally (see showStationSpotlight in
+   MatchaMaking.js) to whichever element needs to punch through
+   .matcha-spotlight-overlay above; currently only ever the Order receipt
+   widget (see spotlightExempt on <OrderReceiptButton> and the className it
+   applies in OrderReceiptButton.js). */
+.matcha-spotlight-exempt {
+  z-index: 26;
+}
+
+/* .order-receipt-widget (see OrderReceiptButton.css) already carries its
+   own hardcoded z-index: 5, needed on every screen it's used on regardless
+   of this walkthrough. Same reasoning as .progress-bar-wrap.ordering-
+   spotlight-exempt in CustomerOrdering.css: a plain single-class
+   .matcha-spotlight-exempt rule isn't guaranteed to beat that existing
+   rule since both have equal specificity and the winner would depend on
+   CSS import order across the component tree. This higher-specificity
+   override sidesteps that. */
+.order-receipt-widget.matcha-spotlight-exempt {
+  z-index: 26;
+}
+
+/* First-order-only walkthrough callout -- see showStationSpotlight in
+   MatchaMaking.js. Same pink/mint panel look as every other walkthrough
+   callout, row layout (arrow at the end, closest to the button) like
+   .ordering-form-callout in CustomerOrdering.css -- sits to the LEFT of
+   the Order button's own top-right corner (.order-receipt-widget: top: 3%;
+   right: 3%) with its arrow pointing right at it, rather than stacked
+   above/below. right: 26% (well clear of the button's own right: 3%) and
+   top: 3% (level with the button itself, not above/below it) are eyeballed
+   the same way every other exact position in this project is -- no
+   live-rendered reference for the button's own true width (font-dependent)
+   or this label's own wrapped height, may need a small nudge once actually
+   seen. z-index: 26 set directly (not via .matcha-spotlight-exempt) since
+   this is new UI drawn on top of the tint, not one of the things being cut
+   out of it -- same reasoning CustomerOrdering's own callouts use their
+   own literal z-index: 26 too. */
+.matcha-order-callout {
+  position: absolute;
+  right: 15%;
+  top: 3%;
+  width: 24%;
+  z-index: 26;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: min(10px, 0.55vw);
+  pointer-events: none;
+  animation: matchaOrderCalloutIn 0.35s ease-out both;
+}
+
+@keyframes matchaOrderCalloutIn {
+  0% {
+    opacity: 0;
+    transform: translateY(10px) scale(0.94);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.matcha-order-callout-text {
+  margin: 0;
+  box-sizing: border-box;
+  padding: min(14px, 0.75vw) min(20px, 1.05vw);
+  border-radius: min(16px, 0.85vw);
+  border: min(2px, 0.11vw) solid rgba(232, 170, 202, 0.65);
+  background: linear-gradient(160deg, #eafaf1 0%, #fdeef6 100%);
+  box-shadow: 0 5px 14px rgba(0, 0, 0, 0.15);
+  color: #5c4a3a;
+  font-family: 'Pixelify Sans', cursive;
+  font-weight: 700;
+  font-size: min(24px, 1.2vw);
+  text-align: center;
+  letter-spacing: 0.01em;
+}
+
+/* Points right, at the Order button beside it. Same real-SVG-triangle
+   convention as every other walkthrough arrow in this project, just laid
+   out sideways (wide viewBox, apex on the right edge) and nudging left/
+   right instead of up/down -- same rotation .ordering-form-callout-arrow
+   in CustomerOrdering.css already applies for its own left-pointing case. */
+.matcha-order-callout-arrow {
+  flex: none;
+  width: min(46px, 2.4vw);
+  height: min(28px, 1.5vw);
+  animation: matchaOrderCalloutArrowNudge 1.4s ease-in-out infinite;
+}
+
+.matcha-order-callout-arrow polygon {
+  fill: #f7c6dc;
+  stroke: rgba(232, 170, 202, 0.9);
+  stroke-width: 3;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+
+@keyframes matchaOrderCalloutArrowNudge {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  50% {
+    transform: translateX(6px);
+  }
+}
+
+/* Shared pop-in for every new walkthrough callout on this screen (tin/
+   scoop/spoon, alongside the Order button's own matcha-order-callout
+   above) -- one keyframe reused by all of them rather than a near-duplicate
+   per callout, since the motion itself never differs, just which element
+   it's attached to. */
+@keyframes matchaCalloutIn {
+  0% {
+    opacity: 0;
+    transform: translateY(10px) scale(0.94);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* Shared down-pointing arrow nudge -- used by both .matcha-tin-callout-
+   arrow and .matcha-spoon-callout-arrow below (both point down at their
+   target), same "one keyframe, several callers" reasoning as
+   matchaCalloutIn above. */
+@keyframes matchaDownArrowNudge {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(6px);
+  }
+}
+
+/* First-order-only walkthrough callout, tins -- see showTinSpotlight in
+   MatchaMaking.js. Text above, arrow below pointing down at the tin row
+   (same "text first, arrow last" shape as .ordering-progress-callout in
+   CustomerOrdering.css, whose target also sits below it). left/top come
+   from the JSX (TIN_HINT_LEFT/TOP, the same anchor point the old plain-text
+   .matcha-tin-hint already used), translateX(-50%) here centers the panel
+   over that point the same way that old hint's own transform did. */
+.matcha-tin-callout {
+  position: absolute;
+  transform: translateX(-50%);
+  width: min(420px, 24vw);
+  z-index: 26;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: min(10px, 0.55vw);
+  pointer-events: none;
+  animation: matchaCalloutIn 0.35s ease-out both;
+}
+
+.matcha-tin-callout-text {
+  margin: 0;
+  box-sizing: border-box;
+  padding: min(14px, 0.75vw) min(20px, 1.05vw);
+  border-radius: min(16px, 0.85vw);
+  border: min(2px, 0.11vw) solid rgba(232, 170, 202, 0.65);
+  background: linear-gradient(160deg, #eafaf1 0%, #fdeef6 100%);
+  box-shadow: 0 5px 14px rgba(0, 0, 0, 0.15);
+  color: #5c4a3a;
+  font-family: 'Pixelify Sans', cursive;
+  font-weight: 700;
+  font-size: min(24px, 1.2vw);
+  text-align: center;
+  letter-spacing: 0.01em;
+}
+
+.matcha-tin-callout-arrow {
+  flex: none;
+  width: min(28px, 1.5vw);
+  height: min(46px, 2.4vw);
+  animation: matchaDownArrowNudge 1.4s ease-in-out infinite;
+}
+
+.matcha-tin-callout-arrow polygon {
+  fill: #f7c6dc;
+  stroke: rgba(232, 170, 202, 0.9);
+  stroke-width: 3;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+
+/* First-order-only walkthrough callout, scoop gauge -- see
+   showScoopSpotlight in MatchaMaking.js. Row layout, arrow at the end
+   pointing right at the gauge, same shape as .matcha-order-callout above.
+   Positioned to the gauge's own left (SCOOP_BAR_BOX: left: 93, top: 42,
+   height: 40 in MatchaMaking.js, so right: 9% here lands just clear of its
+   left edge, top: 55% roughly levels with its vertical center) -- eyeballed
+   the same way every other exact position in this project is. */
+.matcha-scoop-callout {
+  position: absolute;
+  right: 9%;
+  top: 55%;
+  transform: translateY(-50%);
+  width: 24%;
+  z-index: 26;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: min(10px, 0.55vw);
+  pointer-events: none;
+  animation: matchaCalloutIn 0.35s ease-out both;
+}
+
+.matcha-scoop-callout-text {
+  margin: 0;
+  box-sizing: border-box;
+  padding: min(14px, 0.75vw) min(20px, 1.05vw);
+  border-radius: min(16px, 0.85vw);
+  border: min(2px, 0.11vw) solid rgba(232, 170, 202, 0.65);
+  background: linear-gradient(160deg, #eafaf1 0%, #fdeef6 100%);
+  box-shadow: 0 5px 14px rgba(0, 0, 0, 0.15);
+  color: #5c4a3a;
+  font-family: 'Pixelify Sans', cursive;
+  font-weight: 700;
+  font-size: min(22px, 1.1vw);
+  text-align: center;
+  letter-spacing: 0.01em;
+}
+
+.matcha-scoop-callout-arrow {
+  flex: none;
+  width: min(46px, 2.4vw);
+  height: min(28px, 1.5vw);
+  animation: matchaOrderCalloutArrowNudge 1.4s ease-in-out infinite;
+}
+
+.matcha-scoop-callout-arrow polygon {
+  fill: #f7c6dc;
+  stroke: rgba(232, 170, 202, 0.9);
+  stroke-width: 3;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+
+/* First-order-only walkthrough callout, spoon + bowl -- see
+   showSpoonSpotlight in MatchaMaking.js. Same text-above/arrow-below shape
+   as .matcha-tin-callout above. left/top come from the JSX
+   (SPOON_HINT_LEFT/TOP, the same anchor the old plain-text .big-spoon-hint
+   already used), translateX(-50%) centers the panel over that point. */
+.matcha-spoon-callout {
+  position: absolute;
+  transform: translateX(-50%);
+  width: min(420px, 24vw);
+  z-index: 26;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: min(10px, 0.55vw);
+  pointer-events: none;
+  animation: matchaCalloutIn 0.35s ease-out both;
+}
+
+.matcha-spoon-callout-text {
+  margin: 0;
+  box-sizing: border-box;
+  padding: min(14px, 0.75vw) min(20px, 1.05vw);
+  border-radius: min(16px, 0.85vw);
+  border: min(2px, 0.11vw) solid rgba(232, 170, 202, 0.65);
+  background: linear-gradient(160deg, #eafaf1 0%, #fdeef6 100%);
+  box-shadow: 0 5px 14px rgba(0, 0, 0, 0.15);
+  color: #5c4a3a;
+  font-family: 'Pixelify Sans', cursive;
+  font-weight: 700;
+  font-size: min(24px, 1.2vw);
+  text-align: center;
+  letter-spacing: 0.01em;
+}
+
+.matcha-spoon-callout-arrow {
+  flex: none;
+  width: min(28px, 1.5vw);
+  height: min(46px, 2.4vw);
+  animation: matchaDownArrowNudge 1.4s ease-in-out infinite;
+}
+
+.matcha-spoon-callout-arrow polygon {
+  fill: #f7c6dc;
+  stroke: rgba(232, 170, 202, 0.9);
+  stroke-width: 3;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+
+/* First-order-only walkthrough callout, heater button -- see
+   showHeaterSpotlight in MatchaMaking.js. Row layout same as
+   .matcha-scoop-callout, but mirrored: the arrow comes FIRST here (see the
+   JSX) since the button it's pointing at sits to this callout's own left,
+   not its right. Positioned just clear of the button's own right edge
+   (HEATER_BUTTON_BOX works out to roughly left: 5.4%/top: 60.7%/width:
+   3.9%/height: 2.4% in MatchaMaking.js -- derived from heaterRelativeBox,
+   not a literal constant, so left: 10%/top: 58% here are eyeballed off
+   that estimate the same way every other exact position in this project
+   is). */
+.matcha-heater-callout {
+  position: absolute;
+  left: 10%;
+  top: 58%;
+  width: 26%;
+  z-index: 26;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: min(10px, 0.55vw);
+  pointer-events: none;
+  animation: matchaCalloutIn 0.35s ease-out both;
+}
+
+.matcha-heater-callout-text {
+  margin: 0;
+  box-sizing: border-box;
+  padding: min(14px, 0.75vw) min(20px, 1.05vw);
+  border-radius: min(16px, 0.85vw);
+  border: min(2px, 0.11vw) solid rgba(232, 170, 202, 0.65);
+  background: linear-gradient(160deg, #eafaf1 0%, #fdeef6 100%);
+  box-shadow: 0 5px 14px rgba(0, 0, 0, 0.15);
+  color: #5c4a3a;
+  font-family: 'Pixelify Sans', cursive;
+  font-weight: 700;
+  font-size: min(22px, 1.1vw);
+  text-align: center;
+  letter-spacing: 0.01em;
+}
+
+/* Points left, at the heater button beside it -- mirrored viewBox/polygon
+   from .matcha-order-callout-arrow/.matcha-scoop-callout-arrow's own
+   right-pointing shape, nudging the opposite direction to match. */
+.matcha-heater-callout-arrow {
+  flex: none;
+  width: min(46px, 2.4vw);
+  height: min(28px, 1.5vw);
+  animation: matchaHeaterCalloutArrowNudge 1.4s ease-in-out infinite;
+}
+
+.matcha-heater-callout-arrow polygon {
+  fill: #f7c6dc;
+  stroke: rgba(232, 170, 202, 0.9);
+  stroke-width: 3;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+
+@keyframes matchaHeaterCalloutArrowNudge {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  50% {
+    transform: translateX(-6px);
+  }
+}
+
+/* Fifth walkthrough callout, temp gauge -- see showTempBarSpotlight in
+   MatchaMaking.js. Arrow above, text below, pointing up at the gauge
+   (mirrored from .matcha-tin-callout/.matcha-spoon-callout's own
+   down-pointing shape, since this one's target sits ABOVE it instead of
+   below). left/top come from the JSX (TEMP_BAR_BOX's own left/top+height,
+   the same anchor the old plain-text .heater-temp-bar-hint already used).
+   No translateX(-50%) here, same reasoning HEATER_HINT_LEFT's own comment
+   in MatchaMaking.js gives -- TEMP_BAR_BOX.left (3%) sits close enough to
+   the frame's left edge that centering could push the box into negative
+   left. */
+.matcha-temp-callout {
+  position: absolute;
+  width: min(420px, 24vw);
+  z-index: 26;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: min(10px, 0.55vw);
+  pointer-events: none;
+  animation: matchaCalloutIn 0.35s ease-out both;
+}
+
+.matcha-temp-callout-text {
+  margin: 0;
+  box-sizing: border-box;
+  padding: min(14px, 0.75vw) min(20px, 1.05vw);
+  border-radius: min(16px, 0.85vw);
+  border: min(2px, 0.11vw) solid rgba(232, 170, 202, 0.65);
+  background: linear-gradient(160deg, #eafaf1 0%, #fdeef6 100%);
+  box-shadow: 0 5px 14px rgba(0, 0, 0, 0.15);
+  color: #5c4a3a;
+  font-family: 'Pixelify Sans', cursive;
+  font-weight: 700;
+  font-size: min(24px, 1.2vw);
+  text-align: center;
+  letter-spacing: 0.01em;
+}
+
+/* Points up, at the gauge above. Same real-SVG-triangle convention as
+   .ordering-button-callout-arrow in CustomerOrdering.css, whose target also
+   sits above it. */
+.matcha-temp-callout-arrow {
+  flex: none;
+  width: min(28px, 1.5vw);
+  height: min(46px, 2.4vw);
+  animation: matchaTempCalloutArrowNudge 1.4s ease-in-out infinite;
+}
+
+.matcha-temp-callout-arrow polygon {
+  fill: #f7c6dc;
+  stroke: rgba(232, 170, 202, 0.9);
+  stroke-width: 3;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+
+@keyframes matchaTempCalloutArrowNudge {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-6px);
+  }
+}
+
+/* Sixth walkthrough callout, kettle -- see showKettleSpotlight in
+   MatchaMaking.js. Same text-above/arrow-below-pointing-down shape as
+   .matcha-tin-callout/.matcha-spoon-callout. left/top come from the JSX
+   (KETTLE_HINT_LEFT/TOP, the same anchor the old plain-text .kettle-hint
+   already used), translateX(-50%) centers the panel over that point. */
+.matcha-kettle-callout {
+  position: absolute;
+  transform: translateX(-50%);
+  width: min(420px, 24vw);
+  z-index: 26;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: min(10px, 0.55vw);
+  pointer-events: none;
+  animation: matchaCalloutIn 0.35s ease-out both;
+}
+
+.matcha-kettle-callout-text {
+  margin: 0;
+  box-sizing: border-box;
+  padding: min(14px, 0.75vw) min(20px, 1.05vw);
+  border-radius: min(16px, 0.85vw);
+  border: min(2px, 0.11vw) solid rgba(232, 170, 202, 0.65);
+  background: linear-gradient(160deg, #eafaf1 0%, #fdeef6 100%);
+  box-shadow: 0 5px 14px rgba(0, 0, 0, 0.15);
+  color: #5c4a3a;
+  font-family: 'Pixelify Sans', cursive;
+  font-weight: 700;
+  font-size: min(24px, 1.2vw);
+  text-align: center;
+  letter-spacing: 0.01em;
+}
+
+.matcha-kettle-callout-arrow {
+  flex: none;
+  width: min(28px, 1.5vw);
+  height: min(46px, 2.4vw);
+  animation: matchaDownArrowNudge 1.4s ease-in-out infinite;
+}
+
+.matcha-kettle-callout-arrow polygon {
+  fill: #f7c6dc;
+  stroke: rgba(232, 170, 202, 0.9);
+  stroke-width: 3;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+
+/* Seventh and final walkthrough callout, whisk -- see showWhiskSpotlight in
+   MatchaMaking.js. Same shape as .matcha-kettle-callout above. left/top
+   come from the JSX (WHISK_HINT_LEFT/TOP, the same anchor the old
+   plain-text .whisk-hint already used). */
+.matcha-whisk-callout {
+  position: absolute;
+  transform: translateX(-50%);
+  width: min(420px, 24vw);
+  z-index: 26;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: min(10px, 0.55vw);
+  pointer-events: none;
+  animation: matchaCalloutIn 0.35s ease-out both;
+}
+
+.matcha-whisk-callout-text {
+  margin: 0;
+  box-sizing: border-box;
+  padding: min(14px, 0.75vw) min(20px, 1.05vw);
+  border-radius: min(16px, 0.85vw);
+  border: min(2px, 0.11vw) solid rgba(232, 170, 202, 0.65);
+  background: linear-gradient(160deg, #eafaf1 0%, #fdeef6 100%);
+  box-shadow: 0 5px 14px rgba(0, 0, 0, 0.15);
+  color: #5c4a3a;
+  font-family: 'Pixelify Sans', cursive;
+  font-weight: 700;
+  font-size: min(24px, 1.2vw);
+  text-align: center;
+  letter-spacing: 0.01em;
+}
+
+.matcha-whisk-callout-arrow {
+  flex: none;
+  width: min(28px, 1.5vw);
+  height: min(46px, 2.4vw);
+  animation: matchaDownArrowNudge 1.4s ease-in-out infinite;
+}
+
+.matcha-whisk-callout-arrow polygon {
+  fill: #f7c6dc;
+  stroke: rgba(232, 170, 202, 0.9);
+  stroke-width: 3;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+
+/* Eighth and final walkthrough callout, whisking minigame -- see
+   showMixSpotlight in MatchaMaking.js. Same text-above/arrow-below-
+   pointing-down shape as .matcha-tin-callout/.matcha-kettle-callout/
+   .matcha-whisk-callout. left/top come from the JSX (mixBarPos-derived, the
+   same anchor the old plain-text .mix-bar-hint already used),
+   translateX(-50%) centers the panel over that point the same way that old
+   hint's own transform did. Wider than the other callouts (28vw vs 24vw)
+   since this one's message is longer (explains the actual control scheme,
+   not just "move here"). */
+.matcha-mix-callout {
+  position: absolute;
+  transform: translateX(-50%);
+  width: min(460px, 28vw);
+  z-index: 26;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: min(10px, 0.55vw);
+  pointer-events: none;
+  animation: matchaCalloutIn 0.35s ease-out both;
+}
+
+.matcha-mix-callout-text {
+  margin: 0;
+  box-sizing: border-box;
+  padding: min(14px, 0.75vw) min(20px, 1.05vw);
+  border-radius: min(16px, 0.85vw);
+  border: min(2px, 0.11vw) solid rgba(232, 170, 202, 0.65);
+  background: linear-gradient(160deg, #eafaf1 0%, #fdeef6 100%);
+  box-shadow: 0 5px 14px rgba(0, 0, 0, 0.15);
+  color: #5c4a3a;
+  font-family: 'Pixelify Sans', cursive;
+  font-weight: 700;
+  font-size: min(22px, 1.1vw);
+  text-align: center;
+  letter-spacing: 0.01em;
+}
+
+.matcha-mix-callout-arrow {
+  flex: none;
+  width: min(28px, 1.5vw);
+  height: min(46px, 2.4vw);
+  animation: matchaDownArrowNudge 1.4s ease-in-out infinite;
+}
+
+.matcha-mix-callout-arrow polygon {
+  fill: #f7c6dc;
+  stroke: rgba(232, 170, 202, 0.9);
+  stroke-width: 3;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+
+/* Ninth walkthrough callout, bowl -- see showBowlCarrySpotlight in
+   MatchaMaking.js. Same text-above/arrow-below-pointing-down shape as
+   .matcha-tin-callout/.matcha-kettle-callout/.matcha-whisk-callout. left/
+   top come from the JSX (bowlPos-derived, the same anchor the old
+   plain-text .bowl-hint already used), translateX(-50%) centers the panel
+   over that point the same way that old hint's own transform did. */
+.matcha-bowl-callout {
+  position: absolute;
+  transform: translateX(-50%);
+  width: min(420px, 24vw);
+  z-index: 26;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: min(10px, 0.55vw);
+  pointer-events: none;
+  animation: matchaCalloutIn 0.35s ease-out both;
+}
+
+.matcha-bowl-callout-text {
+  margin: 0;
+  box-sizing: border-box;
+  padding: min(14px, 0.75vw) min(20px, 1.05vw);
+  border-radius: min(16px, 0.85vw);
+  border: min(2px, 0.11vw) solid rgba(232, 170, 202, 0.65);
+  background: linear-gradient(160deg, #eafaf1 0%, #fdeef6 100%);
+  box-shadow: 0 5px 14px rgba(0, 0, 0, 0.15);
+  color: #5c4a3a;
+  font-family: 'Pixelify Sans', cursive;
+  font-weight: 700;
+  font-size: min(24px, 1.2vw);
+  text-align: center;
+  letter-spacing: 0.01em;
+}
+
+.matcha-bowl-callout-arrow {
+  flex: none;
+  width: min(28px, 1.5vw);
+  height: min(46px, 2.4vw);
+  animation: matchaDownArrowNudge 1.4s ease-in-out infinite;
+}
+
+.matcha-bowl-callout-arrow polygon {
+  fill: #f7c6dc;
+  stroke: rgba(232, 170, 202, 0.9);
+  stroke-width: 3;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+
+/* Tenth and final walkthrough callout, progress bar -- see
+   showStationAdvanceSpotlight in MatchaMaking.js. Same shape/positioning
+   idea as .ordering-progress-callout in CustomerOrdering.css (text above,
+   arrow below pointing down at the bar, centered horizontally like the bar
+   itself and sitting just above its own top edge). */
+.matcha-progress-callout {
+  position: absolute;
+  left: 32%;
+  bottom: 24%;
+  transform: translateX(-50%);
+  width: 26%;
+  z-index: 26;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: min(10px, 0.55vw);
+  pointer-events: none;
+  animation: matchaCalloutIn 0.35s ease-out both;
+}
+
+.matcha-progress-callout-text {
+  margin: 0;
+  box-sizing: border-box;
+  padding: min(14px, 0.75vw) min(20px, 1.05vw);
+  border-radius: min(16px, 0.85vw);
+  border: min(2px, 0.11vw) solid rgba(232, 170, 202, 0.65);
+  background: linear-gradient(160deg, #eafaf1 0%, #fdeef6 100%);
+  box-shadow: 0 5px 14px rgba(0, 0, 0, 0.15);
+  color: #5c4a3a;
+  font-family: 'Pixelify Sans', cursive;
+  font-weight: 700;
+  font-size: min(24px, 1.2vw);
+  text-align: center;
+  letter-spacing: 0.01em;
+}
+
+.matcha-progress-callout-arrow {
+  flex: none;
+  width: min(28px, 1.5vw);
+  height: min(46px, 2.4vw);
+  animation: matchaDownArrowNudge 1.4s ease-in-out infinite;
+}
+
+.matcha-progress-callout-arrow polygon {
+  fill: #f7c6dc;
+  stroke: rgba(232, 170, 202, 0.9);
+  stroke-width: 3;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+
 .matcha-making-art {
   width: 100%;
   height: 100%;
@@ -1222,6 +1916,20 @@
   z-index: 20;
 }
 
+/* .spoon-pour's own hardcoded z-index (20) above is what makes it paint
+   over the bowl -- see that rule's own comment. Since this file's
+   .matcha-spotlight-exempt rule (z-index: 26) is a plain single-class
+   selector defined earlier in this stylesheet, and this rule is a plain
+   single-class selector defined later, the two have equal specificity and
+   this one -- being later in source order -- would otherwise win outright,
+   silently overriding the exempt class back down to 20 and leaving the
+   pour effect invisibly UNDER the walkthrough overlay again. Same
+   higher-specificity-override fix used for .progress-bar-wrap/.order-
+   receipt-widget elsewhere in this project. */
+.spoon-pour.matcha-spotlight-exempt {
+  z-index: 26;
+}
+
 .spoon-pour-grain {
   position: absolute;
   left: 50%;
@@ -1575,6 +2283,21 @@
   mix-blend-mode: overlay;
 }
 
+/* Same higher-specificity-override reasoning as .spoon-pour.matcha-
+   spotlight-exempt above -- .bowl-mix-swirl's own z-index: 3 is a plain
+   single-class rule defined later in this file than .matcha-spotlight-
+   exempt, so without this override it would win the cascade tiebreak and
+   silently undo the exemption. 28, not the shared exempt class's 26 --
+   same "preserve the resting stack order, don't flatten it" reasoning the
+   whisk's own inline zIndex bump (see MatchaMaking.js) uses: this effect
+   normally sits above the whisk (z-index: 3 vs the whisk's 2) via the
+   exact same painted-later-in-DOM logic, so it needs to land one step
+   above whichever value the whisk gets bumped to here (27) to keep
+   reading as "swirling over the whisk" instead of hiding it. */
+.bowl-mix-swirl.matcha-spotlight-exempt {
+  z-index: 28;
+}
+
 @keyframes bowlMixSwirl {
   from {
     transform: translate(-50%, -50%) rotate(0deg);
@@ -1602,6 +2325,16 @@
   z-index: 4;
   filter: drop-shadow(0 3px 4px rgba(0, 0, 0, 0.3));
   animation: bowlSpillPuddleIn 0.35s ease-out both;
+}
+
+/* Same higher-specificity-override reasoning as .spoon-pour.matcha-
+   spotlight-exempt/.bowl-mix-swirl.matcha-spotlight-exempt above -- and
+   same "preserve the resting stack order" reasoning too: puddles normally
+   sit above everything else on the bowl (z-index: 4, the highest of this
+   whole group), so this needs to land one step above bowl-mix-swirl's own
+   bumped value (28) here. */
+.bowl-spill-puddle.matcha-spotlight-exempt {
+  z-index: 29;
 }
 
 /* One-shot pop-in (small -> slightly overshot -> settled) the instant a

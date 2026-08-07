@@ -48,7 +48,23 @@ const TOPPING_LABELS = {
 // as before. hintText is shown while closed, hintTextOpen while open --
 // the flashing itself keeps going regardless of open/closed, only the
 // wording swaps to match what Enter would do next.
-const OrderReceiptButton = ({ order, highlight = false, hintText = null, hintTextOpen = null, onToggle }) => {
+const OrderReceiptButton = ({
+  order,
+  highlight = false,
+  hintText = null,
+  hintTextOpen = null,
+  onToggle,
+  // Opt-in, only ever passed true by MatchaMaking's own showStationSpotlight
+  // (the first-order-only walkthrough spotlight continued from Customer
+  // Ordering) -- adds the .matcha-spotlight-exempt modifier (defined in
+  // MatchaMaking.css, but a plain global class like every other className in
+  // this project, so it applies here too even though this component doesn't
+  // import that stylesheet itself) so this widget's own z-index clears that
+  // screen's .matcha-spotlight-overlay and reads through the pink tint
+  // untinted. Milk Selection/Toppings never pass this and render exactly as
+  // before.
+  spotlightExempt = false,
+}) => {
   const [open, setOpen] = useState(false);
   const buttonRef = useRef(null);
 
@@ -94,7 +110,7 @@ const OrderReceiptButton = ({ order, highlight = false, hintText = null, hintTex
   };
 
   return (
-    <div className="order-receipt-widget">
+    <div className={`order-receipt-widget${spotlightExempt ? ' matcha-spotlight-exempt' : ''}`}>
       <button
         ref={buttonRef}
         type="button"
