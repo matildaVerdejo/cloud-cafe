@@ -607,6 +607,22 @@ const CustomerOrdering = ({ activeStep, customerNumber, onNavigate, onAdvance, o
     return () => clearInterval(intervalId);
   }, [speechText]);
 
+  // First-order-only walkthrough, "read the order" phase -- drives the
+  // callout (arrow + label) and the spotlight's own character/bubble
+  // cutouts (see .ordering-spotlight-overlay further down). Starts true
+  // only for customerNumber === 1 (2nd/3rd orders never show it), and
+  // switches off 7 seconds after the typewriter above actually finishes --
+  // not the instant it finishes, so there's a real beat to read the order
+  // before this phase ends and the "button" phase below takes over.
+  const typingDone = visibleChars >= speechText.length;
+  const [showReadPhase, setShowReadPhase] = useState(customerNumber === 1);
+  useEffect(() => {
+    if (customerNumber !== 1 || !typingDone) return undefined;
+    const READ_PHASE_LINGER_MS = 7000;
+    const timeoutId = setTimeout(() => setShowReadPhase(false), READ_PHASE_LINGER_MS);
+    return () => clearTimeout(timeoutId);
+  }, [customerNumber, typingDone]);
+
   // Character voice line -- plays once, right as the speech bubble starts
   // typing (this effect and the typewriter one above both fire on mount,
   // i.e. once per customer/remount, for the same reason). Keyed off
@@ -707,11 +723,41 @@ const CustomerOrdering = ({ activeStep, customerNumber, onNavigate, onAdvance, o
     }
   }, [orderFormOpen]);
 
-  // Highlight beat -- half a second after landing on this screen, the play
-  // button starts flashing the same green halo, plus a nearby "click enter
-  // to take the customer's order" label (see .ordering-tablet-* in
-  // CustomerOrdering.css), and becomes enabled/focusable (see disabled=
-  // {!tabletPromptActive} below). Opening the order form itself is handled
+  // First-order-only walkthrough, "use the button" phase -- once
+  // showReadPhase above ends, the spotlight stays up but its cutouts swap
+  // from character+bubble to play-button+bubble instead (see
+  // showButtonPhase below and the exempt-from-tint classes further down),
+  // pointing the player at the play button next rather than the character.
+  // hasOpenedOrderForm is a one-way flag (never resets back to false) so
+  // this phase doesn't pop back up if the player opens the form, decides to
+  // look around, and closes it again without placing the order yet --
+  // once they've found the button once, this walkthrough beat is done.
+  const [hasOpenedOrderForm, setHasOpenedOrderForm] = useState(false);
+  useEffect(() => {
+    if (orderFormOpen) setHasOpenedOrderForm(true);
+  }, [orderFormOpen]);
+  const showButtonPhase = customerNumber === 1 && !showReadPhase && !hasOpenedOrderForm;
+
+  // Third walkthrough beat, first order only -- once the order
+  // form modal is actually open, its own backdrop (see .order-modal-backdrop
+  // below) already covers literally everything on screen except the modal
+  // itself, which is exactly the "pink over everything but the order panel"
+  // shape the first two phases were built around -- so rather than stacking
+  // a second overlay underneath it, this just recolors that existing
+  // backdrop to the same pink tint (see .order-modal-backdrop--walkthrough
+  // in CustomerOrdering.css) instead of its normal dark dim, and shows a
+  // short label above the modal explaining what to do with it. Tied
+  // directly to orderFormOpen, so it starts the instant the modal opens and
+  // ends the instant it closes (either by placing the order or backing out
+  // via the backdrop click) -- no separate linger/one-way flag needed here.
+  const showFormPhase = customerNumber === 1 && orderFormOpen;
+
+  // Half a second after landing on this screen, the play button becomes
+  // enabled/focusable (see disabled={!tabletPromptActive} below) -- used to
+  // also flash a green halo plus a nearby hint label at this same moment,
+  // both removed per request (see the ordering-spotlight-overlay comment
+  // further down for the walkthrough treatment that replaced them).
+  // Opening the order form itself is handled
   // entirely by the button's own native onClick below now -- there used to
   // also be a separate window-level keydown listener here that opened the
   // form on Enter regardless of what was focused, which is exactly what
@@ -746,6 +792,24 @@ const CustomerOrdering = ({ activeStep, customerNumber, onNavigate, onAdvance, o
   // (this flag), not merely orderFormOpen going false, so closing the
   // modal early via the X button doesn't trigger it.
   const [showStationHint, setShowStationHint] = useState(false);
+
+  // Fourth and final walkthrough beat, first order only -- once the order's
+  // actually been placed (showStationHint above, set true at the end of
+  // placeOrder below, never reset false again for this mount), this phase
+  // simply lasts until the player leaves this screen for the matcha
+  // station, same as the dot-highlight/hint it already drives on
+  // ProgressBar. Reuses the exact same pink spotlight (see showSpotlight
+  // below) as the first two phases, this time exempting the progress bar
+  // itself (see spotlightExempt passed to <ProgressBar> further down)
+  // instead of the character/button, with its own down-pointing callout
+  // above the bar telling the player where to go next.
+  const showProgressPhase = customerNumber === 1 && showStationHint;
+
+  // Whether the spotlight overlay itself renders at all -- any of the
+  // three "pink over the whole screen" phases (the fourth, showFormPhase,
+  // instead recolors the order-modal's own backdrop rather than using this
+  // overlay -- see that flag's own comment above).
+  const showSpotlight = showReadPhase || showButtonPhase || showProgressPhase;
 
   const placeOrder = () => {
     playButtonClick();
@@ -798,7 +862,7 @@ const CustomerOrdering = ({ activeStep, customerNumber, onNavigate, onAdvance, o
         <img
           src={CUSTOMER_CHARACTERS[customerCharacter].src}
           alt={CUSTOMER_CHARACTERS[customerCharacter].alt}
-          className="ordering-bunny"
+          className={`ordering-bunny${showReadPhase ? ' ordering-spotlight-exempt' : ''}`}
         />
 
         {/* Speech bubble, sitting above the bunny's head -- now carries the
@@ -822,7 +886,11 @@ const CustomerOrdering = ({ activeStep, customerNumber, onNavigate, onAdvance, o
             bubble with a small gap regardless of how tall the bubble's
             content makes it grow, instead of needing its own separately
             guessed percentage position. */}
-        <div className="ordering-speech-wrap">
+        <div
+          className={`ordering-speech-wrap${
+            showReadPhase || showButtonPhase ? ' ordering-spotlight-exempt' : ''
+          }`}
+        >
           {/* No longer gated behind an Enter-to-acknowledge step (see the
               removed orderAcknowledged state above) -- the bubble just
               shows the order as it types out, with no flashing halo or
@@ -859,7 +927,7 @@ const CustomerOrdering = ({ activeStep, customerNumber, onNavigate, onAdvance, o
         <button
           ref={playButtonRef}
           type="button"
-          className={`ordering-play-button${tabletPromptActive ? ' tablet-highlight' : ''}`}
+          className={`ordering-play-button${showButtonPhase ? ' ordering-spotlight-exempt' : ''}`}
           data-focusable
           // Disabled (unfocusable/unclickable, and skipped by
           // useFlatFocusNav's own `!el.disabled` filter) until it's
@@ -880,11 +948,6 @@ const CustomerOrdering = ({ activeStep, customerNumber, onNavigate, onAdvance, o
           &#9654;
         </button>
 
-        {/* Second highlight beat -- just the button's own flashing white
-            halo (see .ordering-play-button.tablet-highlight in
-            CustomerOrdering.css) plus its nearby hint label, no tint. */}
-        {tabletPromptActive && <p className="ordering-tablet-hint">Click Enter to take the customer&apos;s order.</p>}
-
         {orderFormOpen && (
           <>
             {/* Clicking the dimmed backdrop closes the modal (mouse-only --
@@ -892,8 +955,44 @@ const CustomerOrdering = ({ activeStep, customerNumber, onNavigate, onAdvance, o
                 path anymore; the dedicated close (X) button that used to
                 cover that was removed since completing the order via Place
                 Order already closes the modal, making a separate close
-                button redundant). */}
-            <div className="order-modal-backdrop" onClick={closeOrderForm} />
+                button redundant). During showFormPhase (first order only)
+                this same element also carries the walkthrough's pink tint
+                instead of its normal dark dim -- see showFormPhase above. */}
+            <div
+              className={`order-modal-backdrop${showFormPhase ? ' order-modal-backdrop--walkthrough' : ''}`}
+              onClick={closeOrderForm}
+            />
+            {/* Third walkthrough beat, first order only -- two labels sitting
+                in the open counter space to the RIGHT of the modal (which
+                is horizontally centered, see .order-modal, so its right
+                edge never reaches this far over), shown one at a time
+                rather than together: the first (arrow + label, arrow aimed
+                back at the modal same as before) covers the fill-in-the-
+                sections step and is up while the order's still incomplete;
+                the instant isOrderComplete flips true and the Place Order
+                button itself actually appears (see further down), this one
+                is replaced by the second, arrow-less label pointing the
+                player at that new button instead -- never both at once, so
+                there's always exactly one instruction on screen for
+                whichever step the player's actually on. */}
+            {showFormPhase && !isOrderComplete && (
+              <div className="ordering-form-callout">
+                <svg
+                  className="ordering-form-callout-arrow"
+                  viewBox="0 0 40 24"
+                  preserveAspectRatio="none"
+                  aria-hidden="true"
+                >
+                  <polygon points="2,12 36,2 36,22" />
+                </svg>
+                <p className="ordering-form-callout-text">Fill in each part of the order below</p>
+              </div>
+            )}
+            {showFormPhase && isOrderComplete && (
+              <p className="ordering-form-callout-text ordering-form-callout-text--lower">
+                Press the button below to place the order
+              </p>
+            )}
             <div
               className="order-modal"
               role="dialog"
@@ -1056,8 +1155,125 @@ const CustomerOrdering = ({ activeStep, customerNumber, onNavigate, onAdvance, o
           onNavigate={onNavigate}
           onAdvance={onAdvance}
           highlightCurrentStep={showStationHint}
-          currentStepHint="Use your right arrow key to head to the matcha station."
+          // Suppressed for the first order specifically -- showProgressPhase
+          // below puts its own pink-backed, arrow-pointing callout above the
+          // bar instead, and showing both at once would just be the same
+          // "go to the next station" message said twice. Orders 2/3 never
+          // set showProgressPhase (customerNumber !== 1), so they keep
+          // getting this plain text hint exactly as before.
+          currentStepHint={showProgressPhase ? null : 'Use your right arrow key to head to the matcha station.'}
+          spotlightExempt={showProgressPhase}
         />
+
+        {/* First-order-only walkthrough spotlight -- a single light
+            pastel-pink dim over the ENTIRE screen (art, window, play
+            button, ProgressBar, everything). Used to punch two holes
+            through it via an SVG mask so the character/bubble showed
+            through -- dropped that (kept leaving visible gaps around both,
+            never quite matching their real edges) in favor of the simpler,
+            sturdier fix: this is now a plain flat-colored div with no holes
+            at all, and whichever elements need to show through it are given
+            the shared .ordering-spotlight-exempt z-index modifier instead
+            (see .ordering-bunny/.ordering-speech-wrap/.ordering-play-button/
+            ProgressBar's own spotlightExempt prop and their own conditional
+            classNames) -- they already sit earlier in this file's own DOM
+            order, so without that they'd normally paint UNDER this
+            later-rendered overlay; the explicit z-index is what puts them
+            back on top of it, fully untinted, regardless of DOM order.
+
+            Three-phase lifecycle for customerNumber === 1 only (see
+            showReadPhase/showButtonPhase/showProgressPhase above): the
+            overlay itself stays up for all three (showSpotlight = any of
+            them), but which element is exempt changes each time -- phase 1
+            ("read phase") exempts the character + bubble while the order's
+            still typing out (plus a 7s linger after it finishes) so the
+            player focuses on reading it; phase 2 ("button phase") swaps the
+            exemption to the play button + bubble instead, nudging the
+            player toward the button next, and stays up until they actually
+            open the order form for the first time; phase 3 ("progress
+            phase") kicks in once the order's actually been placed, and
+            swaps the exemption again to the progress bar itself, pointing
+            the player at the next station. (The order-form modal itself,
+            open between phases 2 and 3, uses a different mechanism
+            entirely -- see showFormPhase/.order-modal-backdrop--walkthrough
+            above -- since that modal's own backdrop already covers
+            everything but itself, no separate overlay needed there.)
+            pointer-events: none so it never blocks input even while it's
+            up. */}
+        {showSpotlight && <div className="ordering-spotlight-overlay" aria-hidden="true" />}
+
+        {/* First-order-only walkthrough callout -- a message plus an arrow
+            pointing across the screen at the speech bubble, sitting in the
+            open space to its left (see .ordering-read-order-callout in
+            CustomerOrdering.css for exact placement). Only shown during
+            showReadPhase (not the later showButtonPhase) -- once the read
+            phase ends the callout's job is done, only the spotlight's own
+            exemption target changes over to the play button. z-index above
+            the spotlight overlay (same as the bunny/speech-wrap) so the
+            pink tint doesn't wash it out. */}
+        {showReadPhase && (
+          <div className="ordering-read-order-callout">
+            <svg
+              className="ordering-read-order-callout-arrow"
+              viewBox="0 0 24 40"
+              preserveAspectRatio="none"
+              aria-hidden="true"
+            >
+              <polygon points="12,2 22,36 2,36" />
+            </svg>
+            <p className="ordering-read-order-callout-text">Carefully read the customer&apos;s order</p>
+          </div>
+        )}
+
+        {/* Second walkthrough beat, phase 2 only -- once the read phase
+            ends and the spotlight's exemption swaps over to the play
+            button (see showButtonPhase above), this callout sits just
+            below the button with its own arrow pointing straight up at it,
+            same "arrow + short label" shape as the read-phase callout
+            above but telling the player where to go next instead of what
+            to do: move up (the D-pad/keyboard direction that actually
+            focuses the button, per the nav chain on .ordering-play-button
+            itself) from their station number to reach it. Gone the instant
+            showButtonPhase ends (order form opened), same as every other
+            walkthrough element on this screen. */}
+        {showButtonPhase && (
+          <div className="ordering-button-callout">
+            <svg
+              className="ordering-button-callout-arrow"
+              viewBox="0 0 24 40"
+              preserveAspectRatio="none"
+              aria-hidden="true"
+            >
+              <polygon points="12,2 22,36 2,36" />
+            </svg>
+            <p className="ordering-button-callout-text">Move up to take the order</p>
+          </div>
+        )}
+
+        {/* Third and final walkthrough beat -- once the order's actually
+            been placed and the spotlight's exemption swaps over to the
+            progress bar itself (see showProgressPhase above and
+            spotlightExempt on <ProgressBar>), this callout sits above the
+            bar with its own arrow pointing straight down at it -- text on
+            top, arrow below, mirrored from the read-phase callout's
+            arrow-above-text layout since the thing being pointed at is now
+            below this box instead of above it. Gone the instant the player
+            actually leaves for the matcha station (this whole component
+            unmounts then), same as every other walkthrough element on this
+            screen. */}
+        {showProgressPhase && (
+          <div className="ordering-progress-callout">
+            <p className="ordering-progress-callout-text">Head to the next station to start making the drink</p>
+            <svg
+              className="ordering-progress-callout-arrow"
+              viewBox="0 0 24 40"
+              preserveAspectRatio="none"
+              aria-hidden="true"
+            >
+              <polygon points="12,38 22,4 2,4" />
+            </svg>
+          </div>
+        )}
       </div>
     </div>
   );

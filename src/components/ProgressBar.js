@@ -48,6 +48,16 @@ const ProgressBar = ({
   // at all -- every other screen leaves this false and keeps the original
   // behavior.
   disableAdvance = false,
+  // Opt-in, only ever passed true by CustomerOrdering's own showProgressPhase
+  // (the fourth beat of its first-order walkthrough spotlight) -- adds the
+  // shared .ordering-spotlight-exempt modifier (defined in
+  // CustomerOrdering.css, but a plain global class like every other
+  // className in this project, so it applies here too) so this bar's own
+  // z-index clears that screen's .ordering-spotlight-overlay and reads
+  // through the pink tint untinted, exactly like the character/play button
+  // do during that walkthrough's earlier phases. Every other screen leaves
+  // this false and renders exactly as before.
+  spotlightExempt = false,
 }) => {
   const activeIndex = PROGRESS_STEPS.findIndex((step) => step.key === activeStep);
   const barRef = useRef(null);
@@ -114,7 +124,7 @@ const ProgressBar = ({
   }, [highlightCurrentStep]);
 
   return (
-    <div className="progress-bar-wrap">
+    <div className={`progress-bar-wrap${spotlightExempt ? ' ordering-spotlight-exempt' : ''}`}>
       {highlightCurrentStep && currentStepHint && <p className="progress-station-hint">{currentStepHint}</p>}
       <div className="progress-bar" ref={barRef}>
         <span className="progress-order-count">
