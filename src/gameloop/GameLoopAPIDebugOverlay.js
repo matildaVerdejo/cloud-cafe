@@ -14,8 +14,8 @@ import { getActionFromKeyEvent, shouldDebounceEnter } from './pal';
 // no autofocus race to guard against — a single ref + keydown listener is
 // sufficient.
 const ACTIONS = [
-  { id: 'adOpportunity:LEVEL_COMPLETE', label: 'Send adOpportunity (LEVEL_COMPLETE)' },
-  { id: 'adOpportunity:MENU_RETURN', label: 'Send adOpportunity (MENU_RETURN)' },
+  { id: 'adOpportunity:PREROLL', label: 'Send adOpportunity (PREROLL)' },
+  { id: 'adOpportunity:ORDER_COMPLETE', label: 'Send adOpportunity (ORDER_COMPLETE)' },
   { id: 'focusHost', label: 'Send focusHost' },
   { id: 'close', label: 'Send close' },
 ];

@@ -91,9 +91,9 @@ const FinalCombination = ({
   order,
   incomingDrink,
   // Whether there's actually a next order this session (App.js's own
-  // customerNumber < ORDERS_PER_SESSION) -- true for the first two of
-  // three orders, false for the last one (which instead returns to the
-  // main menu, unchanged). Drives the "Start order N" button below and
+  // customerNumber < ORDERS_PER_SESSION) -- true for the first
+  // ORDERS_PER_SESSION - 1 orders, false for the last one (which instead
+  // returns to the main menu, unchanged). Drives the "Start order N" button below and
   // disables the ProgressBar's own Right-arrow/current-dot "advance"
   // gesture while true, so starting a new round is only ever done through
   // that dedicated button -- see its own comment further down.
@@ -106,6 +106,18 @@ const FinalCombination = ({
   matchaScore,
   mixingScore,
   toppingsScore,
+  // Whether App.js currently has a blocking adOpportunity in flight (see
+  // its own adGate comment) -- disables the "Start order N+1" button below
+  // for the duration, same reasoning as MainPage's own Play button.
+  adGate = false,
+  // Requests the between-order adOpportunity and, once the host resolves
+  // it, actually advances to the next order (App.js's requestAd wraps
+  // handleAdvance as the deferred continuation) -- called from the "Start
+  // order N+1" button below instead of onAdvance directly. Only ever
+  // invoked once dwellElapsed is true (see below), which is what keeps the
+  // ad request itself from ever firing before the required outcome-
+  // comprehension dwell has actually finished.
+  onStartNextOrder,
 }) => {
   const containerRef = useRef(null);
   useFlatFocusNav(containerRef);
@@ -152,6 +164,28 @@ const FinalCombination = ({
     const timeoutId = setTimeout(() => setShowSticker(true), STICKER_REVEAL_DELAY_MS);
     return () => clearTimeout(timeoutId);
   }, [reactionSticker]);
+
+  // ---- Between-order adOpportunity dwell gate -------------------------
+  // GameLoop's ad policy requires an outcome-triggered adOpportunity (this
+  // round's result, i.e. the score reveal) to not fire synchronously with
+  // the triggering event -- the player needs to actually see the result
+  // first, for at least STICKER_REVEAL_DELAY_MS-worth of reveal (which
+  // itself already clears the >=3-4s floor in tv-gameplay-envelopes.md
+  // "Timing envelopes", see that constant's own comment in ScoreCard.js).
+  // The "Start order N+1" button below stays disabled until this flips
+  // true, which is what actually enforces the dwell -- onStartNextOrder
+  // (and therefore the adOpportunity request it makes) is only reachable
+  // through that button, so it can never fire early. Reset on every fresh
+  // round (customerNumber changing) the same way showSticker/showCelebration
+  // reset above; only armed at all when hasNextOrder is true, since the
+  // button (and therefore this gate) doesn't exist on the 7th/last order.
+  const [dwellElapsed, setDwellElapsed] = useState(false);
+  useEffect(() => {
+    setDwellElapsed(false);
+    if (!hasNextOrder) return undefined;
+    const timeoutId = setTimeout(() => setDwellElapsed(true), STICKER_REVEAL_DELAY_MS);
+    return () => clearTimeout(timeoutId);
+  }, [hasNextOrder, customerNumber]);
 
   // ---- Carried-over drink from Toppings Station (see incomingDrink above)
   // Which cup type this actually is -- ToppingsStation's own
@@ -447,9 +481,17 @@ const FinalCombination = ({
             className="start-next-order-button"
             data-focusable
             tabIndex={0}
+            // Disabled until the score/sticker reveal has actually finished
+            // (dwellElapsed) AND, once that request goes out, until the host
+            // resolves it (adGate) -- see both props/state's own comments
+            // above. useFlatFocusNav already filters [data-focusable] on
+            // !el.disabled, so this also removes the button from D-pad focus
+            // (not just click) for the duration, same as MainPage's Play
+            // button.
+            disabled={!dwellElapsed || adGate}
             onClick={() => {
               playButtonClick();
-              onAdvance();
+              onStartNextOrder();
             }}
           >
             Start order {customerNumber + 1}

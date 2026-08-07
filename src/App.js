@@ -8,7 +8,7 @@ import MatchaMaking from './components/MatchaMaking';
 import MilkSelection from './components/MilkSelection';
 import ToppingsStation from './components/ToppingsStation';
 import FinalCombination from './components/FinalCombination';
-import { PROGRESS_STEPS } from './components/ProgressBar';
+import { PROGRESS_STEPS, ORDERS_PER_SESSION } from './components/ProgressBar';
 // Debug overlay is currently unused (see the commented-out JSX below) --
 // import left commented out too so CRA's CI lint pass (unused-import) doesn't
 // fail the Vercel build. Uncomment both together to bring it back.
@@ -23,12 +23,12 @@ import {
   sendAdOpportunity,
   onAdMessage,
   hasSentAppReady,
+  isEmbedded,
 } from './gameloop/bridge';
 
 // Same order as the ProgressBar's PROGRESS_STEPS, imported from the same
 // place so the bar and this state machine can't drift apart.
 const STEP_KEYS = PROGRESS_STEPS.map((step) => step.key);
-const ORDERS_PER_SESSION = 3;
 // How much each press of the Settings panel's volume +/- buttons changes
 // musicVolume by -- 10 presses from empty reaches full volume.
 const VOLUME_STEP = 0.1;
@@ -42,7 +42,8 @@ function App() {
   // "start screen" that gates that, unaffected by this beat coming before
   // it).
   const [currentPage, setCurrentPage] = useState('splash');
-  // Which customer (1-3) the player is currently serving this session.
+  // Which customer (1-ORDERS_PER_SESSION) the player is currently serving
+  // this session.
   const [customerNumber, setCustomerNumber] = useState(1);
   // The order built in CustomerOrdering's "Place Order" step -- null until
   // placed, then shown by OrderReceiptButton on the Matcha/Milk/Toppings
@@ -92,7 +93,26 @@ function App() {
   const [mixingScore, setMixingScore] = useState(null);
   const [toppingsScore, setToppingsScore] = useState(null);
   const [showExitConfirm, setShowExitConfirm] = useState(false);
-  const [adPlaying, setAdPlaying] = useState(false);
+  // Whether an adOpportunity is currently in flight (sent, not yet resolved
+  // by ads.completed/ads.skipped) -- per GameLoop's ad policy, adOpportunity
+  // is a BLOCKING contract: once sent, progression must wait for one of
+  // those two release signals. Drives both the visual curtain below and the
+  // disabled state on whichever button would otherwise let the player
+  // advance past it (MainPage's Play button for PREROLL, FinalCombination's
+  // "Start order N+1" button for the between-order ad). Armed only when
+  // actually embedded (see embeddedRef below) -- the standalone exemption
+  // means there's no host to ever resolve it outside a real iframe.
+  const [adGate, setAdGate] = useState(false);
+  // Captured once at mount -- window.parent doesn't change over the app's
+  // lifetime, so there's no need to recompute this on every ad request.
+  const embeddedRef = useRef(isEmbedded());
+  // Deferred continuation for whichever adOpportunity is currently gating
+  // (see requestAd below) -- run once, the moment adGate clears, then
+  // cleared back to null. null means "nothing to do when this ad resolves"
+  // (the between-order ad's own button click already IS the deferred
+  // action's trigger point, so its own requestAd call passes the real
+  // continuation; PREROLL's requestAd call is the only other caller today).
+  const pendingAfterAdRef = useRef(null);
   // Background music -- one <audio> element rendered once here (outside the
   // per-page conditionals below) so it survives every page navigation and
   // just keeps looping until the tab/app itself closes. There's no on/off
@@ -177,15 +197,42 @@ function App() {
     // be.
     sendAppReady();
 
+    // ads.completed / ads.skipped are the ONLY two release signals for the
+    // blocking adGate (see its own comment above) -- ads.started/
+    // inProgress are informational only and must never clear it (per
+    // gameloop-html5-tv.mdc "Ad policy"; inProgress is also spec-marked
+    // "future release" and not currently emitted by the production
+    // launcher, so this deliberately does not branch on it at all). No
+    // game-side resolution watchdog/timeout either -- a self-release here
+    // would race the host, which is the one place failure handling
+    // (no-fill, playback error) is actually owned.
     const unsubscribe = onAdMessage((message) => {
-      if (message === 'ads.started' || message === 'ads.inProgress') {
-        setAdPlaying(true);
-      } else if (message === 'ads.completed' || message === 'ads.skipped') {
-        setAdPlaying(false);
-      }
+      if (message !== 'ads.completed' && message !== 'ads.skipped') return;
+      setAdGate(false);
+      const runAfterAd = pendingAfterAdRef.current;
+      pendingAfterAdRef.current = null;
+      runAfterAd?.();
     });
     return unsubscribe;
   }, []);
+
+  // Sends a blocking adOpportunity and arms adGate, deferring `onResolved`
+  // (if given) until the host actually releases it via ads.completed/
+  // ads.skipped (see the onAdMessage handler above). Standalone exemption
+  // (gameloop-html5-tv.mdc "Ad policy"): when there's no host to ever
+  // resolve the request (embeddedRef.current is false -- e.g. `npm start`
+  // opened directly in a tab, or the game running outside any iframe),
+  // this suppresses the send entirely and runs onResolved immediately
+  // instead of arming a gate nothing will ever clear.
+  const requestAd = (reason, onResolved) => {
+    if (!embeddedRef.current) {
+      onResolved?.();
+      return;
+    }
+    sendAdOpportunity(reason);
+    pendingAfterAdRef.current = onResolved ?? null;
+    setAdGate(true);
+  };
 
   // Keeps the <audio> element's own volume in sync with musicVolume --
   // declared (and therefore runs, on mount) before the autoplay effect
@@ -346,7 +393,10 @@ function App() {
     setCurrentPage('main');
   };
 
-  const handlePlayClick = () => {
+  // Actually starts a fresh session at order 1 -- split out from
+  // handlePlayClick below so it can run either immediately (standalone) or
+  // as the deferred continuation of the PREROLL adOpportunity (embedded).
+  const startNewSession = () => {
     // Fresh round -- reset the lock too (see maxStepIndexRef's own comment
     // above), before setCurrentPage below actually lands on 'ordering', so
     // this customer's stations don't start out already locked from
@@ -362,6 +412,24 @@ function App() {
     setMixingScore(null);
     setToppingsScore(null);
     setCurrentPage('ordering');
+  };
+
+  // MainPage's Play button IS the "start screen" the GameLoop ad policy
+  // means by "fire PREROLL only after any splash/start-screen has been
+  // shown and dismissed, immediately before gameplay actually begins" --
+  // SplashScreen (the earlier, auto-dismissing loading beat) is unaffected,
+  // see its own comment on currentPage's initial value above. Fires once
+  // per session start (i.e. again each time the player returns to the main
+  // menu and presses Play again, not just once for the whole iframe load --
+  // unlike appReady, PREROLL has no emit-once requirement). requestAd
+  // itself handles the embedded/standalone split and defers startNewSession
+  // until the host actually resolves the ad (or runs it immediately if
+  // there's no host to resolve it at all). Guarded against re-entry so a
+  // second Enter/click on an already-disabled-but-not-yet-re-rendered Play
+  // button can't fire two PREROLL requests back to back.
+  const handlePlayClick = () => {
+    if (adGate) return;
+    requestAd('PREROLL', startNewSession);
   };
 
   // Per request: the next station is locked until the current one's own
@@ -453,17 +521,16 @@ function App() {
       setMatchaScore(null);
       setMixingScore(null);
       setToppingsScore(null);
+      // No ad on the final order's own return to the main menu -- per
+      // product decision, this session's ad breaks are exactly PREROLL (on
+      // Play) plus one between each pair of consecutive orders (see
+      // FinalCombination's own onStartNextOrder/adGate props below), which
+      // is ORDERS_PER_SESSION - 1 of them. The 7th order's completion is
+      // the end of the session, not a boundary between two orders, so
+      // nothing fires here.
       setCurrentPage('main');
-      sendAdOpportunity('MENU_RETURN');
     }
   };
-
-  // Natural ad break point: each customer's drink finished.
-  useEffect(() => {
-    if (currentPage === 'final-combination') {
-      sendAdOpportunity('DRINK_COMPLETE');
-    }
-  }, [currentPage]);
 
   const confirmExit = () => {
     setShowExitConfirm(false);
@@ -483,7 +550,7 @@ function App() {
   };
 
   return (
-    <div className={`App${adPlaying ? ' gl-ad-playing' : ''}`}>
+    <div className={`App${adGate ? ' gl-ad-playing' : ''}`}>
       <div className={`page-container ${currentPage}`}>
         {currentPage === 'splash' && (
           <div className="page-slide">
@@ -492,7 +559,13 @@ function App() {
         )}
         {currentPage === 'main' && (
           <div className="page-slide">
-            <MainPage onPlayClick={handlePlayClick} />
+            {/* disabled while adGate is true so a held-Enter/double-click
+                during the PREROLL ad's own blocking window can't fire a
+                second adOpportunity before the first has resolved -- see
+                handlePlayClick's own re-entry guard, which this backs up
+                at the DOM level (a disabled button can't receive Enter/
+                click at all, see MainPage.js). */}
+            <MainPage onPlayClick={handlePlayClick} disabled={adGate} />
           </div>
         )}
         {currentPage === 'ordering' && (
@@ -551,6 +624,17 @@ function App() {
               matchaScore={matchaScore}
               mixingScore={mixingScore}
               toppingsScore={toppingsScore}
+              // Between-order adOpportunity: FinalCombination's own dwell
+              // timer (see that file) waits out the score/sticker reveal
+              // before ever letting this fire, then this requests the ad
+              // and only actually advances (handleAdvance) once it
+              // resolves -- same requestAd/deferred-continuation shape as
+              // PREROLL above, just triggered by this screen's own button
+              // instead of Play. Only meaningful while hasNextOrder is
+              // true; unused (never called) on the 7th order, which has no
+              // "Start order N+1" button at all (see hasNextOrder above).
+              adGate={adGate}
+              onStartNextOrder={() => requestAd('ORDER_COMPLETE', handleAdvance)}
               {...progressProps}
             />
           </div>
@@ -601,7 +685,13 @@ function App() {
         </div>
       )}
 
-      {adPlaying && <div className="gl-ad-curtain">Ad playing…</div>}
+      {/* Up for the entire blocking window (from the moment adOpportunity
+          is sent until ads.completed/ads.skipped resolves it), not just
+          while the host has confirmed an ad is actually rendering
+          (ads.started) -- see adGate's own comment above for why: the gap
+          between "request sent" and "ads.started arrives" still needs to
+          read as "please wait", not as a dead, clickable screen. */}
+      {adGate && <div className="gl-ad-curtain">Ad playing…</div>}
 
       {/* Rendered once here (not inside any per-page conditional) so it
           keeps looping across every screen/customer for the whole session --

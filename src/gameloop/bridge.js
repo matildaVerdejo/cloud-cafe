@@ -86,8 +86,14 @@ export function sendClose() {
 // adOpportunity MUST carry both source: 'APPSHELL' (the launcher relay's
 // gate/round-trip routing key) and ad_platform: 'playerwon' (GameLoop Main
 // drops object-branch requests missing this) -- this is the only shape that
-// fires in both hosting topologies (direct and launcher-wrapped). reason
-// examples used in this game: 'MENU_RETURN', 'DRINK_COMPLETE'.
+// fires in both hosting topologies (direct and launcher-wrapped). See
+// gs-feedback.md's own "adOpportunity/close wire shape" entry -- this
+// contradicts the served gameloop-html5-tv.mdc rule's current "no source/
+// ad_platform" wording; left as-is pending confirmation rather than
+// silently regressing a previously-validated shape. reason values used in
+// this game: 'PREROLL' (Play button, once per session start) and
+// 'ORDER_COMPLETE' (between each pair of consecutive orders -- see App.js's
+// requestAd and FinalCombination.js's onStartNextOrder).
 export function sendAdOpportunity(reason) {
   post({
     type: 'adOpportunity',
@@ -125,4 +131,14 @@ export function getPublisherUserId() {
 
 export function hasSentAppReady() {
   return appReadySent;
+}
+
+// Whether this game is actually running inside a GameLoop (or mockhost)
+// iframe, vs. opened directly in a tab (e.g. `npm start`). Per the
+// GameLoop ad policy's "standalone exemption": there is no host to resolve
+// an adOpportunity when window.parent === window, so callers should skip
+// the blocking ad gate entirely in that case rather than waiting forever
+// for an ads.completed/skipped that will never arrive.
+export function isEmbedded() {
+  return window.parent !== window;
 }

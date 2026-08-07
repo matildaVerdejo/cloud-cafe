@@ -147,3 +147,14 @@
 .play-button:active {
   transform: scale(0.95);
 }
+
+/* While a blocking PREROLL adOpportunity is in flight (App.js's adGate) --
+   dims the button and swaps the cursor so it visibly reads as "waiting",
+   on top of the gl-ad-curtain overlay already covering the rest of the
+   screen (see App.css). */
+.play-button:disabled {
+  cursor: default;
+  opacity: 0.5;
+  animation-play-state: paused;
+  transform: none;
+}

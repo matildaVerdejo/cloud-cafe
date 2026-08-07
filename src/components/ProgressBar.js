@@ -3,6 +3,12 @@ import './ProgressBar.css';
 import { getActionFromKeyEvent } from '../gameloop/pal';
 import { playButtonClick } from '../gameloop/sfx';
 
+// Single source of truth for how many orders make up a session -- App.js
+// imports this (rather than keeping its own local copy) so its
+// hasNextOrder/session-reset logic can't drift from what this bar (and
+// ScoreCard.js's own order badge, which imports it too) actually displays.
+export const ORDERS_PER_SESSION = 7;
+
 // Single source of truth for step order/labels -- App.js imports this same
 // list (as STEP_KEYS) for its own navigation logic, so the bar and the
 // state machine can never drift out of sync.
@@ -131,7 +137,7 @@ const ProgressBar = ({
       {highlightCurrentStep && currentStepHint && <p className="progress-station-hint">{currentStepHint}</p>}
       <div className="progress-bar" ref={barRef}>
         <span className="progress-order-count">
-          Order {customerNumber} of 3
+          Order {customerNumber} of {ORDERS_PER_SESSION}
         </span>
         <div className="progress-steps">
           {/* Connector track behind the dots: fills green from the first dot

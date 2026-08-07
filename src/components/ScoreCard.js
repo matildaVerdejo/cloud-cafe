@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import './ScoreCard.css';
 import { computeOverallScore } from '../gameloop/scoring';
+import { ORDERS_PER_SESSION } from './ProgressBar';
 
 // Replaces the old hardcoded AnnieOrder1.png receipt + per-section badge
 // overlay on FinalCombination -- see that file's own removed SCORE_SECTIONS
@@ -222,12 +223,13 @@ const ScoreCard = ({ customerNumber, characterName, orderTakingScore, matchaScor
     return () => clearTimeout(timeoutId);
   }, [scoreTier]);
 
-  // Zero-padded "0N/03" badge -- replaces the old plain-gray "Order N of 3"
+  // Zero-padded "0N/0M" badge -- replaces the old plain-gray "Order N of M"
   // line per request, moved into the card's own upper-right corner instead
-  // of sitting as its own line above the title. ORDERS_PER_SESSION isn't
-  // threaded down this far (App.js keeps it a local constant), so "03" is
-  // hardcoded the same way ProgressBar.js's own copy already is.
-  const orderBadge = customerNumber != null ? `0${customerNumber}/03` : null;
+  // of sitting as its own line above the title. ORDERS_PER_SESSION now comes
+  // from ProgressBar.js (see that file's own comment) rather than being
+  // hardcoded here, so this can't drift from the bar's own "Order N of M"
+  // text or App.js's session-length logic.
+  const orderBadge = customerNumber != null ? `0${customerNumber}/0${ORDERS_PER_SESSION}` : null;
 
   return (
     <div className="score-card">

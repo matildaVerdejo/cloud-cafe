@@ -45,7 +45,7 @@
   }
 }
 
-/* "0N/03" badge -- replaces the old plain-gray, centered "Order N of 3" line
+/* "0N/0M" badge -- replaces the old plain-gray, centered "Order N of M" line
    above the title (.score-card-order-number, now removed) per request:
    moved into the card's own upper-right corner instead, and recolored from
    gray (#8a7a6a) to the same green (#5a8a4f) the rest of this card's own

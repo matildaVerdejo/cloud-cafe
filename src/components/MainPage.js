@@ -3,7 +3,7 @@ import './MainPage.css';
 import { playButtonClick } from '../gameloop/sfx';
 import { getActionFromKeyEvent } from '../gameloop/pal';
 
-const MainPage = ({ onPlayClick }) => {
+const MainPage = ({ onPlayClick, disabled = false }) => {
   const playButtonRef = useRef(null);
 
   // Up/Left: Start -> Settings gear. Down/Right: Settings gear -> back to
@@ -79,6 +79,7 @@ const MainPage = ({ onPlayClick }) => {
           className="play-button"
           data-focusable
           autoFocus
+          disabled={disabled}
           onClick={() => {
             playButtonClick();
             onPlayClick?.();

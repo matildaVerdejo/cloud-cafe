@@ -48,11 +48,10 @@ nested iframe in the GameLoop launcher, talks to the host via
 are unchanged — GameLoop scaffolding was added alongside it:
 
 - `src/gameloop/bridge.js` — V1 messaging: `appReady` (sent once the main
-  screen paints), `close` (top-level exit), `adOpportunity` (sent when the
-  matcha latte is finished and when returning to the main menu), and the
-  inbound `adMessage` ad-lifecycle listener. Reads the six GameLoop query
-  parameters (`playerId`, `sessionId`, `platform`, `marketId`, `app_id`,
-  `glQrURL`) at startup.
+  screen paints), `close` (top-level exit), `adOpportunity` (see "Ad breaks"
+  below), and the inbound `adMessage` ad-lifecycle listener. Reads the six
+  GameLoop query parameters (`playerId`, `sessionId`, `platform`, `marketId`,
+  `app_id`, `glQrURL`) at startup.
 - `src/gameloop/pal.js` — keycode → logical action (`Up`/`Down`/`Left`/
   `Right`/`Enter`/`Back`) so no component hardcodes raw keycodes.
 - `src/gameloop/useFlatFocusNav.js` — D-pad/remote focus navigation for each
@@ -64,6 +63,26 @@ are unchanged — GameLoop scaffolding was added alongside it:
 - Back key policy: Back on any sub-screen retraces to the previous step
   (same as the existing "Back to ..." buttons); Back on the main menu opens
   an exit confirmation and sends `close` on confirm.
+
+### Ad breaks
+
+A session is 7 orders (`ORDERS_PER_SESSION` in `src/components/ProgressBar.js`).
+`adOpportunity` fires twice per boundary:
+
+- **`PREROLL`** — once each time Play is pressed on the main menu, before
+  the first order's ordering screen actually opens.
+- **`ORDER_COMPLETE`** — once between each pair of consecutive orders (6
+  times per full session), fired from the "Start order N+1" button on the
+  Serve screen. The button stays disabled until the score/sticker reveal
+  has fully played out (required outcome-comprehension dwell) and, once
+  pressed, until the ad itself resolves.
+
+No ad fires after the 7th order — it returns straight to the main menu.
+Both requests are **blocking**: `App.js`'s `adGate` state disables the
+triggering button and shows a curtain from the moment the request is sent
+until GameLoop resolves it with `ads.completed` or `ads.skipped`; there is
+no gate in a standalone tab (`npm start` opened directly, no host to
+resolve the request).
 
 ### Testing in the GameLoop mock host
 
