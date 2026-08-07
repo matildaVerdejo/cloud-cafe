@@ -135,3 +135,12 @@ design — everything is keyboard/D-pad driven, matching a real TV remote.
   bottle's art while pouring — worth a look on-screen to see whether that
   overlap reads fine or needs the bottle's own z-index/opacity adjusted
   during 'measuring'.
+- The Toppings Station's foam/powder/mint-leaves aim-lever minigame (shared
+  `leverStage`/`leverFor` state machine, `LEVER_PERIOD_MS`/`LEVER_AMPLITUDE_PCT`/
+  `LEVER_CENTER_TOLERANCE` in `ToppingsStation.js`, graded via `leverCredit` in
+  `gameloop/scoring.js`) was built and bundle-verified the same way, so its
+  sweep speed/amplitude/tolerance are un-playtested — check on a real
+  1920×1080 iframe/TV and against actual remote key-repeat behavior, and tune
+  if the center zone reads as too easy/hard to catch. Only syrups keep their
+  own Left/Right-steered balance minigame; foam, powder, and mint leaves all
+  use this shared lever instead.

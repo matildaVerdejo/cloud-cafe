@@ -362,3 +362,41 @@
   animation: bowlSpillPuddleIn 0.35s ease-out both;
 }
 
+/* Foam/powder/leaf lever-miss spill puddle (see renderToppingSpill in
+   ToppingsStation.js) -- an exact duplicate of .syrup-spill-puddle above,
+   just its own class rather than sharing that literal name since these are
+   a conceptually separate (one-shot, not accumulating) kind of spill even
+   though every visual rule is identical. */
+.topping-spill-puddle {
+  position: absolute;
+  pointer-events: none;
+  z-index: 4;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  mask-position: center;
+  -webkit-mask-size: contain;
+  mask-size: contain;
+  filter: drop-shadow(0 3px 4px rgba(0, 0, 0, 0.3));
+  animation: bowlSpillPuddleIn 0.35s ease-out both;
+}
+
+/* Shared foam/powder/leaf aim-lever bar (see leverStage/LEVER_PERIOD_MS in
+   ToppingsStation.js) -- .mix-bar/.mix-bar-zone/.mix-ball already give it
+   the right gray-cased look and green center-zone/light ball for free
+   (MatchaMaking.css, loaded globally); this just adds the missing
+   :focus-visible glow, since .mix-bar itself is only ever used already-
+   focused-by-proxy elsewhere (the syrup minigame listens on the bottle, not
+   the bar) and so never needed one of its own until this bar became a
+   focus target in its own right. Same glow treatment as .scoop-bar:focus-
+   visible in MatchaMaking.css. */
+.lever-bar {
+  cursor: pointer;
+}
+
+.lever-bar:focus-visible {
+  outline: none;
+  box-shadow: inset 0 1px 2px rgba(255, 255, 255, 0.35), inset 0 -1px 2px rgba(0, 0, 0, 0.2),
+    0 0 12px 4px rgba(255, 255, 255, 0.85);
+}
+

@@ -474,6 +474,38 @@ export function scoreMixingDrink({ cupType, iceCubes, milkType, milkFillPercent,
   return { percent: pct(checks), checks };
 }
 
+// ---- Graduated topping-placement credit ------------------------------
+// Per request: the new foam/powder/mint-leaves aim-lever minigame
+// (ToppingsStation.js's own leverStage/LEVER_CENTER_TOLERANCE) shouldn't be
+// all-or-nothing either -- catching the marker right on the middle is full
+// credit, catching it further off (however far it drifted before the
+// player pressed Enter) costs progressively more, same two-segment
+// "still good near the middle, bad the further out you go" shape as
+// tempCredit/milkPourCredit above. LEVER_CENTER_TOLERANCE is this file's
+// own copy of ToppingsStation.js's identically-named/-valued constant (same
+// "own copy rather than importing a sibling screen's layout constants"
+// convention every other graduated check in this file already follows).
+//
+// Unlike tempFillPercent/milkFillPercent (raw 0-100 gauge readings this
+// file re-derives its own distance-from-center math for), the caller here
+// passes an already-normalized distance -- *PlacementFrac below, -1..1,
+// where 0 is dead center and +/-1 is the full swing to either edge of the
+// lever's own travel (see ToppingsStation.js's own offsetFrac, computed off
+// leverPositionRef at the instant of the catch) -- so leverCredit only ever
+// needs the single 0-1 |distance| shape, not a second copy of the lever's
+// own amplitude/move-range numbers.
+const LEVER_CENTER_TOLERANCE = 0.12;
+const LEVER_GREEN_FLOOR_CREDIT = 0.75;
+
+function leverCredit(distanceFrac) {
+  if (distanceFrac <= LEVER_CENTER_TOLERANCE) {
+    return 1 - (distanceFrac / LEVER_CENTER_TOLERANCE) * (1 - LEVER_GREEN_FLOOR_CREDIT);
+  }
+  const overshoot = distanceFrac - LEVER_CENTER_TOLERANCE;
+  const span = 1 - LEVER_CENTER_TOLERANCE;
+  return Math.max(0, LEVER_GREEN_FLOOR_CREDIT * (1 - overshoot / span));
+}
+
 // ---- Toppings ---------------------------------------------------------
 // Grades ToppingsStation's own syrup/foam/powder/mint-leaves picks against
 // the placed order's toppings list, one check per topping the order
@@ -493,8 +525,25 @@ export function scoreMixingDrink({ cupType, iceCubes, milkType, milkFillPercent,
 //     below) when syrupKey is set -- no syrup poured means nothing to grade
 //     here, same as every other check in this file only applying when its
 //     own underlying action actually happened.
+//   foamPlacementFrac/powderPlacementFrac/leafPlacementFrac: ToppingsStation's
+//     own offsetFrac at the instant each topping's aim-lever was caught
+//     (-1..1, 0 == dead center -- see leverCredit's own comment above), or
+//     null if that topping was never applied. Each only actually graded (see
+//     the '*-placement' checks below) when its own topping key/flag is set,
+//     same "nothing to grade if it never happened" reasoning as syrupKey/
+//     syrupSpillCount above.
 //   order: the placed order from CustomerOrdering.
-export function scoreToppings({ syrupKey, foamKey, powderKey, mintLeavesApplied, syrupSpillCount, order }) {
+export function scoreToppings({
+  syrupKey,
+  foamKey,
+  powderKey,
+  mintLeavesApplied,
+  syrupSpillCount,
+  foamPlacementFrac,
+  powderPlacementFrac,
+  leafPlacementFrac,
+  order,
+}) {
   const applied = [
     syrupKey,
     foamKey ? FOAM_KEY_TO_ORDER[foamKey] ?? foamKey : null,
@@ -532,6 +581,40 @@ export function scoreToppings({ syrupKey, foamKey, powderKey, mintLeavesApplied,
       label: 'Syrup pour',
       correct: syrupSpillCount === 0,
       detail: `Spilled ${syrupSpillCount}x while pouring.`,
+    });
+  }
+  // Graded like the milk-pour-amount check above (correct only right on the
+  // middle, graduated credit tapering off the further the lever was caught
+  // from center) -- but, like syrup-pour above, only shows up if that
+  // topping was actually applied.
+  if (foamKey) {
+    const distance = Math.min(1, Math.abs(foamPlacementFrac ?? 1));
+    checks.push({
+      key: 'foam-placement',
+      label: 'Foam placement',
+      correct: distance <= LEVER_CENTER_TOLERANCE,
+      credit: leverCredit(distance),
+      detail: distance <= LEVER_CENTER_TOLERANCE ? 'Landed clean.' : 'Spilled off to the side while placing.',
+    });
+  }
+  if (powderKey) {
+    const distance = Math.min(1, Math.abs(powderPlacementFrac ?? 1));
+    checks.push({
+      key: 'powder-placement',
+      label: 'Powder placement',
+      correct: distance <= LEVER_CENTER_TOLERANCE,
+      credit: leverCredit(distance),
+      detail: distance <= LEVER_CENTER_TOLERANCE ? 'Landed clean.' : 'Spilled off to the side while placing.',
+    });
+  }
+  if (mintLeavesApplied) {
+    const distance = Math.min(1, Math.abs(leafPlacementFrac ?? 1));
+    checks.push({
+      key: 'leaf-placement',
+      label: 'Mint leaf placement',
+      correct: distance <= LEVER_CENTER_TOLERANCE,
+      credit: leverCredit(distance),
+      detail: distance <= LEVER_CENTER_TOLERANCE ? 'Landed clean.' : 'Spilled off to the side while placing.',
     });
   }
   if (checks.length === 0) {

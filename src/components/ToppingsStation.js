@@ -569,7 +569,10 @@ function getFoamHoverPos(item) {
 
 const FOAM_MOVE_MS = 350;
 const FOAM_POUR_MS = 2200;
-const FOAM_MOVE_STEP = 2;
+// How far off-center a missed lever catch can land the poured foam -- same
+// number the old cosmetic Left/Right aim used to clamp to (FOAM_MOVE_STEP,
+// the old per-keypress nudge, is gone now that the lever drives this
+// directly instead of stepped keypresses).
 const FOAM_MOVE_RANGE = 8;
 const FOAM_SNAP_FRACTION = 0.5;
 const FOAM_CLICK_MAX_MOVE_PCT = 1;
@@ -619,7 +622,8 @@ function getPowderHoverPos(item) {
 
 const POWDER_MOVE_MS = 350;
 const POWDER_POUR_MS = 2200;
-const POWDER_MOVE_STEP = 2;
+// Same "lever drives this directly now" note as FOAM_MOVE_RANGE's own
+// comment above -- the old POWDER_MOVE_STEP per-keypress nudge is gone.
 const POWDER_MOVE_RANGE = 8;
 const POWDER_SNAP_FRACTION = 0.5;
 const POWDER_CLICK_MAX_MOVE_PCT = 1;
@@ -636,6 +640,121 @@ const POWDER_STREAM_COLORS = {
   'matcha-powder': 'rgba(139, 165, 94, 0.95)',
   'guava-powder': 'rgba(232, 137, 122, 0.95)',
 };
+
+// ---- Shared aim-lever minigame (foam/powder/mint-leaves placement) -------
+// Per request: foam, powder, and mint-leaf placement -- everything topping-
+// related except syrup, which already has its own balance minigame (see the
+// big comment above SYRUP_MIX_BAR_WIDTH) -- now go through a single "catch
+// the moving lever" challenge instead of the old purely-cosmetic Left/Right
+// aim-while-pouring (foamPourOffset/powderPourOffset used to be free-form
+// player-adjustable during 'pouring' with no scoring or placement effect
+// attached at all -- see FOAM_MOVE_STEP's own comment). A small marker
+// sweeps left-right along a bar above the drink (sine wave, same style of
+// oscillation math as the syrup balance minigame's own drift term, just
+// driving the marker's whole position here instead of a small perturbation);
+// pressing Enter locks in wherever it currently reads. Landing within
+// LEVER_CENTER_TOLERANCE of dead center places the topping perfectly
+// centered with full credit and no spill; landing further off shifts the
+// FINAL landed topping off-center on the drink (reusing each topping's own
+// existing *_MOVE_RANGE for how far, same range the old cosmetic aim used)
+// AND spills some of it onto the counter (see leverMissFor and the
+// foamSpill/powderSpill/leafSpill render-time values in the component
+// below), with credit tapering the further off-center the catch landed --
+// see gameloop/scoring.js's own scoreToppings for the graduated math.
+//
+// This is a deliberate departure from syrup/foam/powder's own established
+// "aim is purely cosmetic, the poured fill always lands centered regardless"
+// convention (see getSyrupBoxFor's own comment) -- per this request, a bad
+// catch here is supposed to visibly, actually mess up the drink, not just
+// the falling stream's cosmetic path.
+//
+// One shared state machine (leverStage/leverFor below), not three separate
+// ones, since canPourFoam/canPourPowder/canPlaceLeaf are already mutually
+// exclusive with each other (and with syrup) -- only one of these can ever
+// be waiting on a catch at a time.
+const LEVER_PERIOD_MS = 3200; // one full left-right-left sweep of the marker
+const LEVER_AMPLITUDE_PCT = 42; // how far the marker's center swings from dead-center (50%) of the bar, in % of the bar's own width
+const LEVER_CENTER_TOLERANCE = 0.12; // |offsetFrac| (see below) within this counts as "hit the middle" -- full credit, no spill
+const LEVER_MARKER_WIDTH_FRAC = 0.06; // matches MatchaMaking's own MIX_BALL_WIDTH_FRAC/SYRUP_MIX_BALL_WIDTH_FRAC
+const LEVER_BAR_WIDTH = 20; // % of container -- matches SYRUP_MIX_BAR_WIDTH
+const LEVER_BAR_HEIGHT = 3.2; // matches SYRUP_MIX_BAR_HEIGHT
+const LEVER_BAR_CLEARANCE = 7; // matches SYRUP_MIX_BAR_CLEARANCE -- clears whichever bottle/tin is hovering at this same spot for foam/powder (mint-leaves has no hovering sprite, so this is just extra breathing room there)
+function getLeverBarPos() {
+  return {
+    left: INCOMING_DRINK_SPOT.left + INCOMING_DRINK_SIZE.width / 2 - LEVER_BAR_WIDTH / 2,
+    top: INCOMING_DRINK_SPOT.top - LEVER_BAR_HEIGHT - LEVER_BAR_CLEARANCE,
+  };
+}
+
+// How far off-center mint-leaves placement can land -- own copy of the same
+// idea as FOAM_MOVE_RANGE/POWDER_MOVE_RANGE above (there's no cosmetic-aim
+// history to inherit this number from, since the leaf never had one before
+// this minigame).
+const LEAF_MOVE_RANGE = 8;
+// A fresh leaf-green for the leaf's own spill puddle (see FOAM_STREAM_COLORS/
+// POWDER_STREAM_COLORS above for the same per-topping-type color role) --
+// deliberately not reusing SYRUP_STREAM_COLORS['mint-syrup'] even though
+// both are mint-adjacent greens, so a leaf spill still reads as its own
+// thing next to an actual mint-syrup spill if both ever show up in the same
+// round.
+const LEAF_SPILL_COLOR = 'rgba(90, 140, 70, 0.92)';
+
+// Given a topping's own resolved lever-catch offset (in the same physical
+// %-of-container units as foamPourOffset/powderPourOffset/leafPourOffset)
+// and that topping's own *_MOVE_RANGE, returns null for a centered catch
+// (nothing spills) or { side, bucket } for a missed one -- side is which
+// way it missed (for which of SYRUP_RIGHT_SPILL_BASE/SYRUP_LEFT_SPILL_BASE
+// to spill toward, reused directly from the syrup section above since that
+// positioning math isn't actually syrup-specific), bucket (0-3) is how bad
+// the miss was, indexing directly into SYRUP_SPILL_DIMS/SYRUP_SPILL_IMAGES/
+// SYRUP_SPILL_STAGE_ROTATIONS (also reused directly) for an escalating
+// size/shape/rotation the same way MatchaMaking's own whisking spills and
+// the syrup balance minigame's own spills already scale with severity --
+// just derived here from a single catch's distance from center instead of
+// an accumulating mess-up count, since this is a one-shot catch, not a
+// continuous minigame.
+function leverMissFor(offset, moveRange) {
+  const offsetFrac = moveRange ? offset / moveRange : 0;
+  const distance = Math.abs(offsetFrac);
+  if (distance <= LEVER_CENTER_TOLERANCE) return null;
+  const severity = Math.min(1, (distance - LEVER_CENTER_TOLERANCE) / (1 - LEVER_CENTER_TOLERANCE));
+  const bucket = Math.min(SYRUP_SPILL_STAGE_COUNT - 1, Math.floor(severity * SYRUP_SPILL_STAGE_COUNT));
+  return { side: offsetFrac < 0 ? 'left' : 'right', bucket };
+}
+
+// Renders one spill puddle for a missed foam/powder/leaf lever catch --
+// same mask-image tinting technique and SYRUP_SPILL_DIMS/SYRUP_SPILL_IMAGES/
+// SYRUP_SPILL_STAGE_ROTATIONS/SYRUP_RIGHT_SPILL_BASE/SYRUP_LEFT_SPILL_BASE
+// the syrup spill block already uses (none of that math is actually syrup-
+// specific despite the name -- see leverMissFor's own comment above), just
+// for a single one-shot catch instead of an accumulating mess-up array, and
+// its own .topping-spill-puddle class in ToppingsStation.css (an identical
+// copy of .syrup-spill-puddle's own rules) so the two don't share a literal
+// class name despite being visually the same kind of thing. Returns null
+// (nothing rendered) for a null spill, i.e. a centered catch.
+function renderToppingSpill(spill, color, key) {
+  if (!spill) return null;
+  const base = spill.side === 'right' ? SYRUP_RIGHT_SPILL_BASE : SYRUP_LEFT_SPILL_BASE;
+  const dims = SYRUP_SPILL_DIMS[spill.bucket];
+  const maskUrl = `url(${SYRUP_SPILL_IMAGES[spill.bucket]})`;
+  return (
+    <span
+      key={key}
+      aria-hidden="true"
+      className="topping-spill-puddle"
+      style={{
+        left: `${INCOMING_DRINK_SPOT.left + base.leftFrac * INCOMING_DRINK_SIZE.width}%`,
+        top: `${INCOMING_DRINK_SPOT.top + base.topFrac * INCOMING_DRINK_SIZE.height}%`,
+        width: `${dims.width}%`,
+        height: `${dims.height}%`,
+        background: color,
+        WebkitMaskImage: maskUrl,
+        maskImage: maskUrl,
+        transform: `translate(-50%, -50%) rotate(${SYRUP_SPILL_STAGE_ROTATIONS[spill.bucket]}deg)`,
+      }}
+    />
+  );
+}
 
 // Fixed (not Math.random()) sets of normalized offsets (dx/dy in
 // [-0.5, 0.5], relative to whatever box getFleckPositions maps them onto)
@@ -758,9 +877,15 @@ const LEAF_HEIGHT = 6; // % of container height
 const LEAF_CANVAS_ASPECT = 88 / 45;
 const LEAF_WIDTH = LEAF_HEIGHT * LEAF_CANVAS_ASPECT * (9 / 16);
 const LEAF_DIP_FRAC = 0.15; // portion of the leaf's own height that dips below topBox's own top edge
-export function getLeafBoxFor(topBox) {
+// offset (default 0, same default-param backward-compatibility shape as
+// every other optional-parameter addition in this project) is the leaf's
+// own resolved lever-catch offset -- see LEAF_MOVE_RANGE/leafPourOffset in
+// the component below. Added on top of the centered left math below rather
+// than replacing it, same "shift, don't recompute" approach the milk pour
+// gauge's own cup fill scale uses.
+export function getLeafBoxFor(topBox, offset = 0) {
   return {
-    left: topBox.left + topBox.width / 2 - LEAF_WIDTH / 2,
+    left: topBox.left + topBox.width / 2 - LEAF_WIDTH / 2 + offset,
     top: topBox.top - LEAF_HEIGHT * (1 - LEAF_DIP_FRAC),
     width: LEAF_WIDTH,
     height: LEAF_HEIGHT,
@@ -1193,10 +1318,14 @@ const ToppingsStation = ({
   // shallower, narrower-overlap variant of getMatchaBoxFor's shape, plus a
   // touch of extra width, per request.
   const incomingTopBox = incomingMatchaBox || incomingMilkBox;
+  // Centered/un-offset base box -- foamPourOffset doesn't exist as a
+  // variable yet this early in the component (it's declared down with the
+  // rest of the foam interaction state below), so the actual offset-shifted
+  // box used everywhere foam is rendered/landed on (renderedFoamBox/
+  // renderedFoamCapBox) is computed later instead, once that state exists --
+  // see the big comment there for why a missed lever catch shifts this at
+  // all now, unlike syrup's own purely-cosmetic pourOffset.
   const incomingFoamBox = incomingTopBox ? getFoamBoxFor(incomingTopBox) : null;
-  // The flattened top-surface ellipse straddling incomingFoamBox's own top
-  // edge -- see getFoamCapBoxFor above.
-  const incomingFoamCapBox = incomingFoamBox ? getFoamCapBoxFor(incomingFoamBox) : null;
   // The whole visible liquid column -- only used for powder's own "no foam
   // to catch it" scatter case, see getPowderLiquidBoxFor above.
   const incomingPowderLiquidBox =
@@ -1321,8 +1450,112 @@ const ToppingsStation = ({
   // the syrup/foam/powder state above (no drag, no aim, no travel sprite).
   // cupMintLeaf persists once placed, same "doesn't reset on its own" rule
   // cupSyrup/cupFoam/cupPowder already follow.
-  const [leafStage, setLeafStage] = useState('idle'); // 'idle' | 'placing'
+  const [leafStage, setLeafStage] = useState('idle'); // 'idle' | 'aiming' | 'placing'
   const [cupMintLeaf, setCupMintLeaf] = useState(false);
+  // Horizontal nudge, own copy of the same foamPourOffset/powderPourOffset
+  // shape (see FOAM_MOVE_RANGE's own comment) -- set once by
+  // resolveLeafLever, read by getLeafBoxFor's own offset param. Unlike
+  // foam/powder there's no earlier cosmetic-aim history for this to have
+  // come from; it starts at 0 simply because no leaf has been aimed yet.
+  const [leafPourOffset, setLeafPourOffset] = useState(0);
+
+  // ---- Shared aim-lever minigame -- see the big comment on LEVER_PERIOD_MS
+  // above. leverFor tracks which of the three pending placements this run
+  // is actually for ('foam' | 'powder' | 'leaf'), read once by
+  // handleLeverKeyDown at the moment of the catch so it can route to the
+  // right resolve* function -- not, e.g., foamPourStage, since checking
+  // three separate stage variables to figure out "which one is this for"
+  // would be more fragile than just tracking it directly.
+  const [leverStage, setLeverStage] = useState('idle'); // 'idle' | 'active'
+  const [leverFor, setLeverFor] = useState(null); // 'foam' | 'powder' | 'leaf' | null
+  // Live marker center position (0-100, 50 == dead center), written by the
+  // rAF physics effect below -- a ref, not state, same "no React re-render
+  // needed every frame, the DOM node is mutated directly instead" reasoning
+  // as the syrup balance minigame's own syrupBallPositionRef.
+  const leverPositionRef = useRef(50);
+  const leverMarkerRef = useRef(null);
+  // The bar itself is the focus target (see the JSX below) -- auto-focused
+  // the instant leverStage flips to 'active' (see the effect below), same
+  // "send focus straight to the only meaningful next action" reasoning as
+  // the milk pour gauge's own milkGaugeButtonRef in MilkSelection.js.
+  const leverBarRef = useRef(null);
+
+  // Sine-wave sweep, same style of oscillation math as the syrup balance
+  // minigame's own drift term (SYRUP_MIX_DRIFT_AMPLITUDE * sin(...)), just
+  // driving the marker's whole position here instead of perturbing a
+  // player-controlled ball. Runs only while leverStage === 'active';
+  // torn down (and the marker implicitly stops wherever it was) the instant
+  // a catch resolves and flips leverStage back to 'idle'.
+  useEffect(() => {
+    if (leverStage !== 'active') return undefined;
+    const startedAt = performance.now();
+    let frameId;
+    const tick = () => {
+      const elapsedMs = performance.now() - startedAt;
+      const centerPct = 50 + LEVER_AMPLITUDE_PCT * Math.sin((elapsedMs / LEVER_PERIOD_MS) * 2 * Math.PI);
+      leverPositionRef.current = centerPct;
+      if (leverMarkerRef.current) {
+        leverMarkerRef.current.style.left = `${centerPct - (LEVER_MARKER_WIDTH_FRAC * 100) / 2}%`;
+      }
+      frameId = requestAnimationFrame(tick);
+    };
+    frameId = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frameId);
+  }, [leverStage]);
+
+  // Sends focus straight to the bar the instant it appears -- see
+  // leverBarRef's own comment above.
+  useEffect(() => {
+    if (leverStage === 'active') {
+      leverBarRef.current?.focus();
+    }
+  }, [leverStage]);
+
+  // Resolve functions -- one per pending placement, called from
+  // handleLeverKeyDown below with offsetFrac (-1..1, 0 == dead center)
+  // already computed from the marker's own live position at the instant of
+  // the catch. Each just sets that topping's own *PourOffset (in physical
+  // %-of-container units, same MOVE_RANGE-scaled shape foamPourOffset
+  // already had) and advances that topping's own stage machine on to its
+  // existing 'pouring'/'placing' stage -- everything downstream (the falling
+  // stream, the final landed box, the spill puddle) already reads that same
+  // offset value, see the render-time foamSpill/powderSpill/leafSpill and
+  // incomingFoamBox/powderLandingBox/incomingLeafBox further down.
+  const resolveFoamLever = (offsetFrac) => {
+    setFoamPourOffset(offsetFrac * FOAM_MOVE_RANGE);
+    setFoamPourStage('pouring');
+  };
+  const resolvePowderLever = (offsetFrac) => {
+    setPowderPourOffset(offsetFrac * POWDER_MOVE_RANGE);
+    setPowderPourStage('pouring');
+  };
+  const resolveLeafLever = (offsetFrac) => {
+    setLeafPourOffset(offsetFrac * LEAF_MOVE_RANGE);
+    setLeafStage('placing');
+  };
+
+  // The one real interaction with the lever -- Enter/center catches it
+  // wherever it currently reads. shouldDebounceEnter guards against a
+  // repeating held key firing this more than once for a single physical
+  // press, same as every other Enter handler in this file. Plain onKeyDown
+  // on the focused bar element (not a global window listener) -- unlike the
+  // milk pour gauge's own press-and-HOLD gesture, this is a single discrete
+  // press, the same shape every other Enter handler in this file already
+  // uses.
+  const handleLeverKeyDown = (e) => {
+    const action = getActionFromKeyEvent(e);
+    if (action !== 'Enter') return;
+    if (shouldDebounceEnter(e)) return;
+    e.preventDefault();
+    playButtonClick();
+    const offsetFrac = (leverPositionRef.current - 50) / LEVER_AMPLITUDE_PCT;
+    const target = leverFor;
+    setLeverStage('idle');
+    setLeverFor(null);
+    if (target === 'foam') resolveFoamLever(offsetFrac);
+    else if (target === 'powder') resolvePowderLever(offsetFrac);
+    else if (target === 'leaf') resolveLeafLever(offsetFrac);
+  };
 
   // Which topping (if any, across all three pairs) currently has the white
   // focus halo -- drives the name label above it (TOPPING_LABELS/
@@ -1651,8 +1884,19 @@ const ToppingsStation = ({
 
   useEffect(() => {
     if (foamPourStage === 'moving') {
-      const t = setTimeout(() => setFoamPourStage('pouring'), FOAM_MOVE_MS);
+      const t = setTimeout(() => setFoamPourStage('aiming'), FOAM_MOVE_MS);
       return () => clearTimeout(t);
+    }
+    // Hands off to the shared lever minigame (see LEVER_PERIOD_MS's own big
+    // comment above) instead of pouring immediately -- 'pouring' only
+    // starts once resolveFoamLever actually catches it (see
+    // handleLeverKeyDown). Fires once per stage-entry (leverFor/leverStage
+    // only get set here, not re-set on every render while 'aiming' persists,
+    // since this effect only re-runs when foamPourStage itself changes).
+    if (foamPourStage === 'aiming') {
+      setLeverFor('foam');
+      setLeverStage('active');
+      return undefined;
     }
     if (foamPourStage === 'pouring') {
       setCupFoam({ key: foamPouringKey });
@@ -1661,31 +1905,17 @@ const ToppingsStation = ({
         setFoamPositions((prev) => ({ ...prev, [foamPouringKey]: { left: home.left, top: home.top } }));
         setFoamPourStage('idle');
         setFoamPouringKey(null);
-        setFoamPourOffset(0);
+        // foamPourOffset is deliberately NOT reset here anymore (it used to
+        // be, back when it was purely cosmetic and only ever drove the
+        // now-finished falling stream) -- it now also positions the FINAL
+        // landed foam fill (see incomingFoamBox below), which stays on
+        // screen long after this pour's own animation ends, so it has to
+        // persist. Only beginFoamPour (a fresh pour) resets it.
       }, FOAM_POUR_MS);
       return () => clearTimeout(t);
     }
     return undefined;
   }, [foamPourStage, foamPouringKey, toppingItems]);
-
-  // Same capture-phase-before-useFlatFocusNav intercept as the syrup aim
-  // effect above -- see its own big comment for why this has to be capture
-  // phase + stopImmediatePropagation rather than a plain onKeyDown.
-  useEffect(() => {
-    if (foamPourStage !== 'pouring' || !foamPouringKey) return undefined;
-    const handleFoamAimKeyDown = (e) => {
-      const action = getActionFromKeyEvent(e);
-      if (action !== 'Left' && action !== 'Right') return;
-      e.preventDefault();
-      e.stopImmediatePropagation();
-      setFoamPourOffset((prev) => {
-        const next = prev + (action === 'Right' ? FOAM_MOVE_STEP : -FOAM_MOVE_STEP);
-        return Math.min(FOAM_MOVE_RANGE, Math.max(-FOAM_MOVE_RANGE, next));
-      });
-    };
-    window.addEventListener('keydown', handleFoamAimKeyDown, { capture: true });
-    return () => window.removeEventListener('keydown', handleFoamAimKeyDown, { capture: true });
-  }, [foamPourStage, foamPouringKey]);
 
   const handleFoamPointerDown = (item) => (e) => {
     if (foamPouringKey === item.key) return; // can't re-grab mid-pour
@@ -1762,8 +1992,14 @@ const ToppingsStation = ({
 
   useEffect(() => {
     if (powderPourStage === 'moving') {
-      const t = setTimeout(() => setPowderPourStage('pouring'), POWDER_MOVE_MS);
+      const t = setTimeout(() => setPowderPourStage('aiming'), POWDER_MOVE_MS);
       return () => clearTimeout(t);
+    }
+    // Same lever hand-off as foam's own 'aiming' branch above.
+    if (powderPourStage === 'aiming') {
+      setLeverFor('powder');
+      setLeverStage('active');
+      return undefined;
     }
     if (powderPourStage === 'pouring') {
       setCupPowder({ key: powderPouringKey });
@@ -1772,31 +2008,14 @@ const ToppingsStation = ({
         setPowderPositions((prev) => ({ ...prev, [powderPouringKey]: { left: home.left, top: home.top } }));
         setPowderPourStage('idle');
         setPowderPouringKey(null);
-        setPowderPourOffset(0);
+        // powderPourOffset intentionally NOT reset here -- same "now
+        // positions the final landed flecks, has to persist past this
+        // pour's own animation" reasoning as foamPourOffset above.
       }, POWDER_POUR_MS);
       return () => clearTimeout(t);
     }
     return undefined;
   }, [powderPourStage, powderPouringKey, toppingItems]);
-
-  // Same capture-phase-before-useFlatFocusNav intercept as the syrup/foam
-  // aim effects above -- see the syrup one's own big comment for why this
-  // has to be capture phase + stopImmediatePropagation.
-  useEffect(() => {
-    if (powderPourStage !== 'pouring' || !powderPouringKey) return undefined;
-    const handlePowderAimKeyDown = (e) => {
-      const action = getActionFromKeyEvent(e);
-      if (action !== 'Left' && action !== 'Right') return;
-      e.preventDefault();
-      e.stopImmediatePropagation();
-      setPowderPourOffset((prev) => {
-        const next = prev + (action === 'Right' ? POWDER_MOVE_STEP : -POWDER_MOVE_STEP);
-        return Math.min(POWDER_MOVE_RANGE, Math.max(-POWDER_MOVE_RANGE, next));
-      });
-    };
-    window.addEventListener('keydown', handlePowderAimKeyDown, { capture: true });
-    return () => window.removeEventListener('keydown', handlePowderAimKeyDown, { capture: true });
-  }, [powderPourStage, powderPouringKey]);
 
   const handlePowderPointerDown = (item) => (e) => {
     if (powderPouringKey === item.key) return; // can't re-grab mid-pour
@@ -1865,10 +2084,17 @@ const ToppingsStation = ({
   // MINT_LEAVES_POT_ITEM/LEAF_PLACE_MS for why there's no travel sprite.
   const beginLeafPlace = () => {
     if (!canPlaceLeaf) return;
-    setLeafStage('placing');
+    setLeafStage('aiming');
   };
 
   useEffect(() => {
+    // Same lever hand-off as foam/powder's own 'aiming' branches above --
+    // resolveLeafLever advances this on to 'placing' once caught.
+    if (leafStage === 'aiming') {
+      setLeverFor('leaf');
+      setLeverStage('active');
+      return undefined;
+    }
     if (leafStage !== 'placing') return undefined;
     const t = setTimeout(() => {
       setCupMintLeaf(true);
@@ -1935,6 +2161,15 @@ const ToppingsStation = ({
         // "last moment this screen's own state still exists" reasoning as
         // everything else this call already reads.
         syrupSpillCount: syrupMessUpCountRef.current,
+        // Each topping's own aim-lever offset, normalized to the -1..1
+        // fraction scoreToppings' own leverCredit expects (see that
+        // function's comment) -- null (rather than 0, which would read as a
+        // dead-center catch) when the topping was never applied, same "no
+        // reading" null milkFillPercent already uses in scoreMixingDrink's
+        // own call site.
+        foamPlacementFrac: cupFoam ? foamPourOffset / FOAM_MOVE_RANGE : null,
+        powderPlacementFrac: cupPowder ? powderPourOffset / POWDER_MOVE_RANGE : null,
+        leafPlacementFrac: cupMintLeaf ? leafPourOffset / LEAF_MOVE_RANGE : null,
         order,
       })
     );
@@ -2023,14 +2258,27 @@ const ToppingsStation = ({
   // render position the way syrupPourLeft/Top above conceptually could.
   const syrupMixBarPos = getSyrupMixBarPos();
 
+  // Offset-shifted versions of incomingFoamBox/incomingFoamCapBox (both
+  // declared much earlier, before foamPourOffset exists yet as a variable --
+  // see LEVER_PERIOD_MS's own big comment for why a missed lever catch now
+  // shifts the FINAL landed foam, not just the falling stream, a deliberate
+  // departure from syrup's own purely-cosmetic pourOffset). left-shifted
+  // only -- top/width/height don't change for a horizontal miss. Used for
+  // everything below and in the JSX that cares where foam actually ended up
+  // (foamPourHeight, powder/leaf's own foam-cap landing fallback, and the
+  // .cup-foam-fill/.cup-foam-cap render further down) in place of the raw
+  // incomingFoamBox/incomingFoamCapBox.
+  const renderedFoamBox = incomingFoamBox ? { ...incomingFoamBox, left: incomingFoamBox.left + foamPourOffset } : null;
+  const renderedFoamCapBox = renderedFoamBox ? getFoamCapBoxFor(renderedFoamBox) : null;
+
   // ---- Falling foam stream -- same idea as the syrup stream above, just
-  // landing at the foam box's own top edge (incomingFoamBox) instead.
+  // landing at the foam box's own top edge (renderedFoamBox) instead.
   const pouringFoamItem = foamPouringKey ? toppingItems.find((i) => i.key === foamPouringKey) : null;
   const pouringFoamPos = foamPouringKey ? foamPositions[foamPouringKey] : null;
   const foamPourLeft =
     pouringFoamItem && pouringFoamPos ? pouringFoamPos.left + pouringFoamItem.width / 2 + foamPourOffset : 0;
   const foamPourTop = pouringFoamItem && pouringFoamPos ? pouringFoamPos.top + pouringFoamItem.height : 0;
-  const foamPourHeight = incomingFoamBox ? Math.max(incomingFoamBox.top - foamPourTop, 1) : 0;
+  const foamPourHeight = renderedFoamBox ? Math.max(renderedFoamBox.top - foamPourTop, 1) : 0;
   const foamPourColor = foamPouringKey ? FOAM_STREAM_COLORS[foamPouringKey] : FOAM_STREAM_COLORS['reg-cold-foam'];
 
   // ---- Falling powder stream -- same idea as the syrup/foam streams
@@ -2046,7 +2294,7 @@ const ToppingsStation = ({
       : 0;
   const powderPourTop =
     pouringPowderItem && pouringPowderPos ? pouringPowderPos.top + pouringPowderItem.height : 0;
-  const powderLandingTop = cupFoam && incomingFoamCapBox ? incomingFoamCapBox.top : incomingPowderLiquidBox?.top;
+  const powderLandingTop = cupFoam && renderedFoamCapBox ? renderedFoamCapBox.top : incomingPowderLiquidBox?.top;
   const powderPourHeight = powderLandingTop != null ? Math.max(powderLandingTop - powderPourTop, 1) : 0;
   const powderPourColor = powderPouringKey
     ? POWDER_STREAM_COLORS[powderPouringKey]
@@ -2059,9 +2307,15 @@ const ToppingsStation = ({
   // CURRENT state is at render time, not a snapshot from when the powder
   // itself was poured -- if foam gets poured in after the powder already
   // settled into the liquid, the flecks stay wherever they were (they
-  // don't retroactively jump onto a foam layer added later).
-  const powderLandingBox = cupFoam && incomingFoamCapBox ? incomingFoamCapBox : incomingPowderLiquidBox;
-  const powderFleckOffsets = cupFoam && incomingFoamCapBox ? POWDER_FLECK_OFFSETS_ELLIPSE : POWDER_FLECK_OFFSETS_LIQUID;
+  // don't retroactively jump onto a foam layer added later). left-shifted
+  // by powderPourOffset on top of whatever base it's landing on (renderedFoam
+  // CapBox already carries foam's own offset, if any, from a mis-poured foam
+  // layer -- the two shifts compose naturally by simple addition).
+  const powderLandingBoxBase = cupFoam && renderedFoamCapBox ? renderedFoamCapBox : incomingPowderLiquidBox;
+  const powderLandingBox = powderLandingBoxBase
+    ? { ...powderLandingBoxBase, left: powderLandingBoxBase.left + powderPourOffset }
+    : null;
+  const powderFleckOffsets = cupFoam && renderedFoamCapBox ? POWDER_FLECK_OFFSETS_ELLIPSE : POWDER_FLECK_OFFSETS_LIQUID;
   const powderFleckPositions =
     cupPowder && powderLandingBox ? getFleckPositions(powderLandingBox, powderFleckOffsets) : [];
 
@@ -2069,12 +2323,24 @@ const ToppingsStation = ({
   // own top ellipse if there's foam to catch it, otherwise the plain top
   // layer instead" choice as powderLandingBox just above (a leaf perched on
   // the foam cap reads the same way flecks scattered onto it do). Computed
-  // fresh every render off incomingTopBox/incomingFoamCapBox (both of which
+  // fresh every render off incomingTopBox/renderedFoamCapBox (both of which
   // already track incomingDrinkRenderPos) rather than stored in state, so
   // the garnish automatically glides/vanishes along with the rest of the
   // drink during the Send to Serving carry instead of staying behind.
-  const leafLandingBox = cupFoam && incomingFoamCapBox ? incomingFoamCapBox : incomingTopBox;
-  const incomingLeafBox = cupMintLeaf && leafLandingBox ? getLeafBoxFor(leafLandingBox) : null;
+  // getLeafBoxFor's own offset param (leafPourOffset) applies the leaf's own
+  // additional shift on top of whatever this landing box already carries.
+  const leafLandingBox = cupFoam && renderedFoamCapBox ? renderedFoamCapBox : incomingTopBox;
+  const incomingLeafBox = cupMintLeaf && leafLandingBox ? getLeafBoxFor(leafLandingBox, leafPourOffset) : null;
+
+  // ---- Spill puddles for a missed lever catch -- see leverMissFor's own
+  // comment above. null while nothing's actually been applied yet (nothing
+  // to have missed) or the catch was dead-centered.
+  const foamSpill = cupFoam ? leverMissFor(foamPourOffset, FOAM_MOVE_RANGE) : null;
+  const powderSpill = cupPowder ? leverMissFor(powderPourOffset, POWDER_MOVE_RANGE) : null;
+  const leafSpill = cupMintLeaf ? leverMissFor(leafPourOffset, LEAF_MOVE_RANGE) : null;
+  // Lever bar's own fixed position -- see getLeverBarPos' own comment above
+  // for why this doesn't need to track the drink's live render position.
+  const leverBarPos = getLeverBarPos();
 
   return (
     <div className="toppings-container" ref={containerRef}>
@@ -2134,11 +2400,12 @@ const ToppingsStation = ({
             />
           );
         })}
-        {/* Matcha-cold-foam/reg-cold-foam/banana-foam -- identical interaction
-            to the syrup pair above (drag onto the drink or Enter to pour,
-            180deg flip via WHISK_FLIP_DEG, Left/Right to aim while pouring);
-            see the big comment above FOAM_HOVER_GAP for what's different
-            about where foam actually lands. */}
+        {/* Matcha-cold-foam/reg-cold-foam/banana-foam -- drag onto the drink
+            or Enter to pour like the syrup pair above, but landing is now
+            decided by the shared aim-lever minigame (see LEVER_PERIOD_MS's
+            own big comment) rather than a Left/Right-steered stream; see the
+            big comment above FOAM_HOVER_GAP for what's different about where
+            foam actually lands. */}
         {toppingItems.filter((item) => item.key === 'matcha-cold-foam' || item.key === 'reg-cold-foam' || item.key === 'banana-foam').map(
           (item) => {
             const dragging = foamDrag?.key === item.key;
@@ -2149,7 +2416,7 @@ const ToppingsStation = ({
               <img
                 key={item.key}
                 src={item.src}
-                alt={`${item.alt}. Drag onto the drink to pour some in, or select it and press Enter. While it's pouring, use Left/Right to aim the stream.`}
+                alt={`${item.alt}. Drag onto the drink to pour some in, or select it and press Enter. While it's pouring, catch the lever right in the middle to land it clean.`}
                 className={`station-item movable${dragging ? ' dragging' : ''}${isPouring ? ' settling' : ''}`}
                 data-focusable
                 data-topping-key={item.key}
@@ -2172,12 +2439,13 @@ const ToppingsStation = ({
             );
           }
         )}
-        {/* Matcha-powder/guava-powder -- identical interaction to the syrup/
-            foam pairs above (drag onto the drink or Enter to pour, 180deg
-            flip via WHISK_FLIP_DEG, Left/Right to aim while pouring); see
-            the big comment above POWDER_HOVER_GAP for what's different
-            about powder itself (particle stream, foam-dependent landing
-            spot). */}
+        {/* Matcha-powder/guava-powder -- drag onto the drink or Enter to
+            pour like the syrup/foam pairs above, but landing is now decided
+            by the same shared aim-lever minigame foam uses (see
+            LEVER_PERIOD_MS's own big comment) rather than a Left/Right-
+            steered stream; see the big comment above POWDER_HOVER_GAP for
+            what's different about powder itself (particle stream,
+            foam-dependent landing spot). */}
         {toppingItems.filter((item) => POWDER_PAIR.some((p) => p.key === item.key)).map((item) => {
           const dragging = powderDrag?.key === item.key;
           const isPouring = powderPouringKey === item.key;
@@ -2187,7 +2455,7 @@ const ToppingsStation = ({
             <img
               key={item.key}
               src={item.src}
-              alt={`${item.alt}. Drag onto the drink to pour some in, or select it and press Enter. While it's pouring, use Left/Right to aim the stream.`}
+              alt={`${item.alt}. Drag onto the drink to pour some in, or select it and press Enter. While it's pouring, catch the lever right in the middle to land it clean.`}
               className={`station-item movable${dragging ? ' dragging' : ''}${isPouring ? ' settling' : ''}`}
               data-focusable
               data-topping-key={item.key}
@@ -2417,15 +2685,15 @@ const ToppingsStation = ({
                 to read as its own distinct layer sitting on top, not as
                 blending into whatever's underneath. Rendered after the
                 matcha fill above so it paints over it. */}
-            {cupFoam && incomingFoamBox && (
+            {cupFoam && renderedFoamBox && (
               <div
                 className={`cup-foam-fill ${cupFoam.key}${drinkSendStage === 'vanishing' ? ' bowl-vanishing' : ''}`}
                 aria-hidden="true"
                 style={{
-                  left: `${incomingFoamBox.left}%`,
-                  top: `${incomingFoamBox.top}%`,
-                  width: `${incomingFoamBox.width}%`,
-                  height: `${incomingFoamBox.height}%`,
+                  left: `${renderedFoamBox.left}%`,
+                  top: `${renderedFoamBox.top}%`,
+                  width: `${renderedFoamBox.width}%`,
+                  height: `${renderedFoamBox.height}%`,
                 }}
               />
             )}
@@ -2436,15 +2704,15 @@ const ToppingsStation = ({
                 sells "filled all the way up" rather than the body's own
                 rounded-but-still-a-bit-angular top edge on its own.
                 Rendered after the body so it paints over that top edge. */}
-            {cupFoam && incomingFoamCapBox && (
+            {cupFoam && renderedFoamCapBox && (
               <div
                 className={`cup-foam-cap ${cupFoam.key}${drinkSendStage === 'vanishing' ? ' bowl-vanishing' : ''}`}
                 aria-hidden="true"
                 style={{
-                  left: `${incomingFoamCapBox.left}%`,
-                  top: `${incomingFoamCapBox.top}%`,
-                  width: `${incomingFoamCapBox.width}%`,
-                  height: `${incomingFoamCapBox.height}%`,
+                  left: `${renderedFoamCapBox.left}%`,
+                  top: `${renderedFoamCapBox.top}%`,
+                  width: `${renderedFoamCapBox.width}%`,
+                  height: `${renderedFoamCapBox.height}%`,
                 }}
               />
             )}
@@ -2603,6 +2871,59 @@ const ToppingsStation = ({
             </p>
           </>
         )}
+        {/* Shared foam/powder/leaf aim-lever minigame -- see the big comment
+            on LEVER_PERIOD_MS above for why one widget covers all three.
+            Only up while leverStage === 'active' (one of the three *PourStage/
+            leafStage effects flips it there on entering 'aiming', see the
+            comment near handleLeverKeyDown). The bar itself is the focus
+            target (tabIndex + onKeyDown, auto-focused by the effect above) --
+            unlike the syrup balance minigame, which listens on the already-
+            focused pouring bottle/tin, there's no separate focused element
+            to reuse here since the lever is the entire interaction. Reuses
+            the same .mix-bar/.mix-bar-zone/.mix-ball classes the syrup
+            minigame above does; the marker is styled as a .mix-ball too
+            since it's visually the same "small thing riding the bar" shape,
+            just gray (.lever-marker) instead of syrup-green and driven by
+            leverMarkerRef every animation frame rather than through React
+            state, same reasoning as syrupBallRef above. */}
+        {leverStage === 'active' && (
+          <>
+            <div
+              ref={leverBarRef}
+              className="mix-bar lever-bar"
+              tabIndex={0}
+              onKeyDown={handleLeverKeyDown}
+              style={{
+                left: `${leverBarPos.left}%`,
+                top: `${leverBarPos.top}%`,
+                width: `${LEVER_BAR_WIDTH}%`,
+                height: `${LEVER_BAR_HEIGHT}%`,
+              }}
+            >
+              <span
+                className="mix-bar-zone lever-zone"
+                style={{
+                  left: `${(0.5 - LEVER_CENTER_TOLERANCE / 2) * 100}%`,
+                  width: `${LEVER_CENTER_TOLERANCE * 100}%`,
+                }}
+              />
+              <span
+                ref={leverMarkerRef}
+                className="mix-ball lever-marker"
+                style={{
+                  left: `${50 - (LEVER_MARKER_WIDTH_FRAC * 100) / 2}%`,
+                  width: `${LEVER_MARKER_WIDTH_FRAC * 100}%`,
+                }}
+              />
+            </div>
+            <p
+              className="mix-bar-hint"
+              style={{ left: `${leverBarPos.left + LEVER_BAR_WIDTH / 2}%`, top: `${leverBarPos.top - 11}%` }}
+            >
+              Press Enter/center right on the middle to land it clean.
+            </p>
+          </>
+        )}
         {/* Syrup spill blobs -- one per mess-up during the syrup pour above
             (see syrupSpills/syrupSpillGrowth in that physics effect), using
             the same Spill1-4.png hand-drawn art MatchaMaking's own puddles
@@ -2643,6 +2964,14 @@ const ToppingsStation = ({
               );
             });
           })()}
+        {/* Foam/powder/leaf lever-miss spill puddles -- unlike syrupSpills
+            above these are a single one-shot value (foamSpill/powderSpill/
+            leafSpill, computed from the persisted *PourOffset once the
+            lever is caught, see leverMissFor above) rather than an
+            accumulating array, since each topping is only placed once. */}
+        {renderToppingSpill(foamSpill, FOAM_STREAM_COLORS[cupFoam?.key], 'foam-spill')}
+        {renderToppingSpill(powderSpill, POWDER_STREAM_COLORS[cupPowder?.key], 'powder-spill')}
+        {renderToppingSpill(leafSpill, LEAF_SPILL_COLOR, 'leaf-spill')}
         {/* Falling foam stream -- same idea as the syrup stream above, see
             the big comment on FOAM_STREAM_COLORS/getFoamHoverPos in this
             file. Only shown during the actual 'pouring' stage. */}
