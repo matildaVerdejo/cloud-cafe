@@ -43,26 +43,26 @@
 // convention CustomerOrdering.js's own TOPPING_SPEECH_NAMES and
 // OrderReceiptButton.js's own GRADE_LABELS/CUP_LABELS/BASE_LABELS/
 // TOPPING_LABELS already use.
-const GRADE_LABEL = { cafe: 'Cafe', classic: 'Classic', ceremonial: 'Ceremonial', hojicha: 'Hojicha' };
-const CUP_LABEL = { glass: 'Glass', mug: 'Mug', plastic: 'Plastic' };
+const GRADE_LABEL = { cafe: 'cafe', classic: 'classic', ceremonial: 'ceremonial', hojicha: 'hojicha' };
+const CUP_LABEL = { glass: 'glass', mug: 'mug', plastic: 'plastic' };
 const BASE_LABEL = {
-  dairy: 'Dairy milk',
-  oat: 'Oat milk',
-  almond: 'Almond milk',
-  coconut: 'Coconut water',
-  strawberry: 'Strawberry milk',
-  yuzu: 'Sparkling yuzu',
+  dairy: 'dairy milk',
+  oat: 'oat milk',
+  almond: 'almond milk',
+  coconut: 'coconut water',
+  strawberry: 'strawberry milk',
+  yuzu: 'sparkling yuzu',
 };
 const TOPPING_LABEL = {
-  'guava-syrup': 'Guava syrup',
-  'mint-syrup': 'Mint syrup',
-  'honey-syrup': 'Honey syrup',
-  'reg-foam': 'Reg cold foam',
-  'matcha-foam': 'Matcha cold foam',
-  'guava-powder': 'Guava powder',
-  'matcha-powder': 'Matcha powder',
-  'mint-leaves': 'Mint leaves',
-  'banana-foam': 'Banana foam',
+  'guava-syrup': 'guava syrup',
+  'mint-syrup': 'mint syrup',
+  'honey-syrup': 'honey syrup',
+  'reg-foam': 'reg cold foam',
+  'matcha-foam': 'matcha cold foam',
+  'guava-powder': 'guava powder',
+  'matcha-powder': 'matcha powder',
+  'mint-leaves': 'mint leaves',
+  'banana-foam': 'banana foam',
 };
 
 // selectedTin (MatchaMaking's own tin keys, e.g. 'cafe-grade') -> the plain
@@ -270,39 +270,39 @@ export function scoreOrderTaking(order, spokenOrder) {
   const checks = [
     {
       key: 'grade',
-      label: 'Matcha grade',
+      label: 'matcha grade',
       correct: order.matchaGrade === spokenOrder.grade,
-      detail: `Wrote down ${GRADE_LABEL[order.matchaGrade]} instead of ${GRADE_LABEL[spokenOrder.grade]}.`,
+      detail: `wrote down ${GRADE_LABEL[order.matchaGrade]} instead of ${GRADE_LABEL[spokenOrder.grade]}.`,
     },
     {
       key: 'teaspoons',
-      label: 'Matcha amount',
+      label: 'matcha amount',
       correct: order.teaspoons === spokenOrder.teaspoons,
-      detail: `Wrote down ${order.teaspoons} tsp instead of ${spokenOrder.teaspoons} tsp.`,
+      detail: `wrote down ${order.teaspoons} tsp instead of ${spokenOrder.teaspoons} tsp.`,
     },
     {
       key: 'cup',
-      label: 'Cup type',
+      label: 'cup type',
       correct: order.cupType === spokenOrder.cup,
-      detail: `Wrote down ${CUP_LABEL[order.cupType]} instead of ${CUP_LABEL[spokenOrder.cup]}.`,
+      detail: `wrote down ${CUP_LABEL[order.cupType]} instead of ${CUP_LABEL[spokenOrder.cup]}.`,
     },
     {
       key: 'ice',
-      label: 'Ice count',
+      label: 'ice count',
       correct: order.iceCubes === spokenOrder.ice,
-      detail: `Wrote down ${order.iceCubes} ice instead of ${spokenOrder.ice}.`,
+      detail: `wrote down ${order.iceCubes} ice instead of ${spokenOrder.ice}.`,
     },
     {
       key: 'base',
-      label: 'Milk / base',
+      label: 'milk / base',
       correct: order.baseMilk === spokenOrder.milk,
-      detail: `Wrote down ${BASE_LABEL[order.baseMilk]} instead of ${BASE_LABEL[spokenOrder.milk]}.`,
+      detail: `wrote down ${BASE_LABEL[order.baseMilk]} instead of ${BASE_LABEL[spokenOrder.milk]}.`,
     },
     {
       key: 'toppings',
-      label: 'Toppings',
+      label: 'toppings',
       correct: sameToppingSet(order.toppings, spokenOrder.toppings),
-      detail: `Wrote down ${toppingListText(order.toppings)} instead of ${toppingListText(spokenOrder.toppings)}.`,
+      detail: `wrote down ${toppingListText(order.toppings)} instead of ${toppingListText(spokenOrder.toppings)}.`,
     },
   ];
   return { percent: pct(checks), checks };
@@ -350,31 +350,31 @@ export function scoreMatchaMaking({ selectedTin, scoopFillPercent, tempFillPerce
   const checks = [
     {
       key: 'grade',
-      label: 'Matcha grade',
+      label: 'matcha grade',
       correct: gotGrade === order?.matchaGrade,
-      detail: `Wanted ${GRADE_LABEL[order?.matchaGrade]}, used ${GRADE_LABEL[gotGrade] ?? '—'}.`,
+      detail: `wanted ${GRADE_LABEL[order?.matchaGrade]}, used ${GRADE_LABEL[gotGrade] ?? '—'}.`,
     },
     {
       key: 'teaspoons',
-      label: 'Matcha amount',
+      label: 'matcha amount',
       correct: teaspoonExact,
       credit: teaspoonCredit,
       // Only ever shown when not exact -- see the ScoreCard.js comment on
       // why correct checks skip their own detail sentence entirely now.
-      detail: `Wanted ${order?.teaspoons} tsp, landed near ${gotTeaspoons} tsp.`,
+      detail: `wanted ${order?.teaspoons} tsp, landed near ${gotTeaspoons} tsp.`,
     },
     {
       key: 'temp',
-      label: 'Water temperature',
+      label: 'water temperature',
       correct: tempExact,
       credit: tempCreditValue,
-      detail: tempInGreenWindow ? `A touch too ${tempTooHot ? 'hot' : 'cold'}.` : `Too ${tempTooHot ? 'hot' : 'cold'}.`,
+      detail: tempInGreenWindow ? `a touch too ${tempTooHot ? 'hot' : 'cold'}.` : `too ${tempTooHot ? 'hot' : 'cold'}.`,
     },
     {
       key: 'whisk',
-      label: 'Whisking',
+      label: 'whisking',
       correct: spillCount === 0,
-      detail: `Spilled ${spillCount}x while whisking.`,
+      detail: `spilled ${spillCount}x while whisking.`,
     },
   ];
   return { percent: pct(checks), checks };
@@ -448,33 +448,33 @@ export function scoreMixingDrink({ cupType, iceCubes, milkType, milkFillPercent,
   const checks = [
     {
       key: 'cup',
-      label: 'Cup type',
+      label: 'cup type',
       correct: cupType === order?.cupType,
-      detail: `Wanted ${CUP_LABEL[order?.cupType]}, used ${CUP_LABEL[cupType] ?? '—'}.`,
+      detail: `wanted ${CUP_LABEL[order?.cupType]}, used ${CUP_LABEL[cupType] ?? '—'}.`,
     },
     {
       key: 'ice',
-      label: 'Ice count',
+      label: 'ice count',
       correct: iceCubes === order?.iceCubes,
-      detail: `Wanted ${order?.iceCubes} ice, used ${iceCubes}.`,
+      detail: `wanted ${order?.iceCubes} ice, used ${iceCubes}.`,
     },
     {
       key: 'base',
-      label: 'Milk / base',
+      label: 'milk / base',
       correct: milkType === order?.baseMilk,
-      detail: `Wanted ${BASE_LABEL[order?.baseMilk]}, used ${BASE_LABEL[milkType] ?? '—'}.`,
+      detail: `wanted ${BASE_LABEL[order?.baseMilk]}, used ${BASE_LABEL[milkType] ?? '—'}.`,
     },
     {
       key: 'milk-pour',
-      label: 'Milk pour amount',
+      label: 'milk pour amount',
       correct: milkPourExact,
       credit: milkPourCreditValue,
       detail:
         milkPourDistance === null
-          ? 'No milk was poured.'
+          ? 'no milk was poured.'
           : milkPourInBand
-          ? `A touch ${milkPourTooMuch ? 'over' : 'under'}filled.`
-          : `${milkPourTooMuch ? 'Overfilled and spilled' : 'Underfilled'}.`,
+          ? `a touch ${milkPourTooMuch ? 'over' : 'under'}filled.`
+          : `${milkPourTooMuch ? 'overfilled and spilled' : 'underfilled'}.`,
     },
   ];
   return { percent: pct(checks), checks };
@@ -565,7 +565,7 @@ export function scoreToppings({
       key: `wanted-${value}`,
       label: TOPPING_LABEL[value] ?? value,
       correct: wasApplied,
-      detail: 'Missing.',
+      detail: 'missing.',
     });
   });
   applied
@@ -575,7 +575,7 @@ export function scoreToppings({
         key: `extra-${value}`,
         label: TOPPING_LABEL[value] ?? value,
         correct: false,
-        detail: 'Not requested.',
+        detail: 'not requested.',
       });
     });
   // Graded like MatchaMaking's own 'whisk' check (correct only with zero
@@ -584,9 +584,9 @@ export function scoreToppings({
   if (syrupKey) {
     checks.push({
       key: 'syrup-pour',
-      label: 'Syrup pour',
+      label: 'syrup pour',
       correct: syrupSpillCount === 0,
-      detail: `Spilled ${syrupSpillCount}x while pouring.`,
+      detail: `spilled ${syrupSpillCount}x while pouring.`,
     });
   }
   // Graded like the milk-pour-amount check above (correct only right on the
@@ -597,38 +597,38 @@ export function scoreToppings({
     const distance = Math.min(1, Math.abs(foamPlacementFrac ?? 1));
     checks.push({
       key: 'foam-placement',
-      label: 'Foam placement',
+      label: 'foam placement',
       correct: distance <= LEVER_CENTER_TOLERANCE,
       credit: leverCredit(distance),
-      detail: distance <= LEVER_CENTER_TOLERANCE ? 'Landed clean.' : 'Spilled off to the side while placing.',
+      detail: distance <= LEVER_CENTER_TOLERANCE ? 'landed clean.' : 'spilled off to the side while placing.',
     });
   }
   if (powderKey) {
     const distance = Math.min(1, Math.abs(powderPlacementFrac ?? 1));
     checks.push({
       key: 'powder-placement',
-      label: 'Powder placement',
+      label: 'powder placement',
       correct: distance <= LEVER_CENTER_TOLERANCE,
       credit: leverCredit(distance),
-      detail: distance <= LEVER_CENTER_TOLERANCE ? 'Landed clean.' : 'Spilled off to the side while placing.',
+      detail: distance <= LEVER_CENTER_TOLERANCE ? 'landed clean.' : 'spilled off to the side while placing.',
     });
   }
   if (mintLeavesApplied) {
     const distance = Math.min(1, Math.abs(leafPlacementFrac ?? 1));
     checks.push({
       key: 'leaf-placement',
-      label: 'Mint leaf placement',
+      label: 'mint leaf placement',
       correct: distance <= LEVER_CENTER_TOLERANCE,
       credit: leverCredit(distance),
-      detail: distance <= LEVER_CENTER_TOLERANCE ? 'Landed clean.' : 'Spilled off to the side while placing.',
+      detail: distance <= LEVER_CENTER_TOLERANCE ? 'landed clean.' : 'spilled off to the side while placing.',
     });
   }
   if (checks.length === 0) {
     checks.push({
       key: 'none',
-      label: 'Toppings',
+      label: 'toppings',
       correct: true,
-      detail: 'No toppings requested, none added.',
+      detail: 'no toppings requested, none added.',
     });
   }
   return { percent: pct(checks), checks };

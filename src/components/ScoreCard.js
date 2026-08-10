@@ -18,10 +18,10 @@ import { ORDERS_PER_SESSION } from './ProgressBar';
 // OrderReceiptButton.js's own drawer already use), showing exactly what was
 // asked for vs. what actually happened for every check in that category.
 const CATEGORIES = [
-  { key: 'order-taking', label: 'Order Taking' },
-  { key: 'matcha-making', label: 'Matcha Making' },
-  { key: 'mixing-drink', label: 'Mixing Drink' },
-  { key: 'toppings', label: 'Toppings' },
+  { key: 'order-taking', label: 'order taking' },
+  { key: 'matcha-making', label: 'matcha making' },
+  { key: 'mixing-drink', label: 'mixing drink' },
+  { key: 'toppings', label: 'toppings' },
 ];
 
 // How long each row's own count-up/fill-in animation takes to settle on its
@@ -241,7 +241,7 @@ const ScoreCard = ({ customerNumber, characterName, orderTakingScore, matchaScor
           characterName somehow isn't available (e.g. an order placed before
           this field existed, or genuinely missing state) rather than
           rendering "null's order". */}
-      <h2 className="score-card-title">{characterName ? `${characterName}'s order` : 'Order Score'}</h2>
+      <h2 className="score-card-title">{characterName ? `${characterName}'s order` : 'order score'}</h2>
       <div className="score-card-rows">
         {CATEGORIES.map((cat, index) => (
           <ScoreCardRow
@@ -255,7 +255,7 @@ const ScoreCard = ({ customerNumber, characterName, orderTakingScore, matchaScor
         ))}
       </div>
       <div className={`score-card-total${colorRevealed && scoreTier ? ` score-card-total--${scoreTier}` : ''}`}>
-        Score: {total !== null ? `${animatedTotal}/100` : '—'}
+        score: {total !== null ? `${animatedTotal}/100` : '—'}
       </div>
     </div>
   );

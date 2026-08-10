@@ -23,7 +23,7 @@ import {
 // name, and order.customerCharacter (see below) only ever carries the raw
 // key ('annie' | 'otto' | 'katie'), so this is what turns that key into the
 // "<Name> Order" title ScoreCard.js's own score-card-title now shows.
-const CUSTOMER_CHARACTER_NAME = { annie: 'Annie', otto: 'Otto', katie: 'Katie' };
+const CUSTOMER_CHARACTER_NAME = { annie: 'annie', otto: 'otto', katie: 'katie' };
 
 // One "reaction sticker" per character per score tier -- fail -> angry,
 // mid -> annoyed, good -> happy, same three tiers computeOverallScore
@@ -494,7 +494,7 @@ const FinalCombination = ({
               onStartNextOrder();
             }}
           >
-            Start order {customerNumber + 1}
+            start order {customerNumber + 1}
           </button>
         )}
       </div>

@@ -2793,7 +2793,7 @@ const ToppingsStation = ({
               height: `${SEND_TO_FINAL_ZONE.height}%`,
             }}
           >
-            Send to Serving
+            send to serving
           </div>
         )}
         {/* Falling syrup stream -- see the big comment on
@@ -2867,7 +2867,7 @@ const ToppingsStation = ({
               className="mix-bar-hint"
               style={{ left: `${syrupMixBarPos.left + SYRUP_MIX_BAR_WIDTH / 2}%`, top: `${syrupMixBarPos.top - 11}%` }}
             >
-              Use your arrow keys to balance the ball inside the green area and pour without spilling.
+              use your arrow keys to balance the ball inside the green area and pour without spilling.
             </p>
           </>
         )}
@@ -2920,7 +2920,7 @@ const ToppingsStation = ({
               className="mix-bar-hint"
               style={{ left: `${leverBarPos.left + LEVER_BAR_WIDTH / 2}%`, top: `${leverBarPos.top - 11}%` }}
             >
-              Press Enter/center right on the middle to land it clean.
+              press enter/center right on the middle to land it clean.
             </p>
           </>
         )}

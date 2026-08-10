@@ -2557,7 +2557,7 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
             className="heater-button-hint"
             style={{ left: `${HEATER_HINT_LEFT}%`, top: `${HEATER_HINT_TOP}%` }}
           >
-            Use Enter to heat up water.
+            use enter to heat up water.
           </p>
         )}
         {/* Fourth and final walkthrough callout on this screen -- arrow
@@ -2576,7 +2576,7 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
             >
               <polygon points="2,12 38,2 38,22" />
             </svg>
-            <p className="matcha-heater-callout-text">Move left and select the button to turn the kettle on</p>
+            <p className="matcha-heater-callout-text">move left and select the button to turn the kettle on</p>
           </div>
         )}
         {heaterOn && tempBarVisible && (
@@ -2631,7 +2631,7 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
                 className="heater-temp-bar-hint"
                 style={{ left: `${TEMP_BAR_BOX.left}%`, top: `${TEMP_BAR_BOX.top + TEMP_BAR_BOX.height + 2}%` }}
               >
-                Use your backspace key to get the right temperature.
+                use your backspace key to get the right temperature.
               </p>
             )}
             {/* Fifth walkthrough callout -- arrow above, pointing up at the
@@ -2656,7 +2656,7 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
                 >
                   <polygon points="12,2 22,36 2,36" />
                 </svg>
-                <p className="matcha-temp-callout-text">Press Enter to stop it at the right temperature</p>
+                <p className="matcha-temp-callout-text">press enter to stop it at the right temperature</p>
               </div>
             )}
           </>
@@ -2710,7 +2710,7 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
             className="matcha-tin-hint"
             style={{ left: `${TIN_HINT_LEFT}%`, top: `${TIN_HINT_TOP}%` }}
           >
-            Use your arrow keys and Enter to pick the matcha grade your customer requested.
+            use your arrow keys and enter to pick the matcha grade your customer requested.
           </p>
         )}
         {/* First-order-only walkthrough callout -- arrow + short label
@@ -2723,7 +2723,7 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
             freestanding new position. */}
         {showTinSpotlight && (
           <div className="matcha-tin-callout" style={{ left: `${TIN_HINT_LEFT}%`, top: `${TIN_HINT_TOP}%` }}>
-            <p className="matcha-tin-callout-text">Move down and choose the right matcha grade</p>
+            <p className="matcha-tin-callout-text">move down and choose the right matcha grade</p>
             <svg
               className="matcha-tin-callout-arrow"
               viewBox="0 0 24 40"
@@ -2808,7 +2808,7 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
                     they keep this exactly as before. */}
                 {scoopRunning && !showScoopSpotlight && (
                   <p className="scoop-bar-hint">
-                    Use your backspace key to choose the right measurement, be as accurate as possible!
+                    use your backspace key to choose the right measurement, be as accurate as possible!
                   </p>
                 )}
                 {/* First-order-only walkthrough callout -- label + arrow
@@ -2822,7 +2822,7 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
                 {showScoopSpotlight && (
                   <div className="matcha-scoop-callout">
                     <p className="matcha-scoop-callout-text">
-                      Press Enter to stop the lever at the right amount
+                      press enter to stop the lever at the right amount
                     </p>
                     <svg
                       className="matcha-scoop-callout-arrow"
@@ -2899,7 +2899,7 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
                 className="big-spoon-hint"
                 style={{ left: `${SPOON_HINT_LEFT}%`, top: `${SPOON_HINT_TOP}%` }}
               >
-                Use Enter to pour the matcha powder on your bowl.
+                use enter to pour the matcha powder on your bowl.
               </p>
             )}
             {/* First-order-only walkthrough callout -- text above, arrow
@@ -2918,7 +2918,7 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
                 // once the spoon's actually shown.
                 style={{ left: `${SPOON_HINT_LEFT - 10}%`, top: `${SPOON_HINT_TOP}%` }}
               >
-                <p className="matcha-spoon-callout-text">Move down to pour the matcha powder</p>
+                <p className="matcha-spoon-callout-text">move down to pour the matcha powder</p>
                 <svg
                   className="matcha-spoon-callout-arrow"
                   viewBox="0 0 24 40"
@@ -3109,7 +3109,7 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
             className="kettle-hint"
             style={{ left: `${KETTLE_HINT_LEFT}%`, top: `${KETTLE_HINT_TOP}%` }}
           >
-            Use Enter to pour water in the bowl.
+            use enter to pour water in the bowl.
           </p>
         )}
         {/* First-order-only walkthrough callout -- text above, arrow below
@@ -3119,7 +3119,7 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
             from here). */}
         {showKettleSpotlight && (
           <div className="matcha-kettle-callout" style={{ left: `${KETTLE_HINT_LEFT}%`, top: `${KETTLE_HINT_TOP}%` }}>
-            <p className="matcha-kettle-callout-text">Move up and select the kettle to pour your water</p>
+            <p className="matcha-kettle-callout-text">move up and select the kettle to pour your water</p>
             <svg
               className="matcha-kettle-callout-arrow"
               viewBox="0 0 24 40"
@@ -3138,7 +3138,7 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
             className="whisk-hint"
             style={{ left: `${WHISK_HINT_LEFT}%`, top: `${WHISK_HINT_TOP}%` }}
           >
-            Use Enter to start whisking.
+            use enter to start whisking.
           </p>
         )}
         {/* First-order-only, final walkthrough callout -- text above, arrow
@@ -3153,7 +3153,7 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
             // feedback that this callout needed to sit more to the left.
             style={{ left: `${WHISK_HINT_LEFT - 10}%`, top: `${WHISK_HINT_TOP}%` }}
           >
-            <p className="matcha-whisk-callout-text">Move right and select the chasen to whisk your matcha</p>
+            <p className="matcha-whisk-callout-text">move right and select the chasen to whisk your matcha</p>
             <svg
               className="matcha-whisk-callout-arrow"
               viewBox="0 0 24 40"
@@ -3172,7 +3172,7 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
             className="bowl-hint"
             style={{ left: `${bowlPos.left + bowlItem.width / 2}%`, top: `${bowlPos.top - 6}%` }}
           >
-            Use Enter to carry your matcha bowl to the next station.
+            use enter to carry your matcha bowl to the next station.
           </p>
         )}
         {/* Ninth walkthrough callout -- text above, arrow below pointing
@@ -3186,7 +3186,7 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
             className="matcha-bowl-callout"
             style={{ left: `${bowlPos.left + bowlItem.width / 2}%`, top: `${bowlPos.top - 6}%` }}
           >
-            <p className="matcha-bowl-callout-text">Select the bowl to carry it over to the next station</p>
+            <p className="matcha-bowl-callout-text">select the bowl to carry it over to the next station</p>
             <svg
               className="matcha-bowl-callout-arrow"
               viewBox="0 0 24 40"
@@ -3469,7 +3469,7 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
                 className="mix-bar-hint"
                 style={{ left: `${mixBarPos.left + MIX_BAR_WIDTH / 2}%`, top: `${mixBarPos.top - 11}%` }}
               >
-                Use your arrow keys to balance the ball inside the green area and whisk without spilling.
+                use your arrow keys to balance the ball inside the green area and whisk without spilling.
               </p>
             )}
             {/* Eighth and final walkthrough callout -- text above, arrow
@@ -3487,7 +3487,7 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
                 style={{ left: `${mixBarPos.left + MIX_BAR_WIDTH / 2 - 8}%`, top: `${mixBarPos.top - 16}%` }}
               >
                 <p className="matcha-mix-callout-text">
-                  Use your left and right arrows to keep the ball in the green area without spilling
+                  use your left and right arrows to keep the ball in the green area without spilling
                 </p>
                 <svg
                   className="matcha-mix-callout-arrow"
@@ -3573,7 +3573,7 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
               height: `${MAKE_DRINK_ZONE.height}%`,
             }}
           >
-            Make Drink
+            make drink
           </div>
         )}
         {/* Order receipt button -- the flashing green halo + dashed-border
@@ -3605,7 +3605,7 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
             (button opened and closed once). */}
         {showStationSpotlight && (
           <div className="matcha-order-callout">
-            <p className="matcha-order-callout-text">Move up to the order button to check back at any time</p>
+            <p className="matcha-order-callout-text">move up to the order button to check back at any time</p>
             <svg
               className="matcha-order-callout-arrow"
               viewBox="0 0 40 24"
@@ -3651,7 +3651,7 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
             then). */}
         {showStationAdvanceSpotlight && (
           <div className="matcha-progress-callout">
-            <p className="matcha-progress-callout-text">Use your right arrow to move to the next station</p>
+            <p className="matcha-progress-callout-text">use your right arrow to move to the next station</p>
             <svg
               className="matcha-progress-callout-arrow"
               viewBox="0 0 24 40"

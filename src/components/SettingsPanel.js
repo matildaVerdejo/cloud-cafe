@@ -220,7 +220,7 @@ const SettingsPanel = ({
       {open && (
         <div className="settings-popover" role="group" aria-label="Settings">
           <VolumeRow
-            label="Music Volume"
+            label="music volume"
             volume={volume}
             onDown={onVolumeDown}
             onUp={onVolumeUp}
@@ -228,7 +228,7 @@ const SettingsPanel = ({
             plusRef={musicPlusRef}
           />
           <VolumeRow
-            label="Sound Volume"
+            label="sound volume"
             volume={soundVolume}
             onDown={onSoundVolumeDown}
             onUp={onSoundVolumeUp}

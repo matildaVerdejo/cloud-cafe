@@ -2578,7 +2578,7 @@ const MilkSelection = ({
               </svg>
             </div>
             <p className="milk-pour-hint" aria-hidden="true">
-              Hold Enter -- release in the yellow
+              hold enter -- release in the yellow
             </p>
           </div>
         )}
@@ -2629,7 +2629,7 @@ const MilkSelection = ({
               height: `${SEND_DRINK_ZONE.height}%`,
             }}
           >
-            Send to Toppings
+            send to toppings
           </div>
         )}
 

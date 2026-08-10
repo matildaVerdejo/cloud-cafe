@@ -14,26 +14,26 @@ import { playButtonClick, playButtonClickOff } from '../gameloop/sfx';
 // standalone maps here rather than importing CustomerOrdering's arrays so
 // this component doesn't depend on another screen's internals for a handful
 // of fixed strings.
-const GRADE_LABELS = { cafe: 'Cafe', classic: 'Classic', ceremonial: 'Ceremonial', hojicha: 'Hojicha' };
-const CUP_LABELS = { glass: 'Glass', mug: 'Mug', plastic: 'Plastic' };
+const GRADE_LABELS = { cafe: 'cafe', classic: 'classic', ceremonial: 'ceremonial', hojicha: 'hojicha' };
+const CUP_LABELS = { glass: 'glass', mug: 'mug', plastic: 'plastic' };
 const BASE_LABELS = {
-  dairy: 'Dairy milk',
-  oat: 'Oat milk',
-  almond: 'Almond milk',
-  coconut: 'Coconut water',
-  strawberry: 'Strawberry milk',
-  yuzu: 'Sparkling yuzu',
+  dairy: 'dairy milk',
+  oat: 'oat milk',
+  almond: 'almond milk',
+  coconut: 'coconut water',
+  strawberry: 'strawberry milk',
+  yuzu: 'sparkling yuzu',
 };
 const TOPPING_LABELS = {
-  'guava-syrup': 'Guava syrup',
-  'mint-syrup': 'Mint syrup',
-  'honey-syrup': 'Honey syrup',
-  'reg-foam': 'Reg cold foam',
-  'matcha-foam': 'Matcha cold foam',
-  'guava-powder': 'Guava powder',
-  'matcha-powder': 'Matcha powder',
-  'mint-leaves': 'Mint leaves',
-  'banana-foam': 'Banana foam',
+  'guava-syrup': 'guava syrup',
+  'mint-syrup': 'mint syrup',
+  'honey-syrup': 'honey syrup',
+  'reg-foam': 'reg cold foam',
+  'matcha-foam': 'matcha cold foam',
+  'guava-powder': 'guava powder',
+  'matcha-powder': 'matcha powder',
+  'mint-leaves': 'mint leaves',
+  'banana-foam': 'banana foam',
 };
 
 // Lets the player peek at the current order without leaving whichever
@@ -128,32 +128,32 @@ const OrderReceiptButton = ({
         aria-label={open ? 'Hide order receipt' : 'Show order receipt'}
         onClick={handleClick}
       >
-        Order
+        order
       </button>
       <div className={`order-receipt-drawer${open ? ' open' : ''}`}>
         {order ? (
           <div className="order-receipt-card">
             <p className="order-receipt-line">
-              <span className="order-receipt-label">Matcha</span>
+              <span className="order-receipt-label">matcha</span>
               {GRADE_LABELS[order.matchaGrade]} &middot; {order.teaspoons} tsp
             </p>
             <p className="order-receipt-line">
-              <span className="order-receipt-label">Cup</span>
+              <span className="order-receipt-label">cup</span>
               {CUP_LABELS[order.cupType]} &middot; {order.iceCubes} ice
             </p>
             <p className="order-receipt-line">
-              <span className="order-receipt-label">Base</span>
+              <span className="order-receipt-label">base</span>
               {BASE_LABELS[order.baseMilk]}
             </p>
             <p className="order-receipt-line">
-              <span className="order-receipt-label">Toppings</span>
+              <span className="order-receipt-label">toppings</span>
               {order.toppings.length > 0
                 ? order.toppings.map((value) => TOPPING_LABELS[value]).join(', ')
-                : 'None'}
+                : 'none'}
             </p>
           </div>
         ) : (
-          <p className="order-receipt-empty">No order placed yet.</p>
+          <p className="order-receipt-empty">no order placed yet.</p>
         )}
       </div>
       {highlight && (open ? hintTextOpen : hintText) && (

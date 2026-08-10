@@ -640,11 +640,11 @@
 
 /* Play button on the ordering computer's screen -- opens the order-builder
    modal (see .order-modal below). Styled to match .progress-step-dot in
-   ProgressBar.css exactly (same white circle / #8a7a6a border / #5c4a3a
-   text look as the progress bar's numbered steps, and the same green
-   focus-glow treatment as .progress-step.current:focus-visible
-   .progress-step-dot there), rather than the plain white/gray look it had
-   before. Nudged up and right twice now per feedback (was left: 63%/top:
+   ProgressBar.css's own white circle / #8a7a6a border / #5c4a3a text look,
+   rather than the plain white/gray look it had before -- its own
+   :focus-visible halo below is white instead of that dot's green, per
+   request (this is the tablet's own button, not a progress-bar step).
+   Nudged up and right twice now per feedback (was left: 63%/top:
    78%, then left: 66%/top: 68%) -- since this whole card scales to fit the
    viewport, physical distances like "an inch" aren't a fixed percentage,
    so these are approximations. Eyeballed position -- no reference yet for
@@ -679,7 +679,7 @@
 .ordering-play-button:focus-visible {
   outline: none;
   transform: scale(1.15);
-  box-shadow: 0 0 0 5px rgba(90, 138, 79, 0.9), 0 0 20px 6px rgba(90, 138, 79, 0.6);
+  box-shadow: 0 0 0 5px rgba(255, 255, 255, 0.9), 0 0 20px 6px rgba(255, 255, 255, 0.6);
 }
 
 /* Disabled while the read-acknowledgment gate is up (see disabled={} in

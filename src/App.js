@@ -743,13 +743,13 @@ function App() {
       {showExitConfirm && (
         <div className="gl-exit-confirm-backdrop">
           <div className="gl-exit-confirm-dialog" ref={exitDialogRef}>
-            <p>Exit Cloud Cafe?</p>
+            <p>exit cloud cafe?</p>
             <div className="gl-exit-confirm-buttons">
               <button type="button" autoFocus data-focusable onClick={confirmExit}>
-                Exit
+                exit
               </button>
               <button type="button" data-focusable onClick={cancelExit}>
-                Cancel
+                cancel
               </button>
             </div>
           </div>
@@ -762,7 +762,7 @@ function App() {
           (ads.started) -- see adGate's own comment above for why: the gap
           between "request sent" and "ads.started arrives" still needs to
           read as "please wait", not as a dead, clickable screen. */}
-      {adGate && <div className="gl-ad-curtain">Ad playing…</div>}
+      {adGate && <div className="gl-ad-curtain">ad playing…</div>}
 
       {/* Rendered once here (not inside any per-page conditional) so it
           keeps looping across every screen/customer for the whole session --

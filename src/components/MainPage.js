@@ -85,7 +85,7 @@ const MainPage = ({ onPlayClick, disabled = false }) => {
             onPlayClick?.();
           }}
         >
-          Start
+          start
         </button>
       </div>
     </div>

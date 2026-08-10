@@ -15,16 +15,16 @@ import { scoreOrderTaking } from '../gameloop/scoring';
 // directly, same "never ask for what the player hasn't seen on the counter
 // yet" rule as BASE_OPTIONS_WITH_STRAWBERRY below.
 const GRADE_OPTIONS_BASE = [
-  { value: 'cafe', label: 'Cafe' },
-  { value: 'classic', label: 'Classic' },
-  { value: 'ceremonial', label: 'Ceremonial' },
+  { value: 'cafe', label: 'cafe' },
+  { value: 'classic', label: 'classic' },
+  { value: 'ceremonial', label: 'ceremonial' },
 ];
-const GRADE_OPTIONS_WITH_HOJICHA = [...GRADE_OPTIONS_BASE, { value: 'hojicha', label: 'Hojicha' }];
+const GRADE_OPTIONS_WITH_HOJICHA = [...GRADE_OPTIONS_BASE, { value: 'hojicha', label: 'hojicha' }];
 const TEASPOON_OPTIONS = [1, 2, 3].map((n) => ({ value: n, label: `${n} tsp` }));
 const CUP_OPTIONS = [
-  { value: 'glass', label: 'Glass' },
-  { value: 'mug', label: 'Mug' },
-  { value: 'plastic', label: 'Plastic' },
+  { value: 'glass', label: 'glass' },
+  { value: 'mug', label: 'mug' },
+  { value: 'plastic', label: 'plastic' },
 ];
 // Extended to include 0 (was [1..7]) so a spoken "0 ice cubes" order (see
 // generateSpokenOrder below) is always something the player can actually
@@ -37,17 +37,17 @@ const ICE_OPTIONS = [0, 1, 2, 3, 4, 5, 6, 7].map((n) => ({ value: n, label: `${n
 // for -- or hears the customer speak -- an ingredient they haven't been
 // introduced to on the counter yet.
 const BASE_OPTIONS_BASE = [
-  { value: 'dairy', label: 'Dairy milk' },
-  { value: 'oat', label: 'Oat milk' },
-  { value: 'almond', label: 'Almond milk' },
-  { value: 'coconut', label: 'Coconut water' },
+  { value: 'dairy', label: 'dairy milk' },
+  { value: 'oat', label: 'oat milk' },
+  { value: 'almond', label: 'almond milk' },
+  { value: 'coconut', label: 'coconut water' },
 ];
-const BASE_OPTIONS_WITH_STRAWBERRY = [...BASE_OPTIONS_BASE, { value: 'strawberry', label: 'Strawberry milk' }];
+const BASE_OPTIONS_WITH_STRAWBERRY = [...BASE_OPTIONS_BASE, { value: 'strawberry', label: 'strawberry milk' }];
 // Sparkling yuzu (order 4 onward, added per request) stacks on top of
 // strawberry rather than replacing it, same "separate list, never ask for
 // what hasn't been introduced yet" reasoning as strawberry itself above --
 // see baseOptions in the component below.
-const BASE_OPTIONS_WITH_YUZU = [...BASE_OPTIONS_WITH_STRAWBERRY, { value: 'yuzu', label: 'Sparkling yuzu' }];
+const BASE_OPTIONS_WITH_YUZU = [...BASE_OPTIONS_WITH_STRAWBERRY, { value: 'yuzu', label: 'sparkling yuzu' }];
 // Same "kept as a separate list, not merged in directly" reasoning as
 // BASE_OPTIONS_BASE/_WITH_STRAWBERRY above -- banana foam (order 2+, see
 // ToppingsStation.js's own bananaFoamUnlocked) and honey syrup/mint leaves
@@ -61,18 +61,18 @@ const BASE_OPTIONS_WITH_YUZU = [...BASE_OPTIONS_WITH_STRAWBERRY, { value: 'yuzu'
 // order-form value (contrast matcha-cold-foam/reg-cold-foam, which map
 // through FOAM_KEY_TO_ORDER in gameloop/scoring.js).
 const TOPPING_OPTIONS_BASE = [
-  { value: 'guava-syrup', label: 'Guava syrup' },
-  { value: 'mint-syrup', label: 'Mint syrup' },
-  { value: 'reg-foam', label: 'Reg cold foam' },
-  { value: 'matcha-foam', label: 'Matcha cold foam' },
-  { value: 'guava-powder', label: 'Guava powder' },
-  { value: 'matcha-powder', label: 'Matcha powder' },
+  { value: 'guava-syrup', label: 'guava syrup' },
+  { value: 'mint-syrup', label: 'mint syrup' },
+  { value: 'reg-foam', label: 'reg cold foam' },
+  { value: 'matcha-foam', label: 'matcha cold foam' },
+  { value: 'guava-powder', label: 'guava powder' },
+  { value: 'matcha-powder', label: 'matcha powder' },
 ];
-const TOPPING_OPTIONS_ORDER2 = [...TOPPING_OPTIONS_BASE, { value: 'banana-foam', label: 'Banana foam' }];
+const TOPPING_OPTIONS_ORDER2 = [...TOPPING_OPTIONS_BASE, { value: 'banana-foam', label: 'banana foam' }];
 const TOPPING_OPTIONS_ORDER3 = [
   ...TOPPING_OPTIONS_ORDER2,
-  { value: 'honey-syrup', label: 'Honey syrup' },
-  { value: 'mint-leaves', label: 'Mint leaves' },
+  { value: 'honey-syrup', label: 'honey syrup' },
+  { value: 'mint-leaves', label: 'mint leaves' },
 ];
 
 // ---- Customer's randomized spoken order ----------------------------------
@@ -90,7 +90,7 @@ const TOPPING_OPTIONS_ORDER3 = [
 // include 0 here (both for speech and the actual Ice dropdown, so a spoken
 // "0 ice cubes" order can still be matched in the form) rather than
 // tracking a second, speech-only range that the dropdown couldn't match.
-const GREETINGS = ['Hello!', 'Hi!', 'Howdy!'];
+const GREETINGS = ['hello!', 'hi!', 'howdy!'];
 
 // A couple of these read better spoken aloud than their short dropdown-chip
 // labels (e.g. TOPPING_OPTIONS' "Reg cold foam" -> "regular foam" here), so
@@ -224,7 +224,7 @@ function buildSpeechSegments(o, gradeOptions, baseOptions) {
   const iceWord = o.ice === 1 ? 'ice cube' : 'ice cubes';
 
   const segments = [
-    { text: `${o.greeting} May I have a drink with `, highlight: false },
+    { text: `${o.greeting} may i have a drink with `, highlight: false },
     { text: `${o.teaspoons} ${tspWord}`, highlight: true },
     { text: ' of ', highlight: false },
     { text: grade, highlight: true },
@@ -232,17 +232,17 @@ function buildSpeechSegments(o, gradeOptions, baseOptions) {
     { text: cup, highlight: true },
     { text: ' cup with ', highlight: false },
     { text: `${o.ice} ${iceWord}`, highlight: true },
-    { text: '. May I please have that with ', highlight: false },
+    { text: '. may i please have that with ', highlight: false },
     { text: milk, highlight: true },
   ];
 
   if (o.toppings.length > 0) {
     const toppingNames = o.toppings.map((v) => TOPPING_SPEECH_NAMES[v]);
-    segments.push({ text: ", and I'd like to add on ", highlight: false });
+    segments.push({ text: ", and i'd like to add on ", highlight: false });
     segments.push(...joinWithAndSegments(toppingNames));
   }
 
-  segments.push({ text: '. Thank you!', highlight: false });
+  segments.push({ text: '. thank you!', highlight: false });
   return segments;
 }
 
@@ -715,14 +715,14 @@ const CustomerOrdering = ({ activeStep, customerNumber, onNavigate, onAdvance, o
   // callout (arrow + label) and the spotlight's own character/bubble
   // cutouts (see .ordering-spotlight-overlay further down). Starts true
   // only for customerNumber === 1 (2nd/3rd orders never show it), and
-  // switches off 7 seconds after the typewriter above actually finishes --
+  // switches off 2 seconds after the typewriter above actually finishes --
   // not the instant it finishes, so there's a real beat to read the order
   // before this phase ends and the "button" phase below takes over.
   const typingDone = visibleChars >= speechText.length;
   const [showReadPhase, setShowReadPhase] = useState(customerNumber === 1);
   useEffect(() => {
     if (customerNumber !== 1 || !typingDone) return undefined;
-    const READ_PHASE_LINGER_MS = 7000;
+    const READ_PHASE_LINGER_MS = 2000;
     const timeoutId = setTimeout(() => setShowReadPhase(false), READ_PHASE_LINGER_MS);
     return () => clearTimeout(timeoutId);
   }, [customerNumber, typingDone]);
@@ -1121,12 +1121,12 @@ const CustomerOrdering = ({ activeStep, customerNumber, onNavigate, onAdvance, o
                 >
                   <polygon points="2,12 36,2 36,22" />
                 </svg>
-                <p className="ordering-form-callout-text">Fill in each part of the order below</p>
+                <p className="ordering-form-callout-text">accurately fill in the order</p>
               </div>
             )}
             {showFormPhase && isOrderComplete && (
               <p className="ordering-form-callout-text ordering-form-callout-text--lower">
-                Press the button below to place the order
+                press the button below to place the order
               </p>
             )}
             <div
@@ -1140,10 +1140,10 @@ const CustomerOrdering = ({ activeStep, customerNumber, onNavigate, onAdvance, o
                   + removable chips). */}
               <div className="order-form">
                 <div className="order-section">
-                  <h2 className="order-section-title">Matcha</h2>
+                  <h2 className="order-section-title">matcha</h2>
                   <div className="order-section-row">
                     <Dropdown
-                      placeholder="Grade"
+                      placeholder="grade"
                       options={gradeOptions}
                       value={matchaGrade}
                       onSelect={setMatchaGrade}
@@ -1152,7 +1152,7 @@ const CustomerOrdering = ({ activeStep, customerNumber, onNavigate, onAdvance, o
                       toggleRef={gradeRef}
                     />
                     <Dropdown
-                      placeholder="Tsp"
+                      placeholder="tsp"
                       options={TEASPOON_OPTIONS}
                       value={teaspoons}
                       onSelect={setTeaspoons}
@@ -1164,10 +1164,10 @@ const CustomerOrdering = ({ activeStep, customerNumber, onNavigate, onAdvance, o
                 </div>
 
                 <div className="order-section">
-                  <h2 className="order-section-title">Cup &amp; Ice</h2>
+                  <h2 className="order-section-title">cup &amp; ice</h2>
                   <div className="order-section-row">
                     <Dropdown
-                      placeholder="Cup"
+                      placeholder="cup"
                       options={CUP_OPTIONS}
                       value={cupType}
                       onSelect={setCupType}
@@ -1176,7 +1176,7 @@ const CustomerOrdering = ({ activeStep, customerNumber, onNavigate, onAdvance, o
                       toggleRef={cupRef}
                     />
                     <Dropdown
-                      placeholder="Ice"
+                      placeholder="ice"
                       options={ICE_OPTIONS}
                       value={iceCubes}
                       onSelect={setIceCubes}
@@ -1188,9 +1188,9 @@ const CustomerOrdering = ({ activeStep, customerNumber, onNavigate, onAdvance, o
                 </div>
 
                 <div className="order-section">
-                  <h2 className="order-section-title">Base</h2>
+                  <h2 className="order-section-title">base</h2>
                   <Dropdown
-                    placeholder="Milk / water"
+                    placeholder="milk / water"
                     options={baseOptions}
                     value={baseMilk}
                     onSelect={setBaseMilk}
@@ -1201,7 +1201,7 @@ const CustomerOrdering = ({ activeStep, customerNumber, onNavigate, onAdvance, o
                 </div>
 
                 <div className="order-section">
-                  <h2 className="order-section-title">Toppings</h2>
+                  <h2 className="order-section-title">toppings</h2>
                   <div className="order-dropdown">
                     <button
                       ref={toppingsAddRef}
@@ -1213,7 +1213,7 @@ const CustomerOrdering = ({ activeStep, customerNumber, onNavigate, onAdvance, o
                         toggleControl('toppings');
                       }}
                     >
-                      + Add topping
+                      + add topping
                     </button>
                     {openControl === 'toppings' && (
                       <div className="order-dropdown-list">
@@ -1282,7 +1282,7 @@ const CustomerOrdering = ({ activeStep, customerNumber, onNavigate, onAdvance, o
                     // toppings -> here chain above.
                     onClick={placeOrder}
                   >
-                    Place Order
+                    place order
                   </button>
                 )}
               </div>
@@ -1302,7 +1302,7 @@ const CustomerOrdering = ({ activeStep, customerNumber, onNavigate, onAdvance, o
           // "go to the next station" message said twice. Orders 2/3 never
           // set showProgressPhase (customerNumber !== 1), so they keep
           // getting this plain text hint exactly as before.
-          currentStepHint={showProgressPhase ? null : 'Use your right arrow key to head to the matcha station.'}
+          currentStepHint={showProgressPhase ? null : 'use your right arrow key to head to the matcha station.'}
           spotlightExempt={showProgressPhase}
           // See ProgressBar's own comment on this prop -- suppresses the
           // station dot's autoFocus while the first two walkthrough beats
@@ -1369,7 +1369,7 @@ const CustomerOrdering = ({ activeStep, customerNumber, onNavigate, onAdvance, o
             >
               <polygon points="12,2 22,36 2,36" />
             </svg>
-            <p className="ordering-read-order-callout-text">Carefully read the customer&apos;s order</p>
+            <p className="ordering-read-order-callout-text">carefully read the customer&apos;s order</p>
           </div>
         )}
 
@@ -1394,7 +1394,7 @@ const CustomerOrdering = ({ activeStep, customerNumber, onNavigate, onAdvance, o
             >
               <polygon points="12,2 22,36 2,36" />
             </svg>
-            <p className="ordering-button-callout-text">Move up to take the order</p>
+            <p className="ordering-button-callout-text">take the order</p>
           </div>
         )}
 
@@ -1411,7 +1411,7 @@ const CustomerOrdering = ({ activeStep, customerNumber, onNavigate, onAdvance, o
             screen. */}
         {showProgressPhase && (
           <div className="ordering-progress-callout">
-            <p className="ordering-progress-callout-text">Head to the next station to start making the drink</p>
+            <p className="ordering-progress-callout-text">head to the next station to start making the drink</p>
             <svg
               className="ordering-progress-callout-arrow"
               viewBox="0 0 24 40"

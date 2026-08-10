@@ -13,11 +13,11 @@ export const ORDERS_PER_SESSION = 5;
 // list (as STEP_KEYS) for its own navigation logic, so the bar and the
 // state machine can never drift out of sync.
 export const PROGRESS_STEPS = [
-  { key: 'ordering', label: 'Take Order' },
-  { key: 'matcha-making', label: 'Matcha' },
-  { key: 'milk-selection', label: 'Milk' },
-  { key: 'toppings', label: 'Toppings' },
-  { key: 'final-combination', label: 'Serve' },
+  { key: 'ordering', label: 'take order' },
+  { key: 'matcha-making', label: 'matcha' },
+  { key: 'milk-selection', label: 'milk' },
+  { key: 'toppings', label: 'toppings' },
+  { key: 'final-combination', label: 'serve' },
 ];
 
 // Replaces the old per-screen Back/forward buttons. Sits bottom-center on
@@ -150,7 +150,7 @@ const ProgressBar = ({
       {highlightCurrentStep && currentStepHint && <p className="progress-station-hint">{currentStepHint}</p>}
       <div className="progress-bar" ref={barRef}>
         <span className="progress-order-count">
-          Order {customerNumber} of {ORDERS_PER_SESSION}
+          order {customerNumber} of {ORDERS_PER_SESSION}
         </span>
         <div className="progress-steps">
           {/* Connector track behind the dots: fills green from the first dot
