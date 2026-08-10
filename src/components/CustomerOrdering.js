@@ -509,15 +509,20 @@ const CustomerOrdering = ({ activeStep, customerNumber, onNavigate, onAdvance, o
   // (see SettingsPanel.js's own handler for the same reasoning): grade
   // Right -> teaspoons, Down -> cup; teaspoons Down -> cup; cup Right ->
   // ice, Down -> base; ice Up -> grade, Down -> base; base Down ->
-  // toppings' own "+ Add topping" toggle; toppings Down -> Place Order,
-  // once it actually exists (see isOrderComplete further down --
-  // placeOrderRef.current is null until then, so that leg is simply a
+  // toppings' own "+ Add topping" toggle; toppings Down -> the first
+  // topping chip if any are on the order (see toggleTopping/.order-topping-
+  // chip), else straight to Place Order; chips themselves cycle Left/Right
+  // among each other (Left from the first one back to "+ Add topping"),
+  // Up back to "+ Add topping", Down on to Place Order; Place Order's own
+  // Up goes to the LAST chip if any exist, else "+ Add topping" -- all
+  // once Place Order actually exists (see isOrderComplete further down --
+  // placeOrderRef.current is null until then, so those legs are simply a
   // no-op before that).
   //
   // Every direction is swallowed (preventDefault + stopImmediatePropagation)
-  // whenever any of these seven elements has focus, whether or not it maps
-  // to one of the named legs above -- not just the ones with somewhere to
-  // go. This is what actually keeps the D-pad contained to the order form
+  // whenever any of these elements (or a chip) has focus, whether or not it
+  // maps to one of the named legs above -- not just the ones with somewhere
+  // to go. This is what actually keeps the D-pad contained to the order form
   // while it's open: without it, an unhandled direction (e.g. Down from
   // Place Order, or Up from Grade) would fall through to the generic
   // useFlatFocusNav(containerRef) hook below, which doesn't know this
@@ -525,10 +530,9 @@ const CustomerOrdering = ({ activeStep, customerNumber, onNavigate, onAdvance, o
   // out to whatever's spatially nearest elsewhere on the screen -- the
   // reported bug, where enough Down presses eventually reached the
   // ProgressBar's own station dot underneath the modal. (This trap
-  // originally only covered these seven named toggles; an open dropdown's
-  // own option list is now trapped too, right below -- see that block's
-  // own comment. Topping chips still aren't covered, so their existing
-  // nav is untouched.)
+  // originally only covered seven named toggles, none of them the
+  // dynamically-many topping chips -- an open dropdown's own option list is
+  // trapped too, right below -- see that block's own comment.)
   //
   // Registered here, before useFlatFocusNav(containerRef) below, for the
   // same reason (and avoiding the same possible cascade) as the
@@ -610,18 +614,58 @@ const CustomerOrdering = ({ activeStep, customerNumber, onNavigate, onAdvance, o
         return;
       }
 
+      // Topping chips (the removable "flavor x" pills that appear once at
+      // least one's been added -- see toggleTopping/.order-topping-chip)
+      // are now part of this same trapped graph too, sitting between the
+      // "+ Add topping" button and Place Order: toppingsAddRef's own Down
+      // goes to the first chip (if any exist) instead of jumping straight
+      // to Place Order, chips themselves cycle Left/Right among each other
+      // (DOM order, same '.order-dropdown-list' pattern above) and go
+      // Up back to "+ Add topping" / Down on to Place Order, and Place
+      // Order's own Up goes back to the LAST chip (if any) instead of
+      // always "+ Add topping" -- keeps a mistaken topping reachable (and
+      // removable with Enter, same as clicking it) from anywhere in this
+      // loop without ever needing to reopen the add list.
+      const chips = containerRef.current
+        ? Array.from(containerRef.current.querySelectorAll('.order-topping-chip'))
+        : [];
+
       if (active === toppingsAddRef.current) {
         e.preventDefault();
         e.stopImmediatePropagation();
-        if (action === 'Down' && placeOrderRef.current) placeOrderRef.current.focus();
-        else if (action === 'Up') baseRef.current?.focus();
+        if (action === 'Down') {
+          if (chips[0]) chips[0].focus();
+          else if (placeOrderRef.current) placeOrderRef.current.focus();
+        } else if (action === 'Up') {
+          baseRef.current?.focus();
+        }
+        return;
+      }
+
+      const chipIndex = chips.indexOf(active);
+      if (chipIndex !== -1) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        if (action === 'Right') {
+          chips[chipIndex + 1]?.focus();
+        } else if (action === 'Left') {
+          if (chipIndex === 0) toppingsAddRef.current?.focus();
+          else chips[chipIndex - 1]?.focus();
+        } else if (action === 'Up') {
+          toppingsAddRef.current?.focus();
+        } else if (action === 'Down' && placeOrderRef.current) {
+          placeOrderRef.current.focus();
+        }
         return;
       }
 
       if (active === placeOrderRef.current) {
         e.preventDefault();
         e.stopImmediatePropagation();
-        if (action === 'Up') toppingsAddRef.current?.focus();
+        if (action === 'Up') {
+          if (chips[chips.length - 1]) chips[chips.length - 1].focus();
+          else toppingsAddRef.current?.focus();
+        }
       }
     };
     window.addEventListener('keydown', handleKeyDown);
@@ -720,10 +764,12 @@ const CustomerOrdering = ({ activeStep, customerNumber, onNavigate, onAdvance, o
   const [cupType, setCupType] = useState(null);
   const [iceCubes, setIceCubes] = useState(null);
   const [baseMilk, setBaseMilk] = useState(null);
-  // Each added topping gets its own id (toppingIdRef below) rather than
-  // being de-duplicated by value, so the same flavor can be added more than
-  // once (e.g. two pumps of guava syrup) and each copy still removed
-  // independently of the others.
+  // Each added topping still gets its own id (toppingIdRef below) even
+  // though there's now only ever at most one per value (see toggleTopping
+  // below -- picking an already-added flavor in the list removes it rather
+  // than stacking a second copy, per request) -- keeps the id-keyed
+  // chip/removal plumbing below unchanged rather than switching it over to
+  // keying by value directly.
   const [toppings, setToppings] = useState([]); // { id, value }[]
   const toppingIdRef = useRef(0);
 
@@ -747,9 +793,16 @@ const CustomerOrdering = ({ activeStep, customerNumber, onNavigate, onAdvance, o
     }
   }, [openControl]);
 
-  const addTopping = (value) => {
+  // Picking a flavor that isn't on the order yet adds it; picking one
+  // that's already there removes it instead of stacking a duplicate --
+  // per request, so double-clicking (or any mis-click) on the same
+  // topping undoes itself instead of silently adding a second copy. Same
+  // dropdown-closes/refocuses-the-adder-button behavior either way.
+  const toggleTopping = (value) => {
     playButtonClick();
-    setToppings((prev) => [...prev, { id: toppingIdRef.current++, value }]);
+    setToppings((prev) =>
+      prev.some((t) => t.value === value) ? prev.filter((t) => t.value !== value) : [...prev, { id: toppingIdRef.current++, value }]
+    );
     setOpenControl(null);
     toppingsAddRef.current?.focus();
   };
@@ -1164,18 +1217,23 @@ const CustomerOrdering = ({ activeStep, customerNumber, onNavigate, onAdvance, o
                     </button>
                     {openControl === 'toppings' && (
                       <div className="order-dropdown-list">
-                        {toppingOptions.map((opt, index) => (
+                        {toppingOptions.map((opt, index) => {
+                          const chosen = toppings.some((t) => t.value === opt.value);
+                          return (
                           <button
                             key={opt.value}
                             ref={index === 0 ? toppingsFirstOptionRef : undefined}
                             type="button"
-                            className="order-dropdown-option"
+                            className={`order-dropdown-option${chosen ? ' selected' : ''}`}
                             data-focusable
-                            onClick={() => addTopping(opt.value)}
+                            onClick={() => toggleTopping(opt.value)}
+                            aria-pressed={chosen}
+                            aria-label={chosen ? `${opt.label}. Already added -- select to remove.` : opt.label}
                           >
                             {opt.label}
                           </button>
-                        ))}
+                          );
+                        })}
                       </div>
                     )}
                   </div>
