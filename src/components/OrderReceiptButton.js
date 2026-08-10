@@ -1,5 +1,12 @@
 import React, { useRef, useState } from 'react';
-import './OrderReceiptButton.css';
+// OrderReceiptButton.css is now imported once, eagerly, from App.js instead
+// of here -- this component is itself imported from three separate
+// lazy-loaded screens (MatchaMaking.js, MilkSelection.js, ToppingsStation.js),
+// and importing its CSS locally meant webpack had to reconcile its order
+// against MatchaMaking.css across every combination of those chunks, which
+// it couldn't -- a "Conflicting order" webpack warning that Vercel's
+// CI=true escalates into a hard build failure. See App.js's own import
+// comment for the full explanation.
 import { playButtonClick, playButtonClickOff } from '../gameloop/sfx';
 
 // Label lookups for the raw values CustomerOrdering.js stores in its order

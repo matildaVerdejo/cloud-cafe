@@ -1,5 +1,24 @@
 import React, { useEffect, useRef, useState, Suspense, lazy } from 'react';
 import './App.css';
+// MatchaMaking.css and OrderReceiptButton.css are each shared across more
+// than one of the five lazy-loaded station screens below (MatchaMaking.css:
+// re-used, class-name-only, by MilkSelection.js and ToppingsStation.js;
+// OrderReceiptButton.css: pulled in by the OrderReceiptButton component,
+// itself imported from MatchaMaking.js, MilkSelection.js, AND
+// ToppingsStation.js) -- if left to import only from within those
+// individual lazy chunks, webpack's mini-css-extract-plugin can't find one
+// consistent relative order across every possible combination of chunks
+// that might end up loaded on the same page (it did find a genuinely
+// unresolvable one here: "Conflicting order" between these two files,
+// which react-scripts treats as a hard build failure rather than a warning
+// under Vercel's CI=true). Importing both here instead -- in App.js, which
+// is always eager, never code-split -- puts them in the one initial CSS
+// bundle that loads before any lazy chunk possibly could, so there's only
+// ever a single order to resolve. Removed from MatchaMaking.js's and
+// OrderReceiptButton.js's own imports accordingly (see each file's own
+// note) now that this is their one canonical load site.
+import './components/MatchaMaking.css';
+import './components/OrderReceiptButton.css';
 import SplashScreen from './components/SplashScreen';
 import SettingsPanel from './components/SettingsPanel';
 import MainPage from './components/MainPage';

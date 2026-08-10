@@ -1,5 +1,10 @@
 import React, { useEffect, useRef, useState } from 'react';
-import './MatchaMaking.css';
+// MatchaMaking.css is now imported once, eagerly, from App.js instead of
+// here -- it's reused (class names only, no import) by MilkSelection.js and
+// ToppingsStation.js too, and importing it from this file's own lazy chunk
+// alongside OrderReceiptButton.css (also multi-chunk-shared) is what caused
+// a webpack "Conflicting order" build failure under Vercel's CI=true. See
+// App.js's own import comment for the full explanation.
 import { useFlatFocusNav } from '../gameloop/useFlatFocusNav';
 import { getActionFromKeyEvent, shouldDebounceEnter } from '../gameloop/pal';
 import { playButtonClick, playLiquidPouring, playMatchaWhisking, playMatchaPowderPour } from '../gameloop/sfx';
