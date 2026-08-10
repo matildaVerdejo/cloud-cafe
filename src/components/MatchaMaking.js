@@ -945,6 +945,45 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
   const kettleRef = useRef(null);
   const whiskRef = useRef(null);
   const bowlRef = useRef(null);
+  // Ref (not state) purely so the lockdown handler right below -- which has
+  // to be declared/registered up here, before this station's own nav-graph
+  // effect and useFlatFocusNav(containerRef) further down, same ordering
+  // reasons as those two -- can read the CURRENT value without needing
+  // showOrderButtonLock (declared much further down this component, past
+  // the Order-hint/spotlight state) in its own dependency array. Kept in
+  // sync every render by the effect sitting right after showOrderButtonLock's
+  // own declaration below. Same "ref declared early, synced late" pattern
+  // as Customer Ordering's own restrictNavigationRef.
+  const restrictNavigationRef = useRef(false);
+
+  // First-order-only walkthrough lockdown -- same idea as Customer
+  // Ordering's own restrictNavigationRef (see that file's matching comment):
+  // while the player hasn't yet pressed Enter on the Order receipt button
+  // once (showOrderButtonLock below), arrow keys shouldn't move focus
+  // anywhere else on this station -- the button is pre-focused the instant
+  // this walkthrough beat starts (see the focus effect near
+  // showOrderButtonLock's own declaration) and Enter on it is the only
+  // thing that should do anything until then. Without this, Up/Down/Left/
+  // Right would still fall through to this station's own nav-graph handler
+  // right below and let the player wander off to the tins/whisk/etc before
+  // the walkthrough's actually pointed them at the Order button yet.
+  //
+  // Registered here, before both that graph and useFlatFocusNav, for the
+  // exact same "attach the window listener first so it runs first"
+  // reasoning that graph's own comment explains -- stopImmediatePropagation
+  // makes this a hard stop rather than merely a first opinion those other
+  // handlers could still override.
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (!restrictNavigationRef.current) return;
+      const action = getActionFromKeyEvent(e);
+      if (action !== 'Up' && action !== 'Down' && action !== 'Left' && action !== 'Right') return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   // This station's own explicit keyboard nav graph, per request -- same
   // "exact fixed graph, not generic spatial nearest-neighbor matching"
@@ -1149,6 +1188,43 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
   // without the pink tint over everything else.
   const showStationSpotlight = customerNumber === 1 && showOrderHint;
 
+  // First-order-only nav lockdown -- separate, shorter-lived flag from
+  // showOrderHint/showStationSpotlight above (which stay up through as many
+  // opens as the player likes and only retire once the drawer's been opened
+  // AND closed again): this one exists purely to gate restrictNavigationRef
+  // (declared/registered far above, before this station's own nav-graph
+  // effect -- see that ref's own comment) and retires the instant the
+  // player's pressed Enter on the Order button ONCE, same "unlocks the
+  // moment the thing it was pointing at gets used" rising-edge shape as
+  // Customer Ordering's own showButtonPhase/hasOpenedOrderForm. Set true by
+  // the onToggle passed to <OrderReceiptButton> below, on the opening
+  // toggle specifically (nowOpen === true) -- unlike showOrderHint's own
+  // onToggle branch, which only cares about the closing one.
+  const [hasOpenedOrderReceipt, setHasOpenedOrderReceipt] = useState(false);
+  const showOrderButtonLock = customerNumber === 1 && !hasOpenedOrderReceipt;
+
+  // Moves focus onto the Order receipt button the instant showOrderButtonLock
+  // turns on -- pairs with suppressInitialFocus on <ProgressBar> below so
+  // the station dot never grabs the walkthrough's very first selection
+  // instead, same "the highlighted thing becomes the next thing selected"
+  // pattern as Customer Ordering's own showButtonPhase focus effect. Reaches
+  // for the button by class (same as this station's own nav-graph effect
+  // above) since OrderReceiptButton doesn't expose a ref up to its parent.
+  useEffect(() => {
+    if (showOrderButtonLock) {
+      document.querySelector('.order-receipt-button')?.focus();
+    }
+  }, [showOrderButtonLock]);
+
+  // Keeps restrictNavigationRef (declared/read far above the lockdown
+  // handler -- see that ref's own comment for why it exists at all) in sync
+  // with showOrderButtonLock. No dependency array -- this just re-reads it
+  // every render, which is cheap and means the ref can never go stale a
+  // render behind the flag.
+  useEffect(() => {
+    restrictNavigationRef.current = showOrderButtonLock;
+  });
+
   // Used to send focus to the first matcha tin once showOrderHint retired
   // -- removed per request, now that this station has its own explicit,
   // deterministic keyboard nav graph (see the big keydown effect below)
@@ -1338,17 +1414,19 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
   const [drag, setDrag] = useState(null); // { key, left, top } | null
   const dragStartRef = useRef({ pointerX: 0, pointerY: 0, left: 0, top: 0 });
 
-  // Sends focus back to the heater's power button ("kettle button") the
-  // instant the temp gauge disappears (tempBarVisible flipping false,
-  // TEMP_BAR_LINGER_MS after stopBar). Same "the control that was focused
-  // is unmounting, so it must hand focus off explicitly or it falls into
-  // the void" reasoning as the scoop-bar/big-spoon pair above -- the gauge
-  // (barRef) is what's been focused since it opened, and it's about to be
-  // removed from the DOM outright, so without this the halo would simply
-  // vanish instead of landing back on the button that opened it.
+  // Sends focus to the kettle itself the instant the temp gauge disappears
+  // (tempBarVisible flipping false, TEMP_BAR_LINGER_MS after stopBar). Same
+  // "the control that was focused is unmounting, so it must hand focus off
+  // explicitly or it falls into the void" reasoning as the scoop-bar/big-
+  // spoon pair above -- the gauge (barRef) is what's been focused since it
+  // opened, and it's about to be removed from the DOM outright -- but
+  // rather than landing back on the heater button that opened it, this
+  // sends focus straight on to the kettle, exactly where play continues
+  // next (arrow over and press Enter to pour the water, same beat
+  // showKettleHint/showKettleSpotlight below already flash on).
   useEffect(() => {
     if (!tempBarVisible) {
-      heaterButtonRef.current?.focus();
+      kettleRef.current?.focus();
     }
   }, [tempBarVisible]);
 
@@ -1865,6 +1943,19 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
   const showScoopSpotlight = customerNumber === 1 && !!selectedTin && !scoopConfirmed;
   const showSpoonSpotlight = customerNumber === 1 && scoopConfirmed && bigSpoonStage !== 'done';
 
+  // Moves focus onto the first (cafe-grade) tin the instant showTinSpotlight
+  // turns on -- same "the highlighted thing becomes the next thing
+  // selected" pattern as showOrderButtonLock's own focus effect above, this
+  // time for the walkthrough's next beat. Reaches for the tin by class
+  // (same '.selectable' query this station's own nav-graph effect above
+  // uses for firstTin) rather than a dedicated ref, since the three tins are
+  // rendered from tinItems below with no ref array of their own.
+  useEffect(() => {
+    if (showTinSpotlight) {
+      containerRef.current?.querySelector('.selectable')?.focus();
+    }
+  }, [showTinSpotlight]);
+
   // The bowl's own persistent "what's in it" state -- deliberately *not*
   // reset when selectedTin changes (unlike the state above), so closing the
   // tin selector or picking a different tin doesn't erase matcha that's
@@ -2085,18 +2176,19 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
   // after this one.
   const showTempBarSpotlight = customerNumber === 1 && heaterOn && tempBarVisible;
 
-  // Sends focus to the bowl the moment the pour finishes (bigSpoonStage
-  // settling on 'done'). Not a "guided next step" nudge like the ones that
-  // stayed removed elsewhere -- the big spoon that was focused right up
-  // until this point actually unmounts the instant bigSpoonStage hits
-  // 'done' (see the JSX below), so without handing focus off explicitly it
-  // would just fall into the void (document.body) instead of landing
-  // somewhere a player can see and act on. The bowl is also exactly where
-  // play continues next (arrow over to the kettle to heat/pour water), so
-  // its white focus halo doubles as the cue for where to go.
+  // Sends focus to the heater/kettle button the moment the pour finishes
+  // (bigSpoonStage settling on 'done'). Not a "guided next step" nudge like
+  // the ones that stayed removed elsewhere -- the big spoon that was
+  // focused right up until this point actually unmounts the instant
+  // bigSpoonStage hits 'done' (see the JSX below), so without handing focus
+  // off explicitly it would just fall into the void (document.body) instead
+  // of landing somewhere a player can see and act on. The heater button is
+  // also exactly where play continues next (press Enter to heat the water,
+  // same beat showHeaterHint/showHeaterSpotlight above already flash on),
+  // so its white focus halo doubles as the cue for where to go.
   useEffect(() => {
     if (bigSpoonStage === 'done') {
-      bowlRef.current?.focus();
+      heaterButtonRef.current?.focus();
     }
   }, [bigSpoonStage]);
 
@@ -2261,10 +2353,12 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
         pourAudioRef.current = null;
         setItemPositions((prev) => ({ ...prev, kettle: MOVABLE_START.kettle }));
         setKettleStage('idle');
-        // Sends the halo to the bowl once the water's actually landed --
-        // per request, the bowl is where play continues next (whisking)
-        // regardless of which item was just used to fill it.
-        bowlRef.current?.focus();
+        // Sends the halo straight to the whisk once the water's actually
+        // landed -- per request, whisking is where play continues next, so
+        // this skips the bowl and lands right on the tool that does it
+        // (same beat showWhiskHint/showWhiskSpotlight below already flash
+        // on), regardless of which item was just used to fill the bowl.
+        whiskRef.current?.focus();
       }, KETTLE_POUR_MS);
       return () => {
         clearTimeout(t);
@@ -2576,7 +2670,7 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
             >
               <polygon points="2,12 38,2 38,22" />
             </svg>
-            <p className="matcha-heater-callout-text">move left and select the button to turn the kettle on</p>
+            <p className="matcha-heater-callout-text">heat up the water</p>
           </div>
         )}
         {heaterOn && tempBarVisible && (
@@ -2723,7 +2817,7 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
             freestanding new position. */}
         {showTinSpotlight && (
           <div className="matcha-tin-callout" style={{ left: `${TIN_HINT_LEFT}%`, top: `${TIN_HINT_TOP}%` }}>
-            <p className="matcha-tin-callout-text">move down and choose the right matcha grade</p>
+            <p className="matcha-tin-callout-text">use the arrows and pick the correct grade</p>
             <svg
               className="matcha-tin-callout-arrow"
               viewBox="0 0 24 40"
@@ -2918,7 +3012,7 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
                 // once the spoon's actually shown.
                 style={{ left: `${SPOON_HINT_LEFT - 10}%`, top: `${SPOON_HINT_TOP}%` }}
               >
-                <p className="matcha-spoon-callout-text">move down to pour the matcha powder</p>
+                <p className="matcha-spoon-callout-text">pour the scoop</p>
                 <svg
                   className="matcha-spoon-callout-arrow"
                   viewBox="0 0 24 40"
@@ -3119,7 +3213,7 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
             from here). */}
         {showKettleSpotlight && (
           <div className="matcha-kettle-callout" style={{ left: `${KETTLE_HINT_LEFT}%`, top: `${KETTLE_HINT_TOP}%` }}>
-            <p className="matcha-kettle-callout-text">move up and select the kettle to pour your water</p>
+            <p className="matcha-kettle-callout-text">pour the water</p>
             <svg
               className="matcha-kettle-callout-arrow"
               viewBox="0 0 24 40"
@@ -3153,7 +3247,7 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
             // feedback that this callout needed to sit more to the left.
             style={{ left: `${WHISK_HINT_LEFT - 10}%`, top: `${WHISK_HINT_TOP}%` }}
           >
-            <p className="matcha-whisk-callout-text">move right and select the chasen to whisk your matcha</p>
+            <p className="matcha-whisk-callout-text">use the chasen to froth your matcha</p>
             <svg
               className="matcha-whisk-callout-arrow"
               viewBox="0 0 24 40"
@@ -3594,6 +3688,13 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
             // first and shouldn't, since the player hasn't closed it back
             // up yet.
             if (!nowOpen) setShowOrderHint(false);
+            // The *opening* toggle, on the other hand, is exactly what
+            // retires showOrderButtonLock -- see that flag's own comment
+            // above for why it's a separate, shorter-lived flag from
+            // showOrderHint. Only ever needs to flip true once (never reset
+            // back), same one-way shape as Customer Ordering's own
+            // hasOpenedOrderForm.
+            if (nowOpen) setHasOpenedOrderReceipt(true);
           }}
         />
         {/* First-order-only walkthrough callout -- label + arrow sitting to
@@ -3605,7 +3706,7 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
             (button opened and closed once). */}
         {showStationSpotlight && (
           <div className="matcha-order-callout">
-            <p className="matcha-order-callout-text">move up to the order button to check back at any time</p>
+            <p className="matcha-order-callout-text">use the order button to check back at any time</p>
             <svg
               className="matcha-order-callout-arrow"
               viewBox="0 0 40 24"
@@ -3633,7 +3734,7 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
           // up. Orders 2/3 never set it, so they keep this exactly as
           // before.
           currentStepHint={
-            showStationAdvanceSpotlight ? null : 'Use your right arrow key to move on to the base adding station.'
+            showStationAdvanceSpotlight ? null : 'use your right arrow key to move on to the base adding station.'
           }
           // Exempts the whole bar from the walkthrough spotlight across
           // BOTH of this screen's last two beats (showBowlCarrySpotlight,
@@ -3642,6 +3743,12 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
           // the bar reads through continuously across that handoff instead
           // of flickering tinted for a frame in between.
           spotlightExempt={showBowlCarrySpotlight || showStationAdvanceSpotlight}
+          // Suppressed while showOrderButtonLock is up so the current-step
+          // dot's own autoFocus doesn't grab the walkthrough's very first
+          // selection out from under the Order button's own focus effect --
+          // same pairing as Customer Ordering's own suppressInitialFocus/
+          // showReadPhase-showButtonPhase.
+          suppressInitialFocus={showOrderButtonLock}
         />
         {/* Tenth and final walkthrough callout -- text above, arrow below
             pointing down at the bar, same shape as .ordering-progress-
