@@ -14,7 +14,7 @@ import { playButtonClick, playButtonClickOff } from '../gameloop/sfx';
 // standalone maps here rather than importing CustomerOrdering's arrays so
 // this component doesn't depend on another screen's internals for a handful
 // of fixed strings.
-const GRADE_LABELS = { cafe: 'Cafe', classic: 'Classic', ceremonial: 'Ceremonial' };
+const GRADE_LABELS = { cafe: 'Cafe', classic: 'Classic', ceremonial: 'Ceremonial', hojicha: 'Hojicha' };
 const CUP_LABELS = { glass: 'Glass', mug: 'Mug', plastic: 'Plastic' };
 const BASE_LABELS = {
   dairy: 'Dairy milk',
@@ -22,6 +22,7 @@ const BASE_LABELS = {
   almond: 'Almond milk',
   coconut: 'Coconut water',
   strawberry: 'Strawberry milk',
+  yuzu: 'Sparkling yuzu',
 };
 const TOPPING_LABELS = {
   'guava-syrup': 'Guava syrup',

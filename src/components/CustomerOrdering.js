@@ -9,11 +9,17 @@ import { scoreOrderTaking } from '../gameloop/scoring';
 // ---- Order-builder option lists ------------------------------------------
 // One list per dropdown/adder below, each a plain { value, label } pair --
 // value is what gets stored in state, label is what's shown to the player.
-const GRADE_OPTIONS = [
+// Base three, always orderable. Hojicha (added per request, order 4 onward
+// only, same as its counter tin on Matcha Making -- see gradeOptions in the
+// component below) is kept as a separate list rather than merged in
+// directly, same "never ask for what the player hasn't seen on the counter
+// yet" rule as BASE_OPTIONS_WITH_STRAWBERRY below.
+const GRADE_OPTIONS_BASE = [
   { value: 'cafe', label: 'Cafe' },
   { value: 'classic', label: 'Classic' },
   { value: 'ceremonial', label: 'Ceremonial' },
 ];
+const GRADE_OPTIONS_WITH_HOJICHA = [...GRADE_OPTIONS_BASE, { value: 'hojicha', label: 'Hojicha' }];
 const TEASPOON_OPTIONS = [1, 2, 3].map((n) => ({ value: n, label: `${n} tsp` }));
 const CUP_OPTIONS = [
   { value: 'glass', label: 'Glass' },
@@ -37,6 +43,11 @@ const BASE_OPTIONS_BASE = [
   { value: 'coconut', label: 'Coconut water' },
 ];
 const BASE_OPTIONS_WITH_STRAWBERRY = [...BASE_OPTIONS_BASE, { value: 'strawberry', label: 'Strawberry milk' }];
+// Sparkling yuzu (order 4 onward, added per request) stacks on top of
+// strawberry rather than replacing it, same "separate list, never ask for
+// what hasn't been introduced yet" reasoning as strawberry itself above --
+// see baseOptions in the component below.
+const BASE_OPTIONS_WITH_YUZU = [...BASE_OPTIONS_WITH_STRAWBERRY, { value: 'yuzu', label: 'Sparkling yuzu' }];
 // Same "kept as a separate list, not merged in directly" reasoning as
 // BASE_OPTIONS_BASE/_WITH_STRAWBERRY above -- banana foam (order 2+, see
 // ToppingsStation.js's own bananaFoamUnlocked) and honey syrup/mint leaves
@@ -175,18 +186,20 @@ function joinWithAndSegments(items) {
 // so a brand-new player's first order is a simpler one to read and build.
 // Every later round uses the full range as before.
 //
-// baseOptions/toppingOptions are passed in (rather than this reading the
-// module-level BASE_OPTIONS_BASE/TOPPING_OPTIONS_BASE directly) so whichever
-// pools the component decided are unlocked this round (see baseOptions/
-// toppingOptions in the component below) are what the customer can actually
-// ask for -- order 1/2 can never randomly speak an ingredient (strawberry
-// milk, honey syrup, mint leaves) the player hasn't seen on the counter yet.
-function generateSpokenOrder(customerNumber, baseOptions, toppingOptions) {
+// gradeOptions/baseOptions/toppingOptions are passed in (rather than this
+// reading the module-level GRADE_OPTIONS_BASE/BASE_OPTIONS_BASE/
+// TOPPING_OPTIONS_BASE directly) so whichever pools the component decided
+// are unlocked this round (see gradeOptions/baseOptions/toppingOptions in
+// the component below) are what the customer can actually ask for -- order
+// 1/2/3 can never randomly speak an ingredient (hojicha, strawberry milk,
+// sparkling yuzu, honey syrup, mint leaves) the player hasn't seen on the
+// counter yet.
+function generateSpokenOrder(customerNumber, gradeOptions, baseOptions, toppingOptions) {
   const toppingCap = customerNumber === 1 ? pickRandom([2, 3]) : toppingOptions.length;
   return {
     greeting: pickRandom(GREETINGS),
     teaspoons: pickRandom(TEASPOON_OPTIONS).value,
-    grade: pickRandom(GRADE_OPTIONS).value,
+    grade: pickRandom(gradeOptions).value,
     cup: pickRandom(CUP_OPTIONS).value,
     ice: pickRandom(ICE_OPTIONS).value,
     milk: pickRandom(baseOptions).value,
@@ -203,8 +216,8 @@ function generateSpokenOrder(customerNumber, baseOptions, toppingOptions) {
 // while the surrounding scripted phrasing and the greeting stay
 // unhighlighted. flattenSegments (below) rejoins these into one plain
 // string for the typewriter effect's character-count timing.
-function buildSpeechSegments(o, baseOptions) {
-  const grade = GRADE_OPTIONS.find((g) => g.value === o.grade).label.toLowerCase();
+function buildSpeechSegments(o, gradeOptions, baseOptions) {
+  const grade = gradeOptions.find((g) => g.value === o.grade).label.toLowerCase();
   const cup = CUP_OPTIONS.find((c) => c.value === o.cup).label.toLowerCase();
   const milk = baseOptions.find((m) => m.value === o.milk).label.toLowerCase();
   const tspWord = o.teaspoons === 1 ? 'teaspoon' : 'teaspoons';
@@ -343,14 +356,20 @@ function Dropdown({ placeholder, options, value, onSelect, isOpen, onToggle, tog
 
 const CustomerOrdering = ({ activeStep, customerNumber, onNavigate, onAdvance, onPlaceOrder, onOrderScored }) => {
   const containerRef = useRef(null);
-  // Strawberry milk only becomes orderable from order 2 onward -- same
-  // unlock as its counter bottle on Milk Selection. This screen fully
-  // unmounts/remounts between customers (App.js only ever renders one
-  // page-slide's component at a time), so customerNumber is fixed for this
-  // whole mount's lifetime -- no need for this to be reactive, just read
-  // once and used both for the dropdown's own options and for whatever the
-  // customer might randomly ask for (see generateSpokenOrder below).
-  const baseOptions = customerNumber >= 2 ? BASE_OPTIONS_WITH_STRAWBERRY : BASE_OPTIONS_BASE;
+  // Strawberry milk becomes orderable from order 2 onward, sparkling yuzu
+  // from order 4 onward -- same unlocks as their counter bottles on Milk
+  // Selection. This screen fully unmounts/remounts between customers
+  // (App.js only ever renders one page-slide's component at a time), so
+  // customerNumber is fixed for this whole mount's lifetime -- no need for
+  // this to be reactive, just read once and used both for the dropdown's
+  // own options and for whatever the customer might randomly ask for (see
+  // generateSpokenOrder below).
+  const baseOptions =
+    customerNumber >= 4 ? BASE_OPTIONS_WITH_YUZU : customerNumber >= 2 ? BASE_OPTIONS_WITH_STRAWBERRY : BASE_OPTIONS_BASE;
+  // Hojicha becomes orderable from order 4 onward -- same unlock as its
+  // counter tin on Matcha Making, same "read once" reasoning as baseOptions
+  // just above.
+  const gradeOptions = customerNumber >= 4 ? GRADE_OPTIONS_WITH_HOJICHA : GRADE_OPTIONS_BASE;
   // Banana foam becomes orderable from order 2 onward, honey syrup/mint
   // leaves from order 3 onward -- same "read once, unmounts between
   // customers" reasoning as baseOptions just above -- see
@@ -614,8 +633,8 @@ const CustomerOrdering = ({ activeStep, customerNumber, onNavigate, onAdvance, o
   // Rolled once per mount (i.e. once per customer -- see the big comment
   // above generateSpokenOrder) via the lazy initializer, so it doesn't
   // re-roll on every re-render (opening a dropdown, picking a value, etc).
-  const [spokenOrder] = useState(() => generateSpokenOrder(customerNumber, baseOptions, toppingOptions));
-  const speechSegments = buildSpeechSegments(spokenOrder, baseOptions);
+  const [spokenOrder] = useState(() => generateSpokenOrder(customerNumber, gradeOptions, baseOptions, toppingOptions));
+  const speechSegments = buildSpeechSegments(spokenOrder, gradeOptions, baseOptions);
   const speechText = flattenSegments(speechSegments);
 
   // Which of the three customer characters (CUSTOMER_CHARACTERS above) is at
@@ -1072,7 +1091,7 @@ const CustomerOrdering = ({ activeStep, customerNumber, onNavigate, onAdvance, o
                   <div className="order-section-row">
                     <Dropdown
                       placeholder="Grade"
-                      options={GRADE_OPTIONS}
+                      options={gradeOptions}
                       value={matchaGrade}
                       onSelect={setMatchaGrade}
                       isOpen={openControl === 'grade'}

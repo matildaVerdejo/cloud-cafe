@@ -20,10 +20,45 @@ import { scoreMatchaMaking } from '../gameloop/scoring';
 // Each item PNG has already been cropped to its own visible content (no
 // leftover transparent padding), so width/height here can use the image's
 // own aspect ratio without distortion.
-const STATIC_ITEMS = [
+// Base three, always available. Hojicha (added per request, order 4 onward
+// only -- see hojichaUnlocked in the component below) sits at the end of
+// this list, same "new one lands as the rightmost tin once unlocked"
+// convention as MilkSelection.js's own BOTTLE_KEYS_WITH_STRAWBERRY. Unlike
+// that file's bottle row though, there's no free space to its right to grow
+// into here -- the tin cluster's right edge (86.35) already sits hard
+// against the scoop spoons/bar (87.58+, see SCOOP_SPOON_LEFT/SCOOP_BAR_BOX
+// below) -- so STATIC_ITEMS_WITH_HOJICHA below doesn't just append a
+// same-sized fourth tin, it re-lays-out all four narrower within the exact
+// same overall footprint the original three occupied (63.65 to 86.35), so
+// order 4+ never needs more horizontal room than orders 1-3 already used.
+const STATIC_ITEMS_BASE = [
   { key: 'cafe-grade', src: './CafeGrade.png', alt: 'Cafe grade matcha tin', left: 63.65, top: 25.66, width: 6.9, height: 19.34 },
   { key: 'classic-grade', src: './ClassicGrade.png', alt: 'Classic grade matcha tin', left: 71.55, top: 25.47, width: 6.9, height: 19.53 },
   { key: 'ceremonial-grade', src: './CeremonialGrade.png', alt: 'Ceremonial grade matcha tin', left: 79.45, top: 25.50, width: 6.9, height: 19.50 },
+];
+
+// Four tins packed into the same 63.65-86.35 span the three above occupy,
+// matched by HEIGHT (not width -- an earlier version matched width
+// instead, which left hojicha looking visibly smaller than the other three
+// since HojichaGrade.png's own 303x455 canvas is squatter -- height/width
+// 1.5017 -- than the other three PNGs' own ~1.54-1.56, so an equal-width
+// tin came out shorter). Each tin's own width instead solves
+// width_i = H * (9/16) / aspect_i (aspect_i = that tin's own pixel
+// height/width -- cafe 176/114, classic 173/111, ceremonial 176/113,
+// hojicha 455/303), so all four render at the exact same on-screen height,
+// each keeping its own undistorted aspect ratio. H itself solves
+// sum(width_i) + 3*0.75 (a fixed small gap between tins, same "sliver of
+// space" sizing as MilkSelection's own BOTTLE_VISUAL_GAP) = 22.7 (the
+// span's total width, i.e. 86.35 - 63.65) -> H ≈ 14.00. top is set so
+// every tin's BOTTOM edge lands on the same 45.00 shelf line the three
+// base tins' bottoms already share (e.g. cafe's base entry above:
+// 25.66+19.34 = 45.00) -- since all four now share one height, that's just
+// 45.00 - 14.00 = 31.00 for all of them, rather than a per-tin top.
+const STATIC_ITEMS_WITH_HOJICHA = [
+  { key: 'cafe-grade', src: './CafeGrade.png', alt: 'Cafe grade matcha tin', left: 63.65, top: 31.0, width: 5.102, height: 14.0 },
+  { key: 'classic-grade', src: './ClassicGrade.png', alt: 'Classic grade matcha tin', left: 69.5, top: 31.0, width: 5.052, height: 14.0 },
+  { key: 'ceremonial-grade', src: './CeremonialGrade.png', alt: 'Ceremonial grade matcha tin', left: 75.3, top: 31.0, width: 5.055, height: 14.0 },
+  { key: 'hojicha-grade', src: './HojichaGrade.png', alt: 'Hojicha tin', left: 81.11, top: 31.0, width: 5.245, height: 14.0 },
 ];
 
 // Display name per tin, keyed the same way as STATIC_ITEMS/SCOOP_FILL_COLORS
@@ -36,6 +71,7 @@ const TIN_LABELS = {
   'cafe-grade': 'cafe',
   'classic-grade': 'classic',
   'ceremonial-grade': 'ceremonial',
+  'hojicha-grade': 'hojicha',
 };
 
 // Small gap between a tin's own bottom edge and its label below it.
@@ -109,10 +145,16 @@ const SCOOP_CONFIRM_LINGER_MS = 1500;
 // color its own matcha-pour effect/fill to match whichever grade was
 // carried over (incomingBowl.grade), instead of picking its own separate
 // palette that could drift out of sync with this one.
+// hojicha-grade's own tone isn't part of the cafe/classic/ceremonial
+// green-gradient scale above (it's a different tea, not a grade tier) --
+// sampled directly off HojichaGradeScoop.png's own recolored powder mound
+// (see that file's own generation notes) rather than picked arbitrarily, so
+// this flat fallback color and that image's actual appearance match.
 export const SCOOP_FILL_COLORS = {
   'cafe-grade': '#CADBAF',
   'classic-grade': '#A3B979',
   'ceremonial-grade': '#809B7A',
+  'hojicha-grade': '#B58A63',
 };
 
 // Three small spoon icons sitting just to the left of the bar, in the gap
@@ -215,6 +257,7 @@ const SCOOP_SPOON_IMAGES = {
   'cafe-grade': './CafeGradeScoop.png',
   'classic-grade': './ClassicGradeScoop.png',
   'ceremonial-grade': './CeremonialGradeScoop.png',
+  'hojicha-grade': './HojichaGradeScoop.png',
 };
 
 // The finished whisked liquid's look, one pre-made image per tin/grade --
@@ -230,6 +273,7 @@ export const WHISKED_LIQUID_IMAGES = {
   'cafe-grade': './WhiskedCafeGrade.png',
   'classic-grade': './WhiskedClassicGrade.png',
   'ceremonial-grade': './WhiskedCeremonialGrade.png',
+  'hojicha-grade': './WhiskedHojichaGrade.png',
 };
 
 // Where the mound of powder actually sits *within* the spoon art, as a
@@ -709,6 +753,15 @@ const SPILL_IMAGES_BY_GRADE = {
     './Spill3CeremonialGrade.png',
     './Spill4CeremonialGrade.png',
   ],
+  // Same recolor treatment as classic-grade/ceremonial-grade above --
+  // cafe-grade's original art, hue-shifted to hojicha-grade's own
+  // SCOOP_FILL_COLORS tone rather than separately drawn.
+  'hojicha-grade': [
+    './Spill1HojichaGrade.png',
+    './Spill2HojichaGrade.png',
+    './Spill3HojichaGrade.png',
+    './Spill4HojichaGrade.png',
+  ],
 };
 // Each PNG's own native pixel size (measured directly off the source files),
 // used below to size each puddle without distorting it -- same
@@ -871,6 +924,15 @@ function getCurrentScaleX(el) {
 
 const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order, onSendToMilk, onScored }) => {
   const containerRef = useRef(null);
+  // Hojicha tin unlocked order 4 onward, same "read once, unmounts between
+  // customers" reasoning as CustomerOrdering.js's own baseOptions/
+  // toppingOptions -- this whole component unmounts/remounts each new
+  // customer, so customerNumber is fixed for this mount's lifetime. tinItems
+  // drives both JSX loops below (the tins themselves and the focused-tin
+  // label) -- see STATIC_ITEMS_BASE/STATIC_ITEMS_WITH_HOJICHA above for the
+  // actual layout math.
+  const hojichaUnlocked = customerNumber >= 4;
+  const tinItems = hojichaUnlocked ? STATIC_ITEMS_WITH_HOJICHA : STATIC_ITEMS_BASE;
   // Declared up here (rather than scattered near where each one used to
   // live -- heaterButtonRef/kettleRef/whiskRef were each declared right
   // before the effect that hands them focus mid-gameplay; bowlRef is new)
@@ -2599,7 +2661,7 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
             )}
           </>
         )}
-        {STATIC_ITEMS.map((item) => (
+        {tinItems.map((item) => (
           <img
             key={item.key}
             src={item.src}
@@ -2624,7 +2686,7 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
             halo (see focusedTin above) -- e.g. "Cafe", "Classic",
             "Ceremonial". Centered under that tin specifically (left +
             half its own width), just below its bottom edge. */}
-        {STATIC_ITEMS.filter((item) => item.key === focusedTin).map((item) => (
+        {tinItems.filter((item) => item.key === focusedTin).map((item) => (
           <p
             key={item.key}
             className="matcha-tin-label"

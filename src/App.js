@@ -19,6 +19,9 @@ import './App.css';
 // note) now that this is their one canonical load site.
 import './components/MatchaMaking.css';
 import './components/OrderReceiptButton.css';
+// Same reasoning -- shared (class names only, no import) by ToppingsStation.js
+// and FinalCombination.js as well as its own MilkSelection.js.
+import './components/MilkSelection.css';
 import SplashScreen from './components/SplashScreen';
 import SettingsPanel from './components/SettingsPanel';
 import MainPage from './components/MainPage';

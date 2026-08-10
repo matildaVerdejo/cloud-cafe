@@ -371,6 +371,10 @@
   background: rgba(250, 200, 210, 0.6);
 }
 
+.cup-milk-fill.yuzu {
+  background: rgba(245, 190, 40, 0.6);
+}
+
 /* Matcha poured on top of the milk (see cupMatcha/getMatchaBoxFor in
    MilkSelection.js) -- same "plain colored shape, clip-path for the
    liquid's own outline" technique as .cup-milk-fill, just its own polygon

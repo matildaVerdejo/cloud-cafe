@@ -43,7 +43,7 @@
 // convention CustomerOrdering.js's own TOPPING_SPEECH_NAMES and
 // OrderReceiptButton.js's own GRADE_LABELS/CUP_LABELS/BASE_LABELS/
 // TOPPING_LABELS already use.
-const GRADE_LABEL = { cafe: 'Cafe', classic: 'Classic', ceremonial: 'Ceremonial' };
+const GRADE_LABEL = { cafe: 'Cafe', classic: 'Classic', ceremonial: 'Ceremonial', hojicha: 'Hojicha' };
 const CUP_LABEL = { glass: 'Glass', mug: 'Mug', plastic: 'Plastic' };
 const BASE_LABEL = {
   dairy: 'Dairy milk',
@@ -51,6 +51,7 @@ const BASE_LABEL = {
   almond: 'Almond milk',
   coconut: 'Coconut water',
   strawberry: 'Strawberry milk',
+  yuzu: 'Sparkling yuzu',
 };
 const TOPPING_LABEL = {
   'guava-syrup': 'Guava syrup',
@@ -66,7 +67,12 @@ const TOPPING_LABEL = {
 
 // selectedTin (MatchaMaking's own tin keys, e.g. 'cafe-grade') -> the plain
 // grade value order.matchaGrade/spokenOrder.grade actually use.
-const TIN_TO_ORDER_GRADE = { 'cafe-grade': 'cafe', 'classic-grade': 'classic', 'ceremonial-grade': 'ceremonial' };
+const TIN_TO_ORDER_GRADE = {
+  'cafe-grade': 'cafe',
+  'classic-grade': 'classic',
+  'ceremonial-grade': 'ceremonial',
+  'hojicha-grade': 'hojicha',
+};
 
 // ToppingsStation's own foam item keys -> the differently-named values
 // CustomerOrdering's TOPPING_OPTIONS uses for the same two flavors (its

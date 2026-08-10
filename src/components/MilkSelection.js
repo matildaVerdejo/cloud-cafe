@@ -1,5 +1,12 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import './MilkSelection.css';
+// MilkSelection.css is now imported once, eagerly, from App.js instead of
+// here -- it's reused (class names only, no import) by ToppingsStation.js
+// and FinalCombination.js too (both render the carried-over cup's
+// .cup-milk-fill), same "multiple lazy chunks share a CSS file that only
+// one of them actually imports" shape that caused MatchaMaking.css/
+// OrderReceiptButton.css's own webpack "Conflicting order" build failure
+// under Vercel's CI=true (see App.js's own import comment) -- fixed
+// proactively here before it manifests as the same failure.
 import { useFlatFocusNav } from '../gameloop/useFlatFocusNav';
 import {
   getActionFromKeyEvent,
@@ -292,6 +299,18 @@ const BOTTLE_KEYS_WITH_STRAWBERRY = [
   ...BOTTLE_KEYS_BASE,
   { key: 'strawberry', src: './StrawberryMilk.png', alt: 'Strawberry milk', leftPad: 24 / 169, rightPad: (169 - 108) / 169 },
 ];
+// Sparkling yuzu (added per request, order 4 onward only -- see
+// yuzuUnlocked in the component below) sits at the end of this list too,
+// same "new one lands as the new rightmost bottle" reasoning as strawberry
+// above -- stacks on top of it rather than replacing it, so order 4+ gets
+// all six. leftPad/rightPad measured off SparklingYuzu.png's own alpha
+// bounding box (169x325 canvas, bbox (67, 53, 144, 264)) the same way as
+// every other bottle here -- turns out to exactly match coconut's own
+// bounds, hence the identical fractions.
+const BOTTLE_KEYS_WITH_YUZU = [
+  ...BOTTLE_KEYS_WITH_STRAWBERRY,
+  { key: 'yuzu', src: './SparklingYuzu.png', alt: 'Sparkling yuzu', leftPad: 67 / 169, rightPad: (169 - 144) / 169 },
+];
 
 // Display name per bottle, shown as a label beneath whichever one currently
 // has focus (see focusedBottle/.milk-bottle-label below) -- same
@@ -303,6 +322,7 @@ const BOTTLE_LABELS = {
   almond: 'almond milk',
   coconut: 'coconut water',
   strawberry: 'strawberry milk',
+  yuzu: 'sparkling yuzu',
 };
 
 // Small gap between a bottle's own top edge and its label above it --
@@ -317,19 +337,29 @@ const BOTTLE_LABEL_GAP = -3.5;
 // fixed point is exactly what makes adding a bottle to the end shift every
 // bottle left to make room, rather than only growing further right.
 // Pulled out into its own function (rather than one inline module-level
-// computation, like this used to be) so it can run twice below -- once for
-// the base four, once for all five -- letting order 1 keep the exact
-// original tight four-bottle layout while order 2+ gets the wider one with
-// strawberry milk, instead of order 1 showing an empty gap where a locked
-// bottle would otherwise sit.
-function layoutBottles(keys) {
+// computation, like this used to be) so it can run multiple times below --
+// once for the base four, once for all five with strawberry, once for all
+// six with sparkling yuzu too -- letting order 1 keep the exact original
+// tight four-bottle layout while later orders get progressively wider ones,
+// instead of showing an empty gap where a locked bottle would otherwise
+// sit. bottleWidth/bottleHeight/gap default to the module constants (every
+// tier through strawberry uses them as-is) but can be overridden smaller --
+// see BOTTLE_WIDTH_YUZU_TIER/BOTTLE_HEIGHT_YUZU_TIER/BOTTLE_VISUAL_GAP_
+// YUZU_TIER below: six bottles at the base size would run the cluster's
+// right edge past the container's own right edge (BOTTLE_CLUSTER_CENTER=83
+// plus six bottles' worth of width already pushes the *five*-bottle
+// strawberry tier to a right edge of ~100.6%, barely-tolerable overflow;
+// six pushes it to ~102%), so that tier scales everything down instead,
+// same "shrink to fit the same footprint" fix as MatchaMaking's own
+// STATIC_ITEMS_WITH_HOJICHA over STATIC_ITEMS_BASE.
+function layoutBottles(keys, bottleWidth = BOTTLE_WIDTH, bottleHeight = BOTTLE_HEIGHT, gap = BOTTLE_VISUAL_GAP) {
   const boxLefts = [0];
   for (let i = 1; i < keys.length; i += 1) {
     const prev = keys[i - 1];
-    const gapNeeded = (1 - prev.rightPad - keys[i].leftPad) * BOTTLE_WIDTH + BOTTLE_VISUAL_GAP;
+    const gapNeeded = (1 - prev.rightPad - keys[i].leftPad) * bottleWidth + gap;
     boxLefts.push(boxLefts[i - 1] + gapNeeded);
   }
-  const clusterBoxWidth = boxLefts[boxLefts.length - 1] + BOTTLE_WIDTH - boxLefts[0];
+  const clusterBoxWidth = boxLefts[boxLefts.length - 1] + bottleWidth - boxLefts[0];
   const clusterStartLeft = BOTTLE_CLUSTER_CENTER - clusterBoxWidth / 2;
 
   const items = keys.map((item, index) => ({
@@ -337,9 +367,9 @@ function layoutBottles(keys) {
     src: item.src,
     alt: item.alt,
     left: clusterStartLeft + boxLefts[index],
-    top: BOTTLE_BOTTOM - BOTTLE_HEIGHT,
-    width: BOTTLE_WIDTH,
-    height: BOTTLE_HEIGHT,
+    top: BOTTLE_BOTTOM - bottleHeight,
+    width: bottleWidth,
+    height: bottleHeight,
   }));
 
   // Each bottle's counter spot, keyed for lookup -- both the starting
@@ -357,6 +387,22 @@ function layoutBottles(keys) {
 const { items: BOTTLE_ITEMS_BASE, home: BOTTLE_HOME_BASE } = layoutBottles(BOTTLE_KEYS_BASE);
 const { items: BOTTLE_ITEMS_WITH_STRAWBERRY, home: BOTTLE_HOME_WITH_STRAWBERRY } = layoutBottles(
   BOTTLE_KEYS_WITH_STRAWBERRY
+);
+// Scale factor solved so all six bottles' cluster width comes out to 28
+// (container %), landing the row at 69-97 -- centered on the same
+// BOTTLE_CLUSTER_CENTER=83 every other tier uses, symmetric margin from
+// both container edges. width/height/gap all scale together (~0.734x) so
+// the row just reads as a slightly smaller, denser version of the same
+// layout rather than a differently-proportioned one.
+const BOTTLE_YUZU_TIER_SCALE = 0.7338;
+const BOTTLE_WIDTH_YUZU_TIER = BOTTLE_WIDTH * BOTTLE_YUZU_TIER_SCALE;
+const BOTTLE_HEIGHT_YUZU_TIER = BOTTLE_HEIGHT * BOTTLE_YUZU_TIER_SCALE;
+const BOTTLE_VISUAL_GAP_YUZU_TIER = BOTTLE_VISUAL_GAP * BOTTLE_YUZU_TIER_SCALE;
+const { items: BOTTLE_ITEMS_WITH_YUZU, home: BOTTLE_HOME_WITH_YUZU } = layoutBottles(
+  BOTTLE_KEYS_WITH_YUZU,
+  BOTTLE_WIDTH_YUZU_TIER,
+  BOTTLE_HEIGHT_YUZU_TIER,
+  BOTTLE_VISUAL_GAP_YUZU_TIER
 );
 
 // ---- Pouring a bottle into the cup ---------------------------------------
@@ -575,6 +621,10 @@ const MILK_STREAM_COLORS = {
   almond: 'rgba(238, 231, 219, 0.92)',
   coconut: 'rgba(240, 247, 247, 0.85)',
   strawberry: 'rgba(250, 200, 210, 0.92)',
+  // Sampled off SparklingYuzu.png's own liquid color (dominant fill ~
+  // rgb(240, 184, 8)), same "matches the bottle art" reasoning as every
+  // other entry here.
+  yuzu: 'rgba(245, 190, 40, 0.92)',
 };
 
 // Generic version of the milk-box math, parameterized on a cup position/
@@ -855,17 +905,27 @@ const MilkSelection = ({
 }) => {
   const containerRef = useRef(null);
 
-  // Strawberry milk (and, per request, other bonus items still to come)
-  // only shows up from order 2 onward -- this screen fully unmounts/
-  // remounts between customers (App.js only ever renders one page-slide's
-  // component at a time), so customerNumber is effectively fixed for this
-  // whole mount's lifetime; no need for this to be reactive/memoized, just
-  // read once here and used to pick which of the two precomputed layouts
-  // (see layoutBottles/BOTTLE_ITEMS_BASE/BOTTLE_ITEMS_WITH_STRAWBERRY
+  // Strawberry milk (order 2 onward) and sparkling yuzu (order 4 onward,
+  // added per request, stacking on top of strawberry rather than
+  // replacing it) -- this screen fully unmounts/remounts between customers
+  // (App.js only ever renders one page-slide's component at a time), so
+  // customerNumber is effectively fixed for this whole mount's lifetime;
+  // no need for this to be reactive/memoized, just read once here and used
+  // to pick which of the three precomputed layouts (see layoutBottles/
+  // BOTTLE_ITEMS_BASE/BOTTLE_ITEMS_WITH_STRAWBERRY/BOTTLE_ITEMS_WITH_YUZU
   // above) this particular order gets.
   const strawberryUnlocked = customerNumber >= 2;
-  const bottleItems = strawberryUnlocked ? BOTTLE_ITEMS_WITH_STRAWBERRY : BOTTLE_ITEMS_BASE;
-  const bottleHome = strawberryUnlocked ? BOTTLE_HOME_WITH_STRAWBERRY : BOTTLE_HOME_BASE;
+  const yuzuUnlocked = customerNumber >= 4;
+  const bottleItems = yuzuUnlocked
+    ? BOTTLE_ITEMS_WITH_YUZU
+    : strawberryUnlocked
+    ? BOTTLE_ITEMS_WITH_STRAWBERRY
+    : BOTTLE_ITEMS_BASE;
+  const bottleHome = yuzuUnlocked
+    ? BOTTLE_HOME_WITH_YUZU
+    : strawberryUnlocked
+    ? BOTTLE_HOME_WITH_STRAWBERRY
+    : BOTTLE_HOME_BASE;
 
   // This station's own explicit keyboard nav graph, per request -- same
   // "exact fixed graph, not generic spatial nearest-neighbor matching"
