@@ -1765,9 +1765,15 @@
    this way the slider's travel range is expressed in the same % units as
    everything else here -- the transform above only ever handles the fixed
    horizontal placement and vertical centering, never the animated part.
-   Travel range (7% to 91%) reaches from just past the topmost tick (10%)
-   to just past the bottommost tick (94%), matching the spoons lined up
-   next to those two ticks in MatchaMaking.js. */
+   Travel range (6% to 94%) reaches a couple percent past both the topmost
+   tick (SCOOP_BAR_MARKERS[0]/SCOOP_SPOON_LINES' 'top' in MatchaMaking.js,
+   8%) and the bottommost tick (SCOOP_BAR_MARKERS[2]/'bottom', 92%) --
+   symmetric on both ends, so the "1 teaspoon" reading at the bottom tick is
+   just as reachable as the "3 teaspoon" one at the top. (An earlier
+   version of this range, 7% to 91%, overshot the top tick by 1% but fell
+   1% SHORT of the bottom one -- the slider could never actually reach down
+   to the bottommost tick/spoon, reported as "the slider doesn't go all the
+   way down to the 1".) */
 .scoop-bar-slider {
   position: absolute;
   left: 0;
@@ -1783,10 +1789,10 @@
 
 @keyframes scoopSliderMove {
   0% {
-    top: 7%;
+    top: 6%;
   }
   100% {
-    top: 91%;
+    top: 94%;
   }
 }
 
