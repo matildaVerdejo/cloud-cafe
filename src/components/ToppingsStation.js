@@ -1392,11 +1392,22 @@ const ToppingsStation = ({
   // js's showBaseSpotlight comment for the TDZ bug that taught this) is to
   // declare each beat right after the state it depends on rather than risk
   // a ReferenceError from referencing a useState before its own declaration.
-  // Active for the whole time before the player's poured a syrup -- once
-  // cupSyrup is set (whichever syrup they picked), this beat is done; there's
-  // no further Toppings beat yet, so the pink tint just goes away entirely at
-  // that point (see the overlay's own render condition further down).
-  const showSyrupSpotlight = customerNumber === 1 && !cupSyrup;
+  // Active for the whole time before the player's poured a syrup, AND for
+  // the whole time a pour is actually in progress (pourStage 'moving' then
+  // 'pouring', tracked by pouringKey being non-null) -- per request, the
+  // pink tint needs to stay up through the balance minigame too, not drop
+  // the instant cupSyrup gets set. cupSyrup is actually set right as
+  // pourStage flips from 'moving' to 'pouring' (see the physics effect
+  // below), i.e. right as the minigame itself starts, so a plain !cupSyrup
+  // condition on its own would have ended this beat exactly when the
+  // minigame begins -- the `|| pouringKey !== null` clause is what keeps it
+  // up through that. Once the pour actually finishes (pourStage back to
+  // 'idle', pouringKey reset to null -- see that same effect), cupSyrup is
+  // already set and pouringKey is null, so both halves of the condition go
+  // false together and the beat ends cleanly. There's no further Toppings
+  // beat yet, so the pink tint just goes away entirely at that point (see
+  // the overlay's own render condition further down).
+  const showSyrupSpotlight = customerNumber === 1 && (!cupSyrup || pouringKey !== null);
 
   // Pre-selects mint-syrup (SYRUP_PAIR_BASE's own first/leftmost item, see
   // its own comment above) the moment this beat starts, same "focus the
@@ -1456,6 +1467,46 @@ const ToppingsStation = ({
   const [foamPourOffset, setFoamPourOffset] = useState(0);
   const [cupFoam, setCupFoam] = useState(null); // { key } | null
 
+  // ---- Second first-order-only walkthrough beat, foam pair -- picks up the
+  // instant showSyrupSpotlight above ends (i.e. the syrup pour + minigame
+  // has fully settled, see that beat's own extended condition), same
+  // "next beat starts where the last one's own condition goes false" shape
+  // MilkSelection.js's showBowlSpotlight/showSendSpotlight chain uses.
+  // Declared here, right after cupFoam itself, rather than up near
+  // showSyrupSpotlight, for the same TDZ reason documented on that beat's
+  // own comment (this one reads cupFoam, which isn't declared until here).
+  // !showSyrupSpotlight (rather than re-deriving "syrup's done" from
+  // cupSyrup/pouringKey directly) is deliberate -- reusing that beat's own
+  // already-computed boolean guarantees the two beats can never both be
+  // true at once (no double-pink-callout moment), the same "reuse the
+  // existing state boundary as the next beat's own trigger" principle this
+  // whole walkthrough system has followed throughout.
+  // EXTENDED per a later request, same shape as showSyrupSpotlight's own
+  // extension above -- stays up through the whole foam pour+minigame
+  // (foamPourStage 'moving' -> 'aiming', the lever minigame itself -> then
+  // 'pouring'), tracked by foamPouringKey being non-null the entire way,
+  // not just until cupFoam gets set. cupFoam is actually set right as
+  // foamPourStage flips to 'pouring' -- AFTER the lever minigame ('aiming')
+  // has already run its course, unlike syrup where cupSyrup got set right
+  // as ITS minigame began -- but foamPouringKey still spans the whole
+  // 'moving'/'aiming'/'pouring' sequence either way, so the same
+  // `|| foamPouringKey !== null` shape works here too. Ends once the pour
+  // actually finishes (foamPourStage back to 'idle', foamPouringKey reset
+  // to null) with cupFoam already set -- there's now a further Toppings
+  // beat (showPowderSpotlight below), which picks up right where this
+  // one's own condition goes false, same "reuse the state boundary" chain
+  // showFoamSpotlight itself already picks up from showSyrupSpotlight.
+  const showFoamSpotlight = customerNumber === 1 && !showSyrupSpotlight && (!cupFoam || foamPouringKey !== null);
+
+  // Pre-selects matcha-cold-foam (FOAM_PAIR_BASE's own first/leftmost item,
+  // same reasoning as mint-syrup's own focus effect above) the moment this
+  // beat starts.
+  useEffect(() => {
+    if (showFoamSpotlight) {
+      containerRef.current?.querySelector('[data-topping-key="matcha-cold-foam"]')?.focus();
+    }
+  }, [showFoamSpotlight]);
+
   // ---- Matcha-powder/guava-powder: pick up, pour on top of the drink, or
   // snap back home -- identical shape to the syrup/foam state above, see
   // the big comment above POWDER_HOVER_GAP for what's different about
@@ -1476,6 +1527,98 @@ const ToppingsStation = ({
   const [powderPouringKey, setPowderPouringKey] = useState(null); // 'matcha-powder' | 'guava-powder' | null
   const [powderPourOffset, setPowderPourOffset] = useState(0);
   const [cupPowder, setCupPowder] = useState(null); // { key } | null
+
+  // ---- Third first-order-only walkthrough beat, powder pair -- picks up
+  // the instant showFoamSpotlight above ends (foam pour + lever minigame
+  // fully settled, see that beat's own extended condition), same "reuse the
+  // existing state boundary as the next beat's own trigger" chain
+  // showFoamSpotlight itself picks up from showSyrupSpotlight. Declared
+  // here, right after cupPowder itself, for the same TDZ reason documented
+  // on both earlier beats' own comments. !showSyrupSpotlight is included
+  // alongside !showFoamSpotlight (not just the latter) so this can never
+  // accidentally fire during the syrup beat too -- !showFoamSpotlight alone
+  // is also true for the whole syrup beat (foam hasn't started yet), so
+  // without this extra guard the powder beat would incorrectly overlap the
+  // syrup beat instead of waiting for it to actually finish first. Ends
+  // once the player actually pours a powder (cupPowder gets set) -- there's
+  // no further Toppings beat yet, so the pink tint just goes away entirely
+  // EXTENDED per a later request, same shape as showSyrupSpotlight's/
+  // showFoamSpotlight's own extensions above -- stays up through the whole
+  // powder pour+minigame (powderPourStage 'moving' -> 'aiming', the shared
+  // lever minigame -> then 'pouring'), tracked by powderPouringKey being
+  // non-null the entire way, not just until cupPowder gets set. cupPowder
+  // is actually set right as powderPourStage flips to 'pouring' -- same
+  // "after the lever minigame, not during it" timing as cupFoam -- but
+  // powderPouringKey still spans the whole 'moving'/'aiming'/'pouring'
+  // sequence either way, so the same `|| powderPouringKey !== null` shape
+  // works here too. Ends once the pour actually finishes (powderPourStage
+  // back to 'idle', powderPouringKey reset to null) with cupPowder already
+  // set -- there's now a further Toppings beat (showSendSpotlight below),
+  // which picks up right where this one's own condition goes false.
+  const showPowderSpotlight =
+    customerNumber === 1 &&
+    !showSyrupSpotlight &&
+    !showFoamSpotlight &&
+    (!cupPowder || powderPouringKey !== null);
+
+  // Pre-selects matcha-powder (POWDER_PAIR's own first/leftmost item, same
+  // reasoning as mint-syrup's/matcha-cold-foam's own focus effects above)
+  // the moment this beat starts.
+  useEffect(() => {
+    if (showPowderSpotlight) {
+      containerRef.current?.querySelector('[data-topping-key="matcha-powder"]')?.focus();
+    }
+  }, [showPowderSpotlight]);
+
+  // ---- Fourth first-order-only walkthrough beat, sending the
+  // drink on -- picks up the instant showPowderSpotlight above ends (powder
+  // pour + lever minigame fully settled, see that beat's own extended
+  // condition), same "reuse the existing state boundary as the next beat's
+  // own trigger" chain every beat on this screen has followed. Unlike the
+  // three pick/pour beats before it, there's no single "chosen ingredient"
+  // here to exempt -- the only things left to interact with are the cup
+  // itself and the Send to Serving drop-zone (make-drink-zone) in the
+  // bottom-right corner, so those are what get exempted (see their own
+  // className/render-condition changes below) instead of any topping image.
+  // drinkSendStage !== 'sent' (rather than just 'idle', the same "stay up
+  // through the whole carry/vanish animation, not just until it begins"
+  // extension MilkSelection.js's own showSendSpotlight needed) keeps the
+  // pink tint up while the drink is actually gliding to the zone, not just
+  // before the player's grabbed it. There's now a fifth and final beat past
+  // 'sent' too (showAdvanceSpotlight below), which picks up right where
+  // this one's own condition goes false, same "reuse the state boundary"
+  // chain every beat on this screen has followed.
+  const showSendSpotlight =
+    customerNumber === 1 && !showSyrupSpotlight && !showFoamSpotlight && !showPowderSpotlight && drinkSendStage !== 'sent';
+
+  // Pre-selects the finished drink itself (the only thing left to act on)
+  // the moment this beat starts, same "focus the exempted target so Enter/
+  // drag both work immediately" reasoning as every other beat's own focus
+  // effect on this screen.
+  useEffect(() => {
+    if (showSendSpotlight) {
+      containerRef.current?.querySelector('[data-topping-key="cup"]')?.focus();
+    }
+  }, [showSendSpotlight]);
+
+  // ---- Fifth and actually-final first-order-only walkthrough beat, picking
+  // up the instant showSendSpotlight above ends (drinkSendStage reaches
+  // 'sent' -- the cup, its contents, and the send zone have all stopped
+  // rendering by then, see their own conditional returns/render guards
+  // further down) and running for the rest of this screen's lifetime (this
+  // whole component unmounts once the player actually leaves for Serving).
+  // Same "final beat hands the flashing baton to the current-step dot
+  // itself" shape as MilkSelection.js's own showAdvanceSpotlight/
+  // MatchaMaking.js's own showStationAdvanceSpotlight -- there's nothing
+  // left on screen worth pointing at except the ProgressBar, so this
+  // exempts that instead (see spotlightExempt on <ProgressBar> further
+  // down) and its own new pink callout (topping-progress-callout below)
+  // takes over from the bar's old plain-text currentStepHint, same "new
+  // pink-styled callout replaces the old text hint for the first order
+  // only" treatment every other final beat in this project's walkthrough
+  // system already uses. Orders 2/3 (customerNumber !== 1) never set this
+  // and keep that old hint exactly as before.
+  const showAdvanceSpotlight = customerNumber === 1 && drinkSendStage === 'sent';
 
   // ---- Mint-leaves pot: Enter picks up a leaf, which lands on the drink
   // after a short pause -- see the big comment above MINT_LEAVES_POT_ITEM/
@@ -2440,7 +2583,17 @@ const ToppingsStation = ({
             decided by the shared aim-lever minigame (see LEVER_PERIOD_MS's
             own big comment) rather than a Left/Right-steered stream; see the
             big comment above FOAM_HOVER_GAP for what's different about where
-            foam actually lands. */}
+            foam actually lands. topping-spotlight-exempt applied whenever
+            showFoamSpotlight is up, same "punch the pick-phase target
+            through the pink tint" treatment the syrup pair's own images get
+            from showSyrupSpotlight above -- deliberately NOT also exempted
+            during showSyrupSpotlight, since the foam pair should still be
+            covered by the pink tint while the player's working through the
+            syrup beat, per request ("everything except... the syrups"),
+            same for showFoamSpotlight now not exempting the syrup pair
+            below (the two beats are mutually exclusive by construction, see
+            showFoamSpotlight's own comment, but each only ever exempts its
+            own target). */}
         {toppingItems.filter((item) => item.key === 'matcha-cold-foam' || item.key === 'reg-cold-foam' || item.key === 'banana-foam').map(
           (item) => {
             const dragging = foamDrag?.key === item.key;
@@ -2452,7 +2605,9 @@ const ToppingsStation = ({
                 key={item.key}
                 src={item.src}
                 alt={`${item.alt}. Drag onto the drink to pour some in, or select it and press Enter. While it's pouring, catch the lever right in the middle to land it clean.`}
-                className={`station-item movable${dragging ? ' dragging' : ''}${isPouring ? ' settling' : ''}`}
+                className={`station-item movable${dragging ? ' dragging' : ''}${isPouring ? ' settling' : ''}${
+                  showFoamSpotlight ? ' topping-spotlight-exempt' : ''
+                }`}
                 data-focusable
                 data-topping-key={item.key}
                 tabIndex={0}
@@ -2480,7 +2635,12 @@ const ToppingsStation = ({
             LEVER_PERIOD_MS's own big comment) rather than a Left/Right-
             steered stream; see the big comment above POWDER_HOVER_GAP for
             what's different about powder itself (particle stream,
-            foam-dependent landing spot). */}
+            foam-dependent landing spot). topping-spotlight-exempt applied
+            whenever showPowderSpotlight is up, same "punch the pick-phase
+            target through the pink tint" treatment the syrup/foam pairs'
+            own images get from their own beats -- deliberately not exempt
+            during showSyrupSpotlight/showFoamSpotlight, same mutual-
+            exclusivity reasoning as those two beats' own images. */}
         {toppingItems.filter((item) => POWDER_PAIR.some((p) => p.key === item.key)).map((item) => {
           const dragging = powderDrag?.key === item.key;
           const isPouring = powderPouringKey === item.key;
@@ -2491,7 +2651,9 @@ const ToppingsStation = ({
               key={item.key}
               src={item.src}
               alt={`${item.alt}. Drag onto the drink to pour some in, or select it and press Enter. While it's pouring, catch the lever right in the middle to land it clean.`}
-              className={`station-item movable${dragging ? ' dragging' : ''}${isPouring ? ' settling' : ''}`}
+              className={`station-item movable${dragging ? ' dragging' : ''}${isPouring ? ' settling' : ''}${
+                showPowderSpotlight ? ' topping-spotlight-exempt' : ''
+              }`}
               data-focusable
               data-topping-key={item.key}
               tabIndex={0}
@@ -2619,7 +2781,7 @@ const ToppingsStation = ({
               }
               className={`station-item movable${drinkDragPos ? ' dragging' : ''}${
                 drinkSendStage === 'vanishing' ? ' bowl-vanishing' : ''
-              }${showSyrupSpotlight ? ' topping-spotlight-exempt' : ''}`}
+              }${showSyrupSpotlight || showFoamSpotlight || showPowderSpotlight || showSendSpotlight ? ' topping-spotlight-exempt' : ''}`}
               data-focusable
               data-topping-key="cup"
               tabIndex={0}
@@ -2672,7 +2834,7 @@ const ToppingsStation = ({
                   alt=""
                   aria-hidden="true"
                   className={`ice-cube placed${drinkSendStage === 'vanishing' ? ' bowl-vanishing' : ''}${
-                    showSyrupSpotlight ? ' topping-spotlight-exempt' : ''
+                    showSyrupSpotlight || showFoamSpotlight || showPowderSpotlight || showSendSpotlight ? ' topping-spotlight-exempt' : ''
                   }`}
                   style={{
                     left: `${iceSlotPos.left}%`,
@@ -2688,7 +2850,7 @@ const ToppingsStation = ({
               <div
                 className={`cup-milk-fill ${incomingDrink.milk.type}${
                   drinkSendStage === 'vanishing' ? ' bowl-vanishing' : ''
-                }${showSyrupSpotlight ? ' topping-spotlight-exempt' : ''}`}
+                }${showSyrupSpotlight || showFoamSpotlight || showPowderSpotlight || showSendSpotlight ? ' topping-spotlight-exempt' : ''}`}
                 aria-hidden="true"
                 style={{
                   left: `${incomingMilkBox.left}%`,
@@ -2702,7 +2864,7 @@ const ToppingsStation = ({
               <div
                 className={`cup-matcha-fill ${incomingDrink.matcha.grade}${
                   drinkSendStage === 'vanishing' ? ' bowl-vanishing' : ''
-                }${showSyrupSpotlight ? ' topping-spotlight-exempt' : ''}`}
+                }${showSyrupSpotlight || showFoamSpotlight || showPowderSpotlight || showSendSpotlight ? ' topping-spotlight-exempt' : ''}`}
                 aria-hidden="true"
                 style={{
                   left: `${incomingMatchaBox.left}%`,
@@ -2725,7 +2887,7 @@ const ToppingsStation = ({
             {cupFoam && renderedFoamBox && (
               <div
                 className={`cup-foam-fill ${cupFoam.key}${drinkSendStage === 'vanishing' ? ' bowl-vanishing' : ''}${
-                  showSyrupSpotlight ? ' topping-spotlight-exempt' : ''
+                  showSyrupSpotlight || showFoamSpotlight || showPowderSpotlight || showSendSpotlight ? ' topping-spotlight-exempt' : ''
                 }`}
                 aria-hidden="true"
                 style={{
@@ -2746,7 +2908,7 @@ const ToppingsStation = ({
             {cupFoam && renderedFoamCapBox && (
               <div
                 className={`cup-foam-cap ${cupFoam.key}${drinkSendStage === 'vanishing' ? ' bowl-vanishing' : ''}${
-                  showSyrupSpotlight ? ' topping-spotlight-exempt' : ''
+                  showSyrupSpotlight || showFoamSpotlight || showPowderSpotlight || showSendSpotlight ? ' topping-spotlight-exempt' : ''
                 }`}
                 aria-hidden="true"
                 style={{
@@ -2765,7 +2927,7 @@ const ToppingsStation = ({
             {cupSyrup && incomingSyrupBox && (
               <div
                 className={`cup-syrup-fill ${cupSyrup.key}${drinkSendStage === 'vanishing' ? ' bowl-vanishing' : ''}${
-                  showSyrupSpotlight ? ' topping-spotlight-exempt' : ''
+                  showSyrupSpotlight || showFoamSpotlight || showPowderSpotlight || showSendSpotlight ? ' topping-spotlight-exempt' : ''
                 }`}
                 aria-hidden="true"
                 style={{
@@ -2788,7 +2950,7 @@ const ToppingsStation = ({
                   key={index}
                   className={`cup-powder-fleck ${cupPowder.key}${
                     drinkSendStage === 'vanishing' ? ' bowl-vanishing' : ''
-                  }${showSyrupSpotlight ? ' topping-spotlight-exempt' : ''}`}
+                  }${showSyrupSpotlight || showFoamSpotlight || showPowderSpotlight || showSendSpotlight ? ' topping-spotlight-exempt' : ''}`}
                   aria-hidden="true"
                   style={{ left: `${pos.left}%`, top: `${pos.top}%` }}
                 />
@@ -2806,7 +2968,7 @@ const ToppingsStation = ({
                 aria-hidden="true"
                 draggable={false}
                 className={`cup-leaf-garnish${drinkSendStage === 'vanishing' ? ' bowl-vanishing' : ''}${
-                  showSyrupSpotlight ? ' topping-spotlight-exempt' : ''
+                  showSyrupSpotlight || showFoamSpotlight || showPowderSpotlight || showSendSpotlight ? ' topping-spotlight-exempt' : ''
                 }`}
                 style={{
                   left: `${incomingLeafBox.left}%`,
@@ -2826,10 +2988,13 @@ const ToppingsStation = ({
             and disappears the instant it actually heads there
             (drinkSendStage leaving 'idle'). Not itself focusable -- it's a
             drop target the drink gets dragged onto or sent to via its own
-            Enter press. */}
+            Enter press. topping-spotlight-exempt applied whenever
+            showSendSpotlight is up -- the "bottom right area to take it to
+            the next station" per request, one of only two things (along
+            with the cup itself) this final beat exempts. */}
         {canSendToFinal && (
           <div
-            className="make-drink-zone"
+            className={`make-drink-zone${showSendSpotlight ? ' topping-spotlight-exempt' : ''}`}
             aria-hidden="true"
             style={{
               left: `${SEND_TO_FINAL_ZONE.left}%`,
@@ -2845,10 +3010,15 @@ const ToppingsStation = ({
             SYRUP_STREAM_COLORS/getSyrupBoxFor above. Reuses MatchaMaking.
             css's .spoon-pour/.spoon-pour-grain-N, same as Milk Selection's
             own falling-liquid effect. Only shown during the actual
-            'pouring' stage, not 'moving'. */}
+            'pouring' stage, not 'moving'. topping-spotlight-exempt applied
+            whenever showSyrupSpotlight is up (which it always is, for order
+            1, by the time this can render -- see that beat's own extended
+            condition above) so the stream itself -- the actual "syrup
+            pouring out" the pink tint is meant to keep visible -- isn't
+            hidden between the (exempt) bottle and the (exempt) cup. */}
         {pourStage === 'pouring' && pouringKey && (
           <div
-            className="spoon-pour"
+            className={`spoon-pour${showSyrupSpotlight ? ' topping-spotlight-exempt' : ''}`}
             style={{
               left: `${syrupPourLeft}%`,
               top: `${syrupPourTop}%`,
@@ -2875,11 +3045,17 @@ const ToppingsStation = ({
             re-render" reasoning as MatchaMaking's own mixBallRef.
             aria-hidden throughout -- the pouring bottle's own focusable
             element is what a screen reader user would be interacting with
-            instead. */}
+            instead. topping-spotlight-exempt applied whenever
+            showSyrupSpotlight is up (see that beat's own extended condition
+            above -- it's always true here for order 1, since this whole
+            block only ever renders mid-pour) so the minigame itself stays
+            visible/playable through the pink tint, per request. */}
         {pourStage === 'pouring' && pouringKey && (
           <>
             <div
-              className="mix-bar mix-bar-highlight"
+              className={`mix-bar mix-bar-highlight${
+                showSyrupSpotlight ? ' topping-spotlight-exempt' : ''
+              }`}
               aria-hidden="true"
               style={{
                 left: `${syrupMixBarPos.left}%`,
@@ -2908,12 +3084,55 @@ const ToppingsStation = ({
                 }}
               />
             </div>
-            <p
-              className="mix-bar-hint"
-              style={{ left: `${syrupMixBarPos.left + SYRUP_MIX_BAR_WIDTH / 2}%`, top: `${syrupMixBarPos.top - 11}%` }}
-            >
-              use your arrow keys to balance the ball inside the green area and pour without spilling.
-            </p>
+            {/* Old plain-text hint (MatchaMaking.css's .mix-bar-hint,
+                already loaded globally) -- stays exactly as before for
+                orders 2/3. Suppressed for order 1 (showSyrupSpotlight is up
+                the entire time this minigame can render, per that beat's
+                own extended condition above) in favor of the new pink
+                walkthrough callout just below, same "new pink-styled
+                callout replaces the old text hint for the first order only"
+                treatment every other beat in this project's walkthrough
+                system already uses. */}
+            {!showSyrupSpotlight && (
+              <p
+                className="mix-bar-hint"
+                style={{
+                  left: `${syrupMixBarPos.left + SYRUP_MIX_BAR_WIDTH / 2}%`,
+                  top: `${syrupMixBarPos.top - 11}%`,
+                }}
+              >
+                use your arrow keys to balance the ball inside the green area and pour without spilling.
+              </p>
+            )}
+            {/* New first-order-only walkthrough callout, replacing the hint
+                above -- see showSyrupSpotlight's own comment for why this
+                beat now spans the whole pour, not just the pre-pour pick.
+                Column layout (text above, arrow below pointing down at the
+                bar), same shape as .matcha-tin-callout/.milk-ice-callout
+                elsewhere in this project. Positioned off the same
+                syrupMixBarPos/SYRUP_MIX_BAR_WIDTH math the old hint used
+                (centered on the bar's own horizontal midpoint), just shifted
+                further up (-18 instead of -11) to leave room for the arrow
+                between the card and the bar's own top edge. Eyeballed the
+                same way every other exact position in this project is, may
+                need a small nudge once actually seen against the live
+                render. */}
+            {showSyrupSpotlight && (
+              <div
+                className="topping-pour-callout"
+                style={{ left: `${syrupMixBarPos.left + SYRUP_MIX_BAR_WIDTH / 2}%`, top: `${syrupMixBarPos.top - 18}%` }}
+              >
+                <p className="topping-pour-callout-text">use the arrows to pour the syrup without spilling</p>
+                <svg
+                  className="topping-pour-callout-arrow"
+                  viewBox="0 0 24 40"
+                  preserveAspectRatio="none"
+                  aria-hidden="true"
+                >
+                  <polygon points="12,38 22,4 2,4" />
+                </svg>
+              </div>
+            )}
           </>
         )}
         {/* Shared foam/powder/leaf aim-lever minigame -- see the big comment
@@ -2930,12 +3149,23 @@ const ToppingsStation = ({
             since it's visually the same "small thing riding the bar" shape,
             just gray (.lever-marker) instead of syrup-green and driven by
             leverMarkerRef every animation frame rather than through React
-            state, same reasoning as syrupBallRef above. */}
+            state, same reasoning as syrupBallRef above.
+            topping-spotlight-exempt applied whenever showFoamSpotlight is
+            up AND leverFor === 'foam', OR showPowderSpotlight is up AND
+            leverFor === 'powder' -- this same bar is shared with foam/
+            powder/leaf's own minigames too (see LEVER_PERIOD_MS's own big
+            comment), so it should only punch through the pink tint while
+            it's actually the active beat's own turn to use it, not
+            whenever any *Spotlight beat happens to be active. */}
         {leverStage === 'active' && (
           <>
             <div
               ref={leverBarRef}
-              className="mix-bar lever-bar"
+              className={`mix-bar lever-bar${
+                (showFoamSpotlight && leverFor === 'foam') || (showPowderSpotlight && leverFor === 'powder')
+                  ? ' topping-spotlight-exempt'
+                  : ''
+              }`}
               tabIndex={0}
               onKeyDown={handleLeverKeyDown}
               style={{
@@ -2961,8 +3191,18 @@ const ToppingsStation = ({
                 }}
               />
             </div>
+            {/* Same topping-spotlight-exempt condition as the bar itself
+                above -- unlike the syrup pour's own mix-bar-hint (replaced
+                outright with a pink callout per an earlier request), this
+                shared hint hasn't been asked to change text, so it just
+                stays legible (exempted, not replaced) through the pink
+                tint while it's foam's or powder's own turn on the lever. */}
             <p
-              className="mix-bar-hint"
+              className={`mix-bar-hint${
+                (showFoamSpotlight && leverFor === 'foam') || (showPowderSpotlight && leverFor === 'powder')
+                  ? ' topping-spotlight-exempt'
+                  : ''
+              }`}
               style={{ left: `${leverBarPos.left + LEVER_BAR_WIDTH / 2}%`, top: `${leverBarPos.top - 11}%` }}
             >
               press enter/center right on the middle to land it clean.
@@ -3019,10 +3259,15 @@ const ToppingsStation = ({
         {renderToppingSpill(leafSpill, LEAF_SPILL_COLOR, 'leaf-spill')}
         {/* Falling foam stream -- same idea as the syrup stream above, see
             the big comment on FOAM_STREAM_COLORS/getFoamHoverPos in this
-            file. Only shown during the actual 'pouring' stage. */}
+            file. Only shown during the actual 'pouring' stage.
+            topping-spotlight-exempt applied whenever showFoamSpotlight is
+            up (always true here for order 1, by the time this can render --
+            see that beat's own extended condition above), same "the pour
+            itself stays visible through the pink tint" treatment the syrup
+            stream gets from showSyrupSpotlight. */}
         {foamPourStage === 'pouring' && foamPouringKey && (
           <div
-            className="spoon-pour"
+            className={`spoon-pour${showFoamSpotlight ? ' topping-spotlight-exempt' : ''}`}
             style={{
               left: `${foamPourLeft}%`,
               top: `${foamPourTop}%`,
@@ -3039,10 +3284,14 @@ const ToppingsStation = ({
             .spoon-pour-grain circles directly, same "small particles" look
             that station already uses for its own falling powder, landing
             wherever the powder will actually settle (see powderLandingTop/
-            POWDER_HOVER_GAP above). */}
+            POWDER_HOVER_GAP above). topping-spotlight-exempt applied
+            whenever showPowderSpotlight is up (always true here for order
+            1, by the time this can render -- see that beat's own extended
+            condition above), same "the pour itself stays visible through
+            the pink tint" treatment the syrup/foam streams get. */}
         {powderPourStage === 'pouring' && powderPouringKey && (
           <div
-            className="spoon-pour"
+            className={`spoon-pour${showPowderSpotlight ? ' topping-spotlight-exempt' : ''}`}
             style={{
               left: `${powderPourLeft}%`,
               top: `${powderPourTop}%`,
@@ -3069,9 +3318,16 @@ const ToppingsStation = ({
             edge, top: 27% levels with its vertical center
             (SYRUP_TOP + TOPPING_HEIGHT / 2). Eyeballed the same way every
             other exact position in this project is, may need a small nudge
-            once actually seen against the live render. Gone the instant
-            showSyrupSpotlight ends (a syrup's been poured). */}
-        {showSyrupSpotlight && (
+            once actually seen against the live render. Gated on
+            !pouringKey in addition to showSyrupSpotlight itself -- that
+            beat now also stays up through the whole pour+minigame (see its
+            own extended condition above), but THIS callout is specifically
+            the "go pick one" prompt for the picking phase only; once a
+            bottle's actually been grabbed, the topping-pour-callout further
+            down (pointing at the minigame bar instead) takes over, so
+            without this extra !pouringKey check both callouts would render
+            at once during the pour. */}
+        {showSyrupSpotlight && !pouringKey && (
           <div className="topping-syrup-callout">
             <svg
               className="topping-syrup-callout-arrow"
@@ -3084,20 +3340,157 @@ const ToppingsStation = ({
             <p className="topping-syrup-callout-text">pick the right syrup</p>
           </div>
         )}
+        {/* Second first-order-only walkthrough callout, foam pair -- see
+            showFoamSpotlight above. Same row layout, arrow at the START
+            pointing LEFT at the foam pair, as .topping-syrup-callout above
+            (the foam pair sits directly below the syrup pair, same
+            STACK_LEFT_MARGIN left edge, so its own callout reuses the exact
+            same "sits to the target's right, points left" shape). Positioned
+            off FOAM_PAIR_BASE's own layout math (matcha-cold-foam left:
+            2.01, reg-cold-foam right edge lands at ~20.2, both sharing
+            FOAM_TOP: 45 and TOPPING_HEIGHT: 30) -- left: 22% clears the
+            pair's own right edge (same x as the syrup callout above, since
+            both pairs share a left edge), top: 60% levels with its vertical
+            center (FOAM_TOP + TOPPING_HEIGHT / 2). Eyeballed the same way
+            every other exact position in this project is, may need a small
+            nudge once actually seen against the live render. */}
+        {showFoamSpotlight && (
+          <div className="topping-foam-callout">
+            <svg
+              className="topping-foam-callout-arrow"
+              viewBox="0 0 40 24"
+              preserveAspectRatio="none"
+              aria-hidden="true"
+            >
+              <polygon points="2,12 38,2 38,22" />
+            </svg>
+            <p className="topping-foam-callout-text">use the arrows to pick the right foam</p>
+          </div>
+        )}
+        {/* Third first-order-only walkthrough callout, powder pair -- see
+            showPowderSpotlight above. Unlike the syrup/foam callouts, this
+            one sits to its target's LEFT (row layout, arrow at the END
+            pointing RIGHT), same orientation as .milk-cup-callout in
+            MilkSelection.css -- the powder pair is right-edge-anchored (see
+            POWDER_ITEMS' own layout math: right anchor at 100 - EDGE_MARGIN
+            = 95), so there's no room for a callout to its right the way the
+            left-anchored syrup/foam pairs had. Positioned off that same
+            layout math (matcha-powder left: ~79.2, guava-powder right edge
+            at ~95, both sharing top: TOPPING_ROW_BOTTOM - POWDER_HEIGHT = 24
+            and height: POWDER_HEIGHT = 21) -- right: 21% clears the pair's
+            own left edge with a small gap, top: 34.5% levels with its
+            vertical center (24 + 21 / 2). Eyeballed the same way every
+            other exact position in this project is, may need a small nudge
+            once actually seen against the live render. */}
+        {showPowderSpotlight && (
+          <div className="topping-powder-callout">
+            <p className="topping-powder-callout-text">use the arrows and pick the right powder</p>
+            <svg
+              className="topping-powder-callout-arrow"
+              viewBox="0 0 40 24"
+              preserveAspectRatio="none"
+              aria-hidden="true"
+            >
+              <polygon points="38,12 2,2 2,22" />
+            </svg>
+          </div>
+        )}
+        {/* Fourth and final first-order-only walkthrough callout, sending
+            the drink on -- see showSendSpotlight above. Column layout,
+            arrow below pointing down at the cup, positioned directly above
+            it (same shape/position as MilkSelection.js's own analogous
+            "point at the cup, send it on" callout, .milk-send-callout --
+            INCOMING_DRINK_SPOT.top works out to 31.42% here, same as
+            CUP_SPOTS.table's own top there, so left: 50%/top: 26% lines up
+            the same way). Eyeballed the same way every other exact position
+            in this project is, may need a small nudge once actually seen
+            against the live render. */}
+        {showSendSpotlight && (
+          <div className="topping-send-callout">
+            <p className="topping-send-callout-text">select the drink to take it to the serving station</p>
+            <svg
+              className="topping-send-callout-arrow"
+              viewBox="0 0 24 40"
+              preserveAspectRatio="none"
+              aria-hidden="true"
+            >
+              <polygon points="12,38 22,4 2,4" />
+            </svg>
+          </div>
+        )}
+        {/* Fifth and actually-final first-order-only walkthrough callout,
+            picking up the instant showSendSpotlight above ends (drinkSend
+            Stage reaches 'sent') and running for the rest of this screen's
+            lifetime. Same shape as MilkSelection.js's own
+            .milk-progress-callout (column layout, arrow below pointing
+            down at the ProgressBar/station dots -- spotlightExempt has
+            punched a hole through the pink tint there for this beat, see
+            the ProgressBar call below) -- there's nothing left on THIS
+            screen to point at once the drink's gone, so this points at the
+            actual next action (the right-arrow key) via the progress bar
+            instead of any one element on the counter. Replaces the old
+            plain-text currentStepHint (now suppressed via the
+            showAdvanceSpotlight ? null : ... ternary below) with this same
+            pink-callout treatment so the whole walkthrough stays visually
+            consistent right up to the screen transition -- same "same style
+            as the other ones" request every prior beat's own callout
+            already follows. */}
+        {showAdvanceSpotlight && (
+          <div className="topping-progress-callout">
+            <p className="topping-progress-callout-text">use your right arrow key to move on to the serving station</p>
+            <svg
+              className="topping-progress-callout-arrow"
+              viewBox="0 0 24 40"
+              preserveAspectRatio="none"
+              aria-hidden="true"
+            >
+              <polygon points="12,38 22,4 2,4" />
+            </svg>
+          </div>
+        )}
         {/* First-order-only walkthrough spotlight -- covers this screen's
-            only beat so far (showSyrupSpotlight). Same flat, full-screen
-            pink tint (no SVG mask, no holes, just a div with a higher-
-            z-index element punched through it) as every other spotlight
-            overlay in this project -- see .matcha-spotlight-overlay in
-            MatchaMaking.css for the shared reasoning. Rendered LAST (after
-            ProgressBar and the callout above, not before) so it actually
-            paints over everything else on this screen by default -- only
-            whichever elements this beat exempts (see topping-spotlight-
-            exempt on the cup/ice cube/milk-fill/matcha-fill/foam-fill/foam-
-            cap/syrup-fill/powder-fleck/leaf-garnish/syrup-image classNames
-            above) punch through it via a higher z-index. pointer-events:
-            none so it never blocks input while it's up. */}
-        {showSyrupSpotlight && <div className="topping-spotlight-overlay" aria-hidden="true" />}
+            five beats. showSyrupSpotlight (the first) spans both the
+            picking phase (before any bottle's grabbed) AND the whole
+            pour+minigame that follows (see that beat's own extended
+            condition above); showFoamSpotlight (the second) does the same
+            for the foam pair, picking up the instant showSyrupSpotlight
+            ends; showPowderSpotlight (the third) does the same for the
+            powder pair, picking up the instant showFoamSpotlight ends;
+            showSendSpotlight (the fourth) picks up the instant
+            showPowderSpotlight ends and stays up through the whole carry/
+            vanish to the Send to Serving zone, same "stay up through the
+            whole mechanic" extension every pour beat before it got;
+            showAdvanceSpotlight (the fifth and actually-final) picks up the
+            instant showSendSpotlight ends and stays up for the rest of this
+            screen's lifetime, same "hand the flashing baton to the
+            current-step dot itself" shape MilkSelection.js's own final beat
+            uses. Same flat, full-screen pink tint (no SVG mask, no holes,
+            just a div with a higher-z-index element punched through it) as
+            every other spotlight overlay in this project -- see
+            .matcha-spotlight-overlay in MatchaMaking.css for the shared
+            reasoning. Rendered LAST (after ProgressBar and all five
+            callouts above, not before) so it actually paints over
+            everything else on this screen by default -- only whichever
+            elements the active beat exempts (see topping-spotlight-exempt
+            on the cup/ice cube/milk-fill/matcha-fill/foam-fill/foam-cap/
+            syrup-fill/powder-fleck/leaf-garnish classNames above, which
+            stay exempt across the first FOUR beats, plus the syrup-image/
+            falling-syrup-stream/minigame-bar classNames exempt only during
+            showSyrupSpotlight, the foam-image/falling-foam-stream/
+            lever-bar/lever-hint classNames exempt only during
+            showFoamSpotlight (and, for the shared lever bar/hint, only
+            when leverFor === 'foam' too), the powder-image/falling-powder-
+            stream/lever-bar/lever-hint classNames exempt only during
+            showPowderSpotlight (same leverFor === 'powder' caveat), the
+            make-drink-zone className exempt only during showSendSpotlight,
+            and spotlightExempt on <ProgressBar> itself exempt only during
+            showAdvanceSpotlight) punch through it via a higher z-index.
+            pointer-events: none so it never blocks input while it's up. */}
+        {(showSyrupSpotlight ||
+          showFoamSpotlight ||
+          showPowderSpotlight ||
+          showSendSpotlight ||
+          showAdvanceSpotlight) && <div className="topping-spotlight-overlay" aria-hidden="true" />}
         <OrderReceiptButton order={order} />
         <ProgressBar
           activeStep={activeStep}
@@ -3111,13 +3504,25 @@ const ToppingsStation = ({
           // props Milk Selection/MatchaMaking use for their own matching
           // beat.
           highlightCurrentStep={drinkSendStage === 'sent'}
-          currentStepHint="use your right arrow key to move on to the serving station."
+          // Suppressed while showAdvanceSpotlight is up -- the new pink
+          // topping-progress-callout below takes over for the first order
+          // specifically. Orders 2/3 never set showAdvanceSpotlight, so
+          // they keep seeing this plain-text hint exactly as before.
+          currentStepHint={
+            showAdvanceSpotlight ? null : 'use your right arrow key to move on to the serving station.'
+          }
           // Suppresses ProgressBar's own mount-time autoFocus while
           // showSyrupSpotlight is up, same "the spotlight's own focus effect
           // owns where focus lands for this beat, not the progress dots"
           // reasoning as every other station's first walkthrough beat (see
           // showCupSpotlight in MilkSelection.js).
           suppressInitialFocus={showSyrupSpotlight}
+          // Punches the ProgressBar itself through the pink tint once
+          // showAdvanceSpotlight is up -- the fifth beat's own target, once
+          // there's nothing left on the counter to point at. Same prop
+          // MilkSelection.js's own final beat uses (see spotlightExempt in
+          // MilkSelection.js/ProgressBar.js for the shared reasoning).
+          spotlightExempt={showAdvanceSpotlight}
         />
       </div>
     </div>

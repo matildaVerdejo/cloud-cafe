@@ -511,3 +511,387 @@
   }
 }
 
+/* Third first-order-only walkthrough callout, foam pair -- see
+   showFoamSpotlight in ToppingsStation.js. Identical row-layout/arrow-left
+   shape to .topping-syrup-callout above (same reasoning: sits to its
+   target's right, points left), just its own class/keyframe names and its
+   own top offset (60% vs 27%) to level with the foam pair's own vertical
+   center instead of the syrup pair's. left (22%) is shared with the syrup
+   callout since both pairs share the same left edge (STACK_LEFT_MARGIN). */
+.topping-foam-callout {
+  position: absolute;
+  left: 22%;
+  top: 60%;
+  transform: translateY(-50%);
+  width: 24%;
+  z-index: 26;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: min(10px, 0.55vw);
+  pointer-events: none;
+  animation: toppingFoamCalloutIn 0.35s ease-out both;
+}
+
+@keyframes toppingFoamCalloutIn {
+  0% {
+    opacity: 0;
+    transform: translateY(10px) scale(0.94);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.topping-foam-callout-text {
+  margin: 0;
+  box-sizing: border-box;
+  padding: min(14px, 0.75vw) min(20px, 1.05vw);
+  border-radius: min(16px, 0.85vw);
+  border: min(2px, 0.11vw) solid rgba(232, 170, 202, 0.65);
+  background: linear-gradient(160deg, #eafaf1 0%, #fdeef6 100%);
+  box-shadow: 0 5px 14px rgba(0, 0, 0, 0.15);
+  color: #5c4a3a;
+  font-family: 'Pixelify Sans', cursive;
+  font-weight: 700;
+  font-size: min(24px, 1.2vw);
+  text-align: center;
+  letter-spacing: 0.01em;
+}
+
+/* Points left, at the foam pair beside it. Same real-SVG-triangle
+   convention as every other walkthrough arrow in this project. */
+.topping-foam-callout-arrow {
+  flex: none;
+  width: min(46px, 2.4vw);
+  height: min(28px, 1.5vw);
+  animation: toppingFoamCalloutArrowNudge 1.4s ease-in-out infinite;
+}
+
+.topping-foam-callout-arrow polygon {
+  fill: #f7c6dc;
+  stroke: rgba(232, 170, 202, 0.9);
+  stroke-width: 3;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+
+@keyframes toppingFoamCalloutArrowNudge {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  50% {
+    transform: translateX(-6px);
+  }
+}
+
+/* Third first-order-only walkthrough callout, powder pair -- see
+   showPowderSpotlight in ToppingsStation.js. Row layout, but arrow at the
+   END pointing RIGHT (opposite of .topping-syrup-callout/.topping-foam-
+   callout above) -- the powder pair is right-edge-anchored, so this callout
+   sits to its LEFT instead, same "right:" + right-pointing-arrow shape as
+   .milk-cup-callout in MilkSelection.css. See the JSX comment for the exact
+   positioning math. */
+.topping-powder-callout {
+  position: absolute;
+  right: 21%;
+  top: 34.5%;
+  transform: translateY(-50%);
+  width: 20%;
+  z-index: 26;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: min(10px, 0.55vw);
+  pointer-events: none;
+  animation: toppingPowderCalloutIn 0.35s ease-out both;
+}
+
+@keyframes toppingPowderCalloutIn {
+  0% {
+    opacity: 0;
+    transform: translateY(10px) scale(0.94);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.topping-powder-callout-text {
+  margin: 0;
+  box-sizing: border-box;
+  padding: min(14px, 0.75vw) min(20px, 1.05vw);
+  border-radius: min(16px, 0.85vw);
+  border: min(2px, 0.11vw) solid rgba(232, 170, 202, 0.65);
+  background: linear-gradient(160deg, #eafaf1 0%, #fdeef6 100%);
+  box-shadow: 0 5px 14px rgba(0, 0, 0, 0.15);
+  color: #5c4a3a;
+  font-family: 'Pixelify Sans', cursive;
+  font-weight: 700;
+  font-size: min(24px, 1.2vw);
+  text-align: center;
+  letter-spacing: 0.01em;
+}
+
+/* Points right, at the powder pair beside it. Same real-SVG-triangle
+   convention as every other walkthrough arrow in this project, laid out
+   sideways (wide viewBox, apex on the right edge) -- same shape as
+   .milk-cup-callout-arrow in MilkSelection.css. */
+.topping-powder-callout-arrow {
+  flex: none;
+  width: min(46px, 2.4vw);
+  height: min(28px, 1.5vw);
+  animation: toppingPowderCalloutArrowNudge 1.4s ease-in-out infinite;
+}
+
+.topping-powder-callout-arrow polygon {
+  fill: #f7c6dc;
+  stroke: rgba(232, 170, 202, 0.9);
+  stroke-width: 3;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+
+@keyframes toppingPowderCalloutArrowNudge {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  50% {
+    transform: translateX(6px);
+  }
+}
+
+/* Fourth and final first-order-only walkthrough callout, sending the drink
+   on -- see showSendSpotlight in ToppingsStation.js. Column layout, arrow
+   below pointing down at the cup, same shape as .milk-send-callout in
+   MilkSelection.css (which this is modeled directly on -- both are "point
+   at the cup, send it on" callouts). left/top come from that same JSX
+   comment's own math (centered above the cup's own INCOMING_DRINK_SPOT),
+   translateX(-50%) centers the panel over that point. Wider than the other
+   callouts on this screen (26vw vs 20-24vw) since this one's message is the
+   longest here, same reasoning .milk-send-callout's own width comment
+   gives. */
+.topping-send-callout {
+  position: absolute;
+  left: 50%;
+  top: 26%;
+  transform: translateX(-50%);
+  width: min(420px, 26vw);
+  z-index: 26;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: min(10px, 0.55vw);
+  pointer-events: none;
+  animation: toppingSendCalloutIn 0.35s ease-out both;
+}
+
+@keyframes toppingSendCalloutIn {
+  0% {
+    opacity: 0;
+    transform: translateY(10px) scale(0.94);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.topping-send-callout-text {
+  margin: 0;
+  box-sizing: border-box;
+  padding: min(14px, 0.75vw) min(20px, 1.05vw);
+  border-radius: min(16px, 0.85vw);
+  border: min(2px, 0.11vw) solid rgba(232, 170, 202, 0.65);
+  background: linear-gradient(160deg, #eafaf1 0%, #fdeef6 100%);
+  box-shadow: 0 5px 14px rgba(0, 0, 0, 0.15);
+  color: #5c4a3a;
+  font-family: 'Pixelify Sans', cursive;
+  font-weight: 700;
+  font-size: min(24px, 1.2vw);
+  text-align: center;
+  letter-spacing: 0.01em;
+}
+
+/* Points down, at the cup below. Same real-SVG-triangle convention as every
+   other walkthrough arrow in this project. */
+.topping-send-callout-arrow {
+  flex: none;
+  width: min(28px, 1.5vw);
+  height: min(46px, 2.4vw);
+  animation: toppingSendCalloutArrowNudge 1.4s ease-in-out infinite;
+}
+
+.topping-send-callout-arrow polygon {
+  fill: #f7c6dc;
+  stroke: rgba(232, 170, 202, 0.9);
+  stroke-width: 3;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+
+@keyframes toppingSendCalloutArrowNudge {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(6px);
+  }
+}
+
+/* Fifth and actually-final first-order-only walkthrough callout, ProgressBar
+   advance hint -- see showAdvanceSpotlight in ToppingsStation.js. Same
+   position/shape as MilkSelection.js's own .milk-progress-callout and
+   MatchaMaking.css's .matcha-progress-callout (both are "point down at the
+   progress bar" callouts) -- left: 32%/bottom: 24%/width: 26%, column
+   layout, reusing this file's own keyframes rather than duplicating
+   MilkSelection's/MatchaMaking's. */
+.topping-progress-callout {
+  position: absolute;
+  left: 32%;
+  bottom: 24%;
+  transform: translateX(-50%);
+  width: 26%;
+  z-index: 26;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: min(10px, 0.55vw);
+  pointer-events: none;
+  animation: toppingProgressCalloutIn 0.35s ease-out both;
+}
+
+@keyframes toppingProgressCalloutIn {
+  0% {
+    opacity: 0;
+    transform: translateY(10px) scale(0.94);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.topping-progress-callout-text {
+  margin: 0;
+  box-sizing: border-box;
+  padding: min(14px, 0.75vw) min(20px, 1.05vw);
+  border-radius: min(16px, 0.85vw);
+  border: min(2px, 0.11vw) solid rgba(232, 170, 202, 0.65);
+  background: linear-gradient(160deg, #eafaf1 0%, #fdeef6 100%);
+  box-shadow: 0 5px 14px rgba(0, 0, 0, 0.15);
+  color: #5c4a3a;
+  font-family: 'Pixelify Sans', cursive;
+  font-weight: 700;
+  font-size: min(24px, 1.2vw);
+  text-align: center;
+  letter-spacing: 0.01em;
+}
+
+.topping-progress-callout-arrow {
+  flex: none;
+  width: min(28px, 1.5vw);
+  height: min(46px, 2.4vw);
+  animation: toppingProgressCalloutArrowNudge 1.4s ease-in-out infinite;
+}
+
+.topping-progress-callout-arrow polygon {
+  fill: #f7c6dc;
+  stroke: rgba(232, 170, 202, 0.9);
+  stroke-width: 3;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+
+@keyframes toppingProgressCalloutArrowNudge {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(6px);
+  }
+}
+
+/* Second first-order-only walkthrough callout, syrup pour minigame -- see
+   showSyrupSpotlight in ToppingsStation.js (this is the "already grabbed a
+   bottle" half of that same beat) and the topping-pour-callout JSX comment
+   for the exact positioning math. Column layout (text above, arrow below
+   pointing down at the minigame bar), same shape as .milk-ice-callout/
+   .matcha-tin-callout elsewhere in this project -- unlike
+   .topping-syrup-callout above, left/top are set inline in JSX rather than
+   fixed here, since they're derived from syrupMixBarPos (itself effectively
+   fixed, but already computed in JS, so no reason to duplicate that math a
+   second time in CSS). */
+.topping-pour-callout {
+  position: absolute;
+  transform: translateX(-50%);
+  width: min(340px, 21vw);
+  z-index: 26;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: min(10px, 0.55vw);
+  pointer-events: none;
+  animation: toppingPourCalloutIn 0.35s ease-out both;
+}
+
+@keyframes toppingPourCalloutIn {
+  0% {
+    opacity: 0;
+    transform: translateY(10px) scale(0.94);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.topping-pour-callout-text {
+  margin: 0;
+  box-sizing: border-box;
+  padding: min(14px, 0.75vw) min(20px, 1.05vw);
+  border-radius: min(16px, 0.85vw);
+  border: min(2px, 0.11vw) solid rgba(232, 170, 202, 0.65);
+  background: linear-gradient(160deg, #eafaf1 0%, #fdeef6 100%);
+  box-shadow: 0 5px 14px rgba(0, 0, 0, 0.15);
+  color: #5c4a3a;
+  font-family: 'Pixelify Sans', cursive;
+  font-weight: 700;
+  font-size: min(24px, 1.2vw);
+  text-align: center;
+  letter-spacing: 0.01em;
+}
+
+/* Points down, at the minigame bar below. Same real-SVG-triangle
+   convention as every other walkthrough arrow in this project. */
+.topping-pour-callout-arrow {
+  flex: none;
+  width: min(28px, 1.5vw);
+  height: min(46px, 2.4vw);
+  animation: toppingPourCalloutArrowNudge 1.4s ease-in-out infinite;
+}
+
+.topping-pour-callout-arrow polygon {
+  fill: #f7c6dc;
+  stroke: rgba(232, 170, 202, 0.9);
+  stroke-width: 3;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+
+@keyframes toppingPourCalloutArrowNudge {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(6px);
+  }
+}
+
