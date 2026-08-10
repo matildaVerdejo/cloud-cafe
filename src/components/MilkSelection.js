@@ -1791,7 +1791,13 @@ const MilkSelection = ({
   // have switched to plastic or the mug -- so this indexes into the same
   // three-cup DOM order (['glass', 'plastic', 'mug'], matching that
   // literal array's own order in the JSX below) by activeCup's own position
-  // in it instead.
+  // in it instead. activeCup is listed alongside showSendSpotlight in the
+  // dep array (CI's react-hooks/exhaustive-deps treats a missing one as a
+  // build-breaking error, not just a lint warning, since warnings are
+  // treated as errors in production builds) -- harmless to re-run if
+  // activeCup somehow changed after this beat already started, since it
+  // just re-focuses the (now-correct) active cup rather than doing anything
+  // destructive.
   useEffect(() => {
     if (showSendSpotlight) {
       const cups = containerRef.current
@@ -1799,7 +1805,7 @@ const MilkSelection = ({
         : [];
       cups[['glass', 'plastic', 'mug'].indexOf(activeCup)]?.focus();
     }
-  }, [showSendSpotlight]);
+  }, [showSendSpotlight, activeCup]);
 
   // Sixth and actually-final first-order-only walkthrough beat, picking up
   // the instant showSendSpotlight above ends (cupSendStage reaches 'sent'
