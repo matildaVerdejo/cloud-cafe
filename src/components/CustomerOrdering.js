@@ -136,13 +136,18 @@ const CUSTOMER_CHARACTERS = {
 // One short voice-over clip per customer character, keyed by character id --
 // tied to WHO is at the counter, not to what they happen to order (the
 // spoken order text itself is randomized separately by generateSpokenOrder
-// above). Otto/Teddy/Coco are the only ones without a recorded line so far
-// -- they simply have no entry yet, and the playback effect below already
-// treats a missing entry as "no line to play" rather than erroring --
-// adding one later is just adding another key here, no other change needed.
+// above). All five characters have a recorded line now -- Katie's was
+// re-recorded (a straight file swap, same key/path, no code change needed
+// beyond the asset itself) and Otto/Teddy/Coco's were added fresh. The
+// playback effect below still treats a missing entry as "no line to play"
+// rather than erroring, so any future character added without its own line
+// yet would still just silently skip playing anything.
 const CHARACTER_ORDERING_AUDIO = {
   annie: './AnnieOrdering.wav',
   katie: './KatieOrdering.wav',
+  otto: './OttoOrdering.wav',
+  teddy: './TeddyOrdering.wav',
+  coco: './CocoOrdering.wav',
 };
 
 function pickRandom(list) {
@@ -746,10 +751,10 @@ const CustomerOrdering = ({ activeStep, customerNumber, onNavigate, onAdvance, o
   // i.e. once per customer/remount, for the same reason). Keyed off
   // whichever character customerCharacter rolled above (not the rolled
   // spokenOrder text), so this stays "that character's own ordering line"
-  // no matter what they order. Only Annie has a recorded line so far --
-  // CHARACTER_ORDERING_AUDIO simply has no entry for Otto/Katie yet, and
-  // that's exactly what the src/!src check below is for, so this silently
-  // skips playing anything on the rounds they're picked instead of erroring.
+  // no matter what they order. All five characters now have a recorded
+  // line (CHARACTER_ORDERING_AUDIO above) -- the src/!src check below is
+  // kept regardless, so a future character added without its own line yet
+  // still silently skips playing anything instead of erroring.
   // Routed through sfx.js's playVoiceLine (a one-shot clip, same "not
   // App.js's looping <audio ref> element" distinction as before) so it's
   // controlled by the Settings panel's "Sound" slider rather than always
@@ -758,12 +763,38 @@ const CustomerOrdering = ({ activeStep, customerNumber, onNavigate, onAdvance, o
   // somehow the very first sound of the session with no prior user gesture;
   // unlike background music there's no first-gesture retry for a one-shot
   // line like this, it just silently doesn't play that round.
+  // Held in a ref (not just a local const in the effect below) so the
+  // separate typingDone effect further down can reach the same Audio
+  // instance and cut it short -- see that effect's own comment.
+  const orderingAudioRef = useRef(null);
   useEffect(() => {
     const src = CHARACTER_ORDERING_AUDIO[customerCharacter];
     if (!src) return undefined;
     const audio = playVoiceLine(src);
-    return () => audio.pause();
+    orderingAudioRef.current = audio;
+    return () => {
+      audio.pause();
+      orderingAudioRef.current = null;
+    };
   }, [customerCharacter]);
+
+  // Cuts the voice line short the instant the typewriter above actually
+  // finishes (typingDone) -- per request, the recorded clips tend to run
+  // noticeably longer than the bubble takes to finish typing out, which
+  // read as awkward with the character still talking well after their own
+  // line has finished appearing on screen. A plain .pause() (not swapping
+  // the src or anything more involved) is enough, same "just stop it"
+  // treatment playLiquidPouring's own callers already use to cut a pour's
+  // clip short once its own visual finishes. Separate effect (rather than
+  // folded into the play effect above) since this one's dependency is
+  // typingDone, not customerCharacter -- combining them would either
+  // re-trigger playback on every typingDone flip or miss the cutoff
+  // entirely depending on which dependency actually changed.
+  useEffect(() => {
+    if (typingDone) {
+      orderingAudioRef.current?.pause();
+    }
+  }, [typingDone]);
 
   // ---- Order-builder state -----------------------------------------------
   // Four sections (matcha, cup & ice, base, toppings) -- now shown inside a
