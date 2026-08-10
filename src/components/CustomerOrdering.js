@@ -108,31 +108,38 @@ const TOPPING_SPEECH_NAMES = {
 };
 
 // ---- Which character is at the counter -----------------------------------
-// Three interchangeable customer characters -- Annie (the bunny, the
-// original/only one before this), Otto (the frog), and Katie (the cat) --
-// one is picked at random each time a new order starts (see CUSTOMER_
-// CHARACTER's own lazy useState initializer in the component below, same
-// "rolled once per mount, not re-rolled on every render" pattern
-// generateSpokenOrder's own spokenOrder already uses, since this whole
-// component unmounts/remounts between customers). All three share the same
-// bust framing/crop (Annie.png/Otto.png/Katie.png, each 398x506 -- cropped
-// from a shared 455x548 source canvas down to the union of all three
-// characters' own bounding boxes, so they render at identical scale/
-// position in .ordering-bunny below regardless of which one gets picked)
-// rather than each needing its own tuned box.
+// Five interchangeable customer characters -- Annie (the bunny, the
+// original/only one before this), Otto (the frog), Katie (the cat), Teddy
+// (the bear), and Coco (the poodle) -- one is picked at random each time a
+// new order starts (see CUSTOMER_CHARACTER's own lazy useState initializer
+// in the component below, same "rolled once per mount, not re-rolled on
+// every render" pattern generateSpokenOrder's own spokenOrder already
+// uses, since this whole component unmounts/remounts between customers).
+// All five share the same bust framing/crop (Annie.png/Otto.png/
+// Katie.png/Teddy.png/Coco.png, each 429x509 -- cropped from a shared
+// 455x548 source canvas down to the union of all FIVE characters' own
+// bounding boxes (re-widened from the original three-character union once
+// Teddy's/Coco's own art turned out to reach further toward the canvas
+// edges than Annie/Otto/Katie did -- see the git history around when Teddy/
+// Coco were added for the narrower box that used to clip Teddy's left ear/
+// arm), so they render at identical scale/position in .ordering-bunny below
+// regardless of which one gets picked, with a few pixels of headroom (PAD)
+// on every side rather than a pixel-tight bound.
 const CUSTOMER_CHARACTERS = {
   annie: { src: './Annie.png', alt: 'Annie the bunny, a customer at the counter' },
   otto: { src: './Otto.png', alt: 'Otto the frog, a customer at the counter' },
   katie: { src: './Katie.png', alt: 'Katie the cat, a customer at the counter' },
+  teddy: { src: './Teddy.png', alt: 'Teddy the bear, a customer at the counter' },
+  coco: { src: './Coco.png', alt: 'Coco the poodle, a customer at the counter' },
 };
 
 // One short voice-over clip per customer character, keyed by character id --
 // tied to WHO is at the counter, not to what they happen to order (the
 // spoken order text itself is randomized separately by generateSpokenOrder
-// above). Otto is the only one without a recorded line so far -- he simply
-// has no entry yet, and the playback effect below already treats a missing
-// entry as "no line to play" rather than erroring -- adding one later is
-// just adding another key here, no other change needed.
+// above). Otto/Teddy/Coco are the only ones without a recorded line so far
+// -- they simply have no entry yet, and the playback effect below already
+// treats a missing entry as "no line to play" rather than erroring --
+// adding one later is just adding another key here, no other change needed.
 const CHARACTER_ORDERING_AUDIO = {
   annie: './AnnieOrdering.wav',
   katie: './KatieOrdering.wav',
@@ -990,8 +997,9 @@ const CustomerOrdering = ({ activeStep, customerNumber, onNavigate, onAdvance, o
             background so it can eventually be swapped per customer"
             approach the matcha/toppings stations use for their own props.
             Now actually swapped per customer -- randomly one of Annie/Otto/
-            Katie (see customerCharacter/CUSTOMER_CHARACTERS above) instead
-            of always Annie's own BunnyOrder.png -- see .ordering-bunny in
+            Katie/Teddy/Coco (see customerCharacter/CUSTOMER_CHARACTERS
+            above) instead of always Annie's own BunnyOrder.png -- see
+            .ordering-bunny in
             CustomerOrdering.css (class name kept as-is even though it's not
             always the bunny anymore, to avoid churning that stylesheet's
             own selector for a purely cosmetic rename). */}

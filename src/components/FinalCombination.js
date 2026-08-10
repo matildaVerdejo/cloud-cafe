@@ -21,26 +21,29 @@ import {
 // Display name per customer character key -- CustomerOrdering.js's own
 // CUSTOMER_CHARACTERS only has src/alt (image concerns), not a plain display
 // name, and order.customerCharacter (see below) only ever carries the raw
-// key ('annie' | 'otto' | 'katie'), so this is what turns that key into the
-// "<Name> Order" title ScoreCard.js's own score-card-title now shows.
-const CUSTOMER_CHARACTER_NAME = { annie: 'annie', otto: 'otto', katie: 'katie' };
+// key ('annie' | 'otto' | 'katie' | 'teddy' | 'coco'), so this is what turns
+// that key into the "<Name> Order" title ScoreCard.js's own score-card-title
+// now shows.
+const CUSTOMER_CHARACTER_NAME = { annie: 'annie', otto: 'otto', katie: 'katie', teddy: 'teddy', coco: 'coco' };
 
 // One "reaction sticker" per character per score tier -- fail -> angry,
 // mid -> annoyed, good -> happy, same three tiers computeOverallScore
 // (gameloop/scoring.js) already buckets the round's total into for
 // ScoreCard's own total-pill coloring, just reused here for which sticker
 // shows instead of which color does. Files are the three emotion PNGs per
-// character (Annie/Katie/Otto), each already trimmed to its own alpha
-// bounding box -- rendered with object-fit: contain (see .serving-reaction-
-// sticker in FinalCombination.css) rather than the shared-canvas crop
-// CustomerOrdering.js's own portraits use, since these don't need to match
-// each other pixel-for-pixel the way three same-pose ordering portraits do
-// -- a sticker propped next to the plate reads fine at its own natural
-// aspect ratio.
+// character (Annie/Katie/Otto/Teddy/Coco), each already trimmed to its own
+// alpha bounding box -- rendered with object-fit: contain (see .serving-
+// reaction-sticker in FinalCombination.css) rather than the shared-canvas
+// crop CustomerOrdering.js's own portraits use, since these don't need to
+// match each other pixel-for-pixel the way five same-pose ordering
+// portraits do -- a sticker propped next to the plate reads fine at its own
+// natural aspect ratio.
 const REACTION_STICKERS = {
   annie: { fail: './AnnieAngry.png', mid: './AnnieAnnoyed.png', good: './AnnieHappy.png' },
   katie: { fail: './KatieAngry.png', mid: './KatieAnnoyed.png', good: './KatieHappy.png' },
   otto: { fail: './OttoAngry.png', mid: './OttoAnnoyed.png', good: './OttoHappy.png' },
+  teddy: { fail: './TeddyAngry.png', mid: './TeddyAnnoyed.png', good: './TeddyHappy.png' },
+  coco: { fail: './CocoAngry.png', mid: './CocoAnnoyed.png', good: './CocoHappy.png' },
 };
 
 // Where the finished drink (see incomingDrink below), carried over from

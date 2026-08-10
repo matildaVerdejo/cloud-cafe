@@ -356,6 +356,18 @@
   width: 18.6%;
   height: 42%;
   object-fit: contain;
+  /* Anchors the character to the BOTTOM of its box rather than object-fit's
+     own default center -- the widened shared crop box (see CUSTOMER_
+     CHARACTERS' own comment in CustomerOrdering.js) is no longer quite the
+     same aspect ratio as this box, so contain now letterboxes a little
+     instead of filling it edge-to-edge. Centered, that letterboxing splits
+     evenly top/bottom and visibly lifts every character off the counter
+     line drawn into the background art; anchored to the bottom instead, all
+     of it collects above the character's head where it isn't noticeable,
+     same "anchor the edge that touches a surface, not the center" idea
+     BOTTLE_BOTTOM in MilkSelection.js and .serving-reaction-sticker in
+     FinalCombination.css already use for their own object-fit: contain. */
+  object-position: bottom;
   pointer-events: none;
   /* No longer an unconditional z-index here -- the character is only
      exempt from the spotlight overlay during the "read phase" (see
