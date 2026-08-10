@@ -304,6 +304,401 @@
   }
 }
 
+/* First-order-only walkthrough spotlight -- see showCupSpotlight in
+   MilkSelection.js. Same flat, full-screen pink tint (no SVG mask, no
+   holes, just a div with a higher-z-index element punched through it) as
+   .matcha-spotlight-overlay in MatchaMaking.css. */
+.milk-spotlight-overlay {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 25;
+  background: rgba(255, 224, 236, 0.6);
+  pointer-events: none;
+}
+
+/* Shared modifier -- applied conditionally (see showCupSpotlight in
+   MilkSelection.js) to whichever element needs to punch through
+   .milk-spotlight-overlay above; currently only ever the three shelf cup
+   images (see milk-spotlight-exempt on their own className in the JSX).
+   .glass-cup itself carries no z-index of its own, so a plain single-class
+   rule is enough here -- unlike .order-receipt-widget.matcha-spotlight-
+   exempt in MatchaMaking.css, which needs the extra specificity to beat
+   that widget's own hardcoded z-index: 5. */
+.milk-spotlight-exempt {
+  z-index: 26;
+}
+
+/* First-order-only walkthrough callout, cup shelf -- see showCupSpotlight
+   in MilkSelection.js. Row layout, arrow at the end pointing right at the
+   cup shelf, same shape as .matcha-order-callout/.matcha-scoop-callout in
+   MatchaMaking.css. Positioned to the shelf's own left (CUP_SPOTS.shelf:
+   left: 71.12, top: 25.79, height (SHELF_SIZE.height): 12.39 in
+   MilkSelection.js, so right: 30% lands just clear of its left edge,
+   top: 32% roughly levels with its vertical center) -- eyeballed the same
+   way every other exact position in this project is, may need a small
+   nudge once actually seen against the live render. */
+.milk-cup-callout {
+  position: absolute;
+  right: 30%;
+  top: 32%;
+  transform: translateY(-50%);
+  width: 24%;
+  z-index: 26;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: min(10px, 0.55vw);
+  pointer-events: none;
+  animation: milkCupCalloutIn 0.35s ease-out both;
+}
+
+@keyframes milkCupCalloutIn {
+  0% {
+    opacity: 0;
+    transform: translateY(10px) scale(0.94);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.milk-cup-callout-text {
+  margin: 0;
+  box-sizing: border-box;
+  padding: min(14px, 0.75vw) min(20px, 1.05vw);
+  border-radius: min(16px, 0.85vw);
+  border: min(2px, 0.11vw) solid rgba(232, 170, 202, 0.65);
+  background: linear-gradient(160deg, #eafaf1 0%, #fdeef6 100%);
+  box-shadow: 0 5px 14px rgba(0, 0, 0, 0.15);
+  color: #5c4a3a;
+  font-family: 'Pixelify Sans', cursive;
+  font-weight: 700;
+  font-size: min(24px, 1.2vw);
+  text-align: center;
+  letter-spacing: 0.01em;
+}
+
+/* Points right, at the cup shelf beside it. Same real-SVG-triangle
+   convention as every other walkthrough arrow in this project, just laid
+   out sideways (wide viewBox, apex on the right edge) -- same shape as
+   .matcha-order-callout-arrow in MatchaMaking.css. */
+.milk-cup-callout-arrow {
+  flex: none;
+  width: min(46px, 2.4vw);
+  height: min(28px, 1.5vw);
+  animation: milkCupCalloutArrowNudge 1.4s ease-in-out infinite;
+}
+
+.milk-cup-callout-arrow polygon {
+  fill: #f7c6dc;
+  stroke: rgba(232, 170, 202, 0.9);
+  stroke-width: 3;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+
+@keyframes milkCupCalloutArrowNudge {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  50% {
+    transform: translateX(6px);
+  }
+}
+
+/* Second first-order-only walkthrough callout, ice box -- see
+   showIceSpotlight in MilkSelection.js. Column layout, text above, arrow
+   below pointing down at the ice box, same shape as .matcha-tin-callout in
+   MatchaMaking.css. left/top come from that same JSX comment's own math
+   (centered over the ice box's two-column cluster, just clear of its top
+   edge), translateX(-50%) centers the panel over that point. */
+.milk-ice-callout {
+  position: absolute;
+  left: 12.6%;
+  top: 58%;
+  transform: translateX(-50%);
+  width: min(360px, 22vw);
+  z-index: 26;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: min(10px, 0.55vw);
+  pointer-events: none;
+  animation: milkCupCalloutIn 0.35s ease-out both;
+}
+
+.milk-ice-callout-text {
+  margin: 0;
+  box-sizing: border-box;
+  padding: min(14px, 0.75vw) min(20px, 1.05vw);
+  border-radius: min(16px, 0.85vw);
+  border: min(2px, 0.11vw) solid rgba(232, 170, 202, 0.65);
+  background: linear-gradient(160deg, #eafaf1 0%, #fdeef6 100%);
+  box-shadow: 0 5px 14px rgba(0, 0, 0, 0.15);
+  color: #5c4a3a;
+  font-family: 'Pixelify Sans', cursive;
+  font-weight: 700;
+  font-size: min(22px, 1.1vw);
+  text-align: center;
+  letter-spacing: 0.01em;
+}
+
+/* Points down, at the ice box below. Same real-SVG-triangle convention as
+   every other walkthrough arrow in this project -- same shape as
+   .matcha-tin-callout-arrow in MatchaMaking.css. */
+.milk-ice-callout-arrow {
+  flex: none;
+  width: min(28px, 1.5vw);
+  height: min(46px, 2.4vw);
+  animation: milkIceCalloutArrowNudge 1.4s ease-in-out infinite;
+}
+
+.milk-ice-callout-arrow polygon {
+  fill: #f7c6dc;
+  stroke: rgba(232, 170, 202, 0.9);
+  stroke-width: 3;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+
+@keyframes milkIceCalloutArrowNudge {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(6px);
+  }
+}
+
+/* Third first-order-only walkthrough callout, bottle row -- see
+   showBaseSpotlight in MilkSelection.js. Row layout, arrow at the end
+   pointing right at the bottles, same shape as .milk-cup-callout above.
+   Positioned to the bottle cluster's own left (see the JSX comment on
+   <div className="milk-base-callout"> for the actual numbers). */
+.milk-base-callout {
+  position: absolute;
+  right: 32%;
+  top: 64%;
+  transform: translateY(-50%);
+  width: 24%;
+  z-index: 26;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: min(10px, 0.55vw);
+  pointer-events: none;
+  animation: milkCupCalloutIn 0.35s ease-out both;
+}
+
+.milk-base-callout-text {
+  margin: 0;
+  box-sizing: border-box;
+  padding: min(14px, 0.75vw) min(20px, 1.05vw);
+  border-radius: min(16px, 0.85vw);
+  border: min(2px, 0.11vw) solid rgba(232, 170, 202, 0.65);
+  background: linear-gradient(160deg, #eafaf1 0%, #fdeef6 100%);
+  box-shadow: 0 5px 14px rgba(0, 0, 0, 0.15);
+  color: #5c4a3a;
+  font-family: 'Pixelify Sans', cursive;
+  font-weight: 700;
+  font-size: min(24px, 1.2vw);
+  text-align: center;
+  letter-spacing: 0.01em;
+}
+
+/* Points right, at the bottle row beside it. Same real-SVG-triangle
+   convention as every other walkthrough arrow in this project -- same
+   shape as .milk-cup-callout-arrow above. */
+.milk-base-callout-arrow {
+  flex: none;
+  width: min(46px, 2.4vw);
+  height: min(28px, 1.5vw);
+  animation: milkCupCalloutArrowNudge 1.4s ease-in-out infinite;
+}
+
+.milk-base-callout-arrow polygon {
+  fill: #f7c6dc;
+  stroke: rgba(232, 170, 202, 0.9);
+  stroke-width: 3;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+
+/* Fourth first-order-only walkthrough callout, matcha bowl -- see
+   showBowlSpotlight in MilkSelection.js. Column layout, text above, arrow
+   below pointing down at the bowl, same shape as .milk-ice-callout above.
+   left/top come from that same JSX comment's own math (centered over the
+   bowl's own resting spot, just clear of its top edge), translateX(-50%)
+   centers the panel over that point. */
+.milk-bowl-callout {
+  position: absolute;
+  left: 28.5%;
+  top: 44%;
+  transform: translateX(-50%);
+  width: min(320px, 20vw);
+  z-index: 26;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: min(10px, 0.55vw);
+  pointer-events: none;
+  animation: milkCupCalloutIn 0.35s ease-out both;
+}
+
+.milk-bowl-callout-text {
+  margin: 0;
+  box-sizing: border-box;
+  padding: min(14px, 0.75vw) min(20px, 1.05vw);
+  border-radius: min(16px, 0.85vw);
+  border: min(2px, 0.11vw) solid rgba(232, 170, 202, 0.65);
+  background: linear-gradient(160deg, #eafaf1 0%, #fdeef6 100%);
+  box-shadow: 0 5px 14px rgba(0, 0, 0, 0.15);
+  color: #5c4a3a;
+  font-family: 'Pixelify Sans', cursive;
+  font-weight: 700;
+  font-size: min(24px, 1.2vw);
+  text-align: center;
+  letter-spacing: 0.01em;
+}
+
+/* Points down, at the bowl below. Same real-SVG-triangle convention as
+   every other walkthrough arrow in this project -- same shape as
+   .milk-ice-callout-arrow above. */
+.milk-bowl-callout-arrow {
+  flex: none;
+  width: min(28px, 1.5vw);
+  height: min(46px, 2.4vw);
+  animation: milkIceCalloutArrowNudge 1.4s ease-in-out infinite;
+}
+
+.milk-bowl-callout-arrow polygon {
+  fill: #f7c6dc;
+  stroke: rgba(232, 170, 202, 0.9);
+  stroke-width: 3;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+
+/* Fifth and final first-order-only walkthrough callout, cup -- see
+   showSendSpotlight in MilkSelection.js. Column layout, text above, arrow
+   below pointing down at the cup, same shape as .milk-bowl-callout above.
+   left/top come from that same JSX comment's own math (centered over the
+   cup's own table spot, well clear of its top edge), translateX(-50%)
+   centers the panel over that point. Wider than the other column callouts
+   (26vw vs 20-24vw) since this one's message is the longest on this
+   screen. */
+.milk-send-callout {
+  position: absolute;
+  left: 50%;
+  top: 26%;
+  transform: translateX(-50%);
+  width: min(420px, 26vw);
+  z-index: 26;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: min(10px, 0.55vw);
+  pointer-events: none;
+  animation: milkCupCalloutIn 0.35s ease-out both;
+}
+
+.milk-send-callout-text {
+  margin: 0;
+  box-sizing: border-box;
+  padding: min(14px, 0.75vw) min(20px, 1.05vw);
+  border-radius: min(16px, 0.85vw);
+  border: min(2px, 0.11vw) solid rgba(232, 170, 202, 0.65);
+  background: linear-gradient(160deg, #eafaf1 0%, #fdeef6 100%);
+  box-shadow: 0 5px 14px rgba(0, 0, 0, 0.15);
+  color: #5c4a3a;
+  font-family: 'Pixelify Sans', cursive;
+  font-weight: 700;
+  font-size: min(24px, 1.2vw);
+  text-align: center;
+  letter-spacing: 0.01em;
+}
+
+/* Points down, at the cup below. Same real-SVG-triangle convention as
+   every other walkthrough arrow in this project -- same shape as
+   .milk-bowl-callout-arrow above. */
+.milk-send-callout-arrow {
+  flex: none;
+  width: min(28px, 1.5vw);
+  height: min(46px, 2.4vw);
+  animation: milkIceCalloutArrowNudge 1.4s ease-in-out infinite;
+}
+
+.milk-send-callout-arrow polygon {
+  fill: #f7c6dc;
+  stroke: rgba(232, 170, 202, 0.9);
+  stroke-width: 3;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+
+/* Sixth and final walkthrough beat -- shown once cupSendStage === 'sent',
+   after the drink has actually arrived at Toppings-bound and there's
+   nothing left on this counter to point at. Points down at the ProgressBar/
+   station dots instead (spotlightExempt punches a hole through the pink
+   tint there for this beat -- see the ProgressBar call in MilkSelection.js).
+   Positioned/sized identically to Matcha Making's own
+   .matcha-progress-callout, which this is modeled directly on, since both
+   are "point at the progress bar" callouts. Reuses this file's own
+   milkCupCalloutIn/milkIceCalloutArrowNudge keyframes rather than
+   duplicating Matcha Making's matchaCalloutIn/matchaDownArrowNudge --
+   same shared-keyframe convention every other callout on this screen
+   already follows. */
+.milk-progress-callout {
+  position: absolute;
+  left: 32%;
+  bottom: 24%;
+  transform: translateX(-50%);
+  width: 26%;
+  z-index: 26;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: min(10px, 0.55vw);
+  pointer-events: none;
+  animation: milkCupCalloutIn 0.35s ease-out both;
+}
+
+.milk-progress-callout-text {
+  margin: 0;
+  box-sizing: border-box;
+  padding: min(14px, 0.75vw) min(20px, 1.05vw);
+  border-radius: min(16px, 0.85vw);
+  border: min(2px, 0.11vw) solid rgba(232, 170, 202, 0.65);
+  background: linear-gradient(160deg, #eafaf1 0%, #fdeef6 100%);
+  box-shadow: 0 5px 14px rgba(0, 0, 0, 0.15);
+  color: #5c4a3a;
+  font-family: 'Pixelify Sans', cursive;
+  font-weight: 700;
+  font-size: min(24px, 1.2vw);
+  text-align: center;
+  letter-spacing: 0.01em;
+}
+
+.milk-progress-callout-arrow {
+  flex: none;
+  width: min(28px, 1.5vw);
+  height: min(46px, 2.4vw);
+  animation: milkIceCalloutArrowNudge 1.4s ease-in-out infinite;
+}
+
+.milk-progress-callout-arrow polygon {
+  fill: #f7c6dc;
+  stroke: rgba(232, 170, 202, 0.9);
+  stroke-width: 3;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+
 /* The milk fill itself -- see the big comment on CUP_MILK_BOX_FRAC/cupMilk
    in MilkSelection.js for why this is a plain colored shape layered on top
    of the glass rather than something requiring a transparent cutout in

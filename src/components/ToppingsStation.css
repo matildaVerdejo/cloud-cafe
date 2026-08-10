@@ -400,3 +400,114 @@
     0 0 12px 4px rgba(255, 255, 255, 0.85);
 }
 
+/* ---- First-order-only walkthrough spotlight -- see showSyrupSpotlight in
+   ToppingsStation.js. Same flat full-screen pink tint + higher-z-index
+   "exempt" escape hatch shape every other station's own walkthrough uses --
+   see .milk-spotlight-overlay/.milk-spotlight-exempt in MilkSelection.css
+   for the shared reasoning, just given this file's own "topping-" prefix
+   since this is a brand new component to the walkthrough system, not an
+   extension of one that already had this infrastructure. */
+.topping-spotlight-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(255, 224, 236, 0.6);
+  z-index: 25;
+  pointer-events: none;
+}
+
+/* No position property here on purpose -- every exempted element (the cup,
+   its ice cubes/fills, the syrup bottles) already has its own position:
+   absolute from .station-item/.cup-*-fill/.ice-cube etc., which is what
+   makes their left/top percentages place them correctly in the first place.
+   Adding position: relative here (an earlier mistake) overrode that back to
+   normal document flow, throwing every exempted element's actual on-screen
+   position out -- same "no extra specificity needed" z-index-only shape as
+   .milk-spotlight-exempt in MilkSelection.css, which this is modeled on. */
+.topping-spotlight-exempt {
+  z-index: 26;
+}
+
+/* First-order-only walkthrough callout, syrup pair -- see showSyrupSpotlight
+   in ToppingsStation.js. Row layout, but with the arrow FIRST (not last) so
+   it renders on the callout's own left edge, closest to the syrup pair it's
+   pointing at -- the label sits to the pair's right per request, opposite
+   of Milk Selection's own row-layout callouts which sit to their target's
+   left. left/top come from that same JSX comment's own math (just clear of
+   the syrup pair's own right edge, vertically centered on it). */
+.topping-syrup-callout {
+  position: absolute;
+  left: 22%;
+  top: 27%;
+  transform: translateY(-50%);
+  width: 24%;
+  z-index: 26;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: min(10px, 0.55vw);
+  pointer-events: none;
+  animation: toppingSyrupCalloutIn 0.35s ease-out both;
+}
+
+/* Same shape as milkCupCalloutIn in MilkSelection.css (the same "row layout,
+   positioned via top + translateY(-50%)" callout type) -- the animation's
+   own transform values intentionally don't re-include translateY(-50%),
+   matching that existing convention exactly rather than introducing a
+   different compounding-transform behavior just for this one callout. */
+@keyframes toppingSyrupCalloutIn {
+  0% {
+    opacity: 0;
+    transform: translateY(10px) scale(0.94);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.topping-syrup-callout-text {
+  margin: 0;
+  box-sizing: border-box;
+  padding: min(14px, 0.75vw) min(20px, 1.05vw);
+  border-radius: min(16px, 0.85vw);
+  border: min(2px, 0.11vw) solid rgba(232, 170, 202, 0.65);
+  background: linear-gradient(160deg, #eafaf1 0%, #fdeef6 100%);
+  box-shadow: 0 5px 14px rgba(0, 0, 0, 0.15);
+  color: #5c4a3a;
+  font-family: 'Pixelify Sans', cursive;
+  font-weight: 700;
+  font-size: min(24px, 1.2vw);
+  text-align: center;
+  letter-spacing: 0.01em;
+}
+
+/* Points left, at the syrup pair beside it. Same real-SVG-triangle
+   convention as every other walkthrough arrow in this project, just mirrored
+   horizontally from Milk Selection's own row-layout arrows (apex on the
+   LEFT edge here, not the right, since this callout sits to its target's
+   right instead of its left). */
+.topping-syrup-callout-arrow {
+  flex: none;
+  width: min(46px, 2.4vw);
+  height: min(28px, 1.5vw);
+  animation: toppingSyrupCalloutArrowNudge 1.4s ease-in-out infinite;
+}
+
+.topping-syrup-callout-arrow polygon {
+  fill: #f7c6dc;
+  stroke: rgba(232, 170, 202, 0.9);
+  stroke-width: 3;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+
+@keyframes toppingSyrupCalloutArrowNudge {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  50% {
+    transform: translateX(-6px);
+  }
+}
+

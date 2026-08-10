@@ -1246,6 +1246,36 @@ const MilkSelection = ({
   useEffect(() => {
     cupSpotRef.current = cupSpot;
   }, [cupSpot]);
+
+  // First-order-only walkthrough beat, continued from Customer Ordering/
+  // Matcha Making -- reuses an EXISTING state boundary rather than tracking
+  // a separate one-way flag, same "the underlying UI already appears/
+  // disappears at precisely the right moment for this to just tag along"
+  // reasoning MatchaMaking.js's own showTinSpotlight/showScoopSpotlight/etc
+  // give for doing the same: cupSpot is 'shelf' from the moment this screen
+  // mounts and switches to 'table' the instant a cup's actually been
+  // confirmed (either Enter on the already-active shelf cup, or switching
+  // to a different one -- both routes set cupSpot to 'table', see
+  // handleCupKeyDown/handleCupSwitchKeyDown above), so "still on the shelf"
+  // already means exactly "hasn't picked a cup yet" with no extra state
+  // needed.
+  const showCupSpotlight = customerNumber === 1 && cupSpot === 'shelf';
+
+  // Moves focus onto the first (glass) shelf cup the instant showCupSpotlight
+  // turns on -- pairs with suppressInitialFocus on <ProgressBar> further
+  // down so the station dot never grabs the walkthrough's very first
+  // selection instead, same "the highlighted thing becomes the next thing
+  // selected" pattern as MatchaMaking's own showOrderButtonLock/showTinSpotlight
+  // focus effects. Reaches for the cup by class (same '.glass-cup' query
+  // this station's own nav-graph effect above uses for firstCup) rather
+  // than a dedicated ref, since all three cups share that one class with no
+  // ref array of their own.
+  useEffect(() => {
+    if (showCupSpotlight) {
+      containerRef.current?.querySelector('.glass-cup')?.focus();
+    }
+  }, [showCupSpotlight]);
+
   const [cupDragPos, setCupDragPos] = useState(null);
   const cupDragStartRef = useRef({ pointerX: 0, pointerY: 0, cupLeft: 0, cupTop: 0 });
   // Which cup type (if any) currently has the white focus halo -- drives
@@ -1433,6 +1463,41 @@ const MilkSelection = ({
   useEffect(() => {
     icePlacedRef.current = icePlaced;
   }, [icePlaced]);
+
+  // How many cubes are actually sitting in the cup right now -- read in
+  // more than one place below (showIceSpotlight's own retirement,
+  // showBaseSpotlight's own start), so worked out once here rather than
+  // repeating icePlaced.filter(Boolean).length at each call site.
+  const icePlacedCount = icePlaced.filter(Boolean).length;
+
+  // Second first-order-only walkthrough beat on this screen, picking up the
+  // instant showCupSpotlight above ends (a cup's been confirmed onto the
+  // table) and retiring the instant the player's placed all 3 requested ice
+  // cubes -- same "reuse an existing state boundary" reasoning
+  // showCupSpotlight itself already documents. generateSpokenOrder in
+  // CustomerOrdering.js fixes the spoken ice count at exactly 3 for
+  // customerNumber === 1 specifically so this beat always has the same,
+  // predictable amount to teach -- without that, a differently-rolled
+  // order would leave this beat waiting on a number the walkthrough itself
+  // never actually told the player.
+  const showIceSpotlight = customerNumber === 1 && cupSpot === 'table' && icePlacedCount < 3;
+
+  // Moves focus onto the first still-unplaced ice cube the instant
+  // showIceSpotlight turns on -- pairs with the exempt styling on the ice
+  // cubes themselves (see milk-spotlight-exempt on their own className
+  // further down), same "the highlighted thing becomes the next thing
+  // selected" pattern as showCupSpotlight's own focus effect above. Reaches
+  // for the cube by class (same '.ice-cube' query this station's own
+  // nav-graph effect above uses for firstIceCube, minus that effect's own
+  // "skip already-placed ones" filter, since every cube's still unplaced
+  // the first time this fires) rather than a dedicated ref, since all seven
+  // cubes share that one class with no ref array of their own.
+  useEffect(() => {
+    if (showIceSpotlight) {
+      containerRef.current?.querySelector('.ice-cube')?.focus();
+    }
+  }, [showIceSpotlight]);
+
   // Which cube (if any) is being dragged right now, and its live position.
   const [iceDrag, setIceDrag] = useState(null); // { index, left, top } | null
   const iceDragStartRef = useRef({ pointerX: 0, pointerY: 0, left: 0, top: 0 });
@@ -1656,6 +1721,104 @@ const MilkSelection = ({
   // last (a fresh pour of a different bottle just replaces it, same
   // "doesn't accumulate" simplification).
   const [cupMilk, setCupMilk] = useState(null);
+
+  // Third first-order-only walkthrough beat, picking up the instant
+  // showIceSpotlight above ends (all 3 ice cubes placed) and retiring the
+  // instant a base is actually poured (cupMilk flips non-null, same state
+  // the milk-pour gauge itself keys on -- see canPourMilk below). Same
+  // "reuse an existing state boundary" reasoning every other beat on this
+  // screen already documents. Declared here, after cupMilk itself, rather
+  // than back up alongside showCupSpotlight/showIceSpotlight, since it
+  // needs that state in scope.
+  const showBaseSpotlight = customerNumber === 1 && cupSpot === 'table' && icePlacedCount >= 3 && !cupMilk;
+
+  // Moves focus onto the first (oat) milk bottle the instant
+  // showBaseSpotlight turns on -- same pairing/reasoning as
+  // showIceSpotlight's own focus effect further up. Reaches for the bottle
+  // by class (same '.milk-bottle' query this station's own nav-graph effect
+  // up top uses for firstBottle) rather than a dedicated ref, since all of
+  // them share that one class with no ref array of their own.
+  useEffect(() => {
+    if (showBaseSpotlight) {
+      containerRef.current?.querySelector('.milk-bottle')?.focus();
+    }
+  }, [showBaseSpotlight]);
+
+  // Fourth first-order-only walkthrough beat, picking up the instant
+  // showBaseSpotlight above ends (a base is actually poured) and retiring
+  // the instant the matcha bowl's own contents actually land in the cup
+  // (bowlPoured flips true, the same moment cupMatcha itself is set -- see
+  // that state's own comment further down). Same "reuse an existing state
+  // boundary" reasoning every other beat on this screen already documents.
+  const showBowlSpotlight = customerNumber === 1 && cupSpot === 'table' && !!cupMilk && !bowlPoured;
+
+  // Moves focus onto the matcha bowl the instant showBowlSpotlight turns
+  // on -- same pairing/reasoning as showBaseSpotlight's own focus effect
+  // above. Reaches for the bowl by class (same '.incoming-bowl' query this
+  // station's own nav-graph effect up top uses for bowl) rather than a
+  // dedicated ref, even though a bowlRef-style ref would also work here --
+  // kept consistent with every other beat's own "query by the shared class"
+  // approach on this screen.
+  useEffect(() => {
+    if (showBowlSpotlight) {
+      containerRef.current?.querySelector('.incoming-bowl')?.focus();
+    }
+  }, [showBowlSpotlight]);
+
+  // Fifth first-order-only walkthrough beat on this screen, picking up the
+  // instant showBowlSpotlight above ends (the matcha's actually landed in
+  // the cup) and staying up through the WHOLE send sequence -- confirming
+  // the send (cupSendStage leaving 'idle'), the glide to the zone
+  // ('carrying'), and the shrink/fade once it arrives ('vanishing') -- only
+  // retiring once the drink's actually gone (cupSendStage reaches 'sent').
+  // Per request, the pink tint needs to stay up for that entire carry
+  // rather than dropping the instant the player presses Enter/drops the
+  // cup, so the player can still see it (and the send zone, and the cup's
+  // own contents) exempted from the tint the whole way there -- see
+  // showAdvanceSpotlight further down for the sixth and actually-final beat
+  // that takes over once there's nothing left on screen to exempt.
+  const showSendSpotlight =
+    customerNumber === 1 && cupSpot === 'table' && !!cupMilk && bowlPoured && cupSendStage !== 'sent';
+
+  // Moves focus onto the ACTIVE cup itself the instant showSendSpotlight
+  // turns on -- the bowl (focused by the previous beat) stays focused
+  // through its own pour since it's the same persistent DOM node just
+  // repositioned via inline styles, so without this the halo would simply
+  // stay parked on the bowl instead of moving on to the actual next thing
+  // to act on. Can't just grab the first '.glass-cup' the way firstCup does
+  // elsewhere on this screen -- that's always the glass cup regardless of
+  // which type is actually in play, and by this beat the player may well
+  // have switched to plastic or the mug -- so this indexes into the same
+  // three-cup DOM order (['glass', 'plastic', 'mug'], matching that
+  // literal array's own order in the JSX below) by activeCup's own position
+  // in it instead.
+  useEffect(() => {
+    if (showSendSpotlight) {
+      const cups = containerRef.current
+        ? Array.from(containerRef.current.querySelectorAll('.glass-cup'))
+        : [];
+      cups[['glass', 'plastic', 'mug'].indexOf(activeCup)]?.focus();
+    }
+  }, [showSendSpotlight]);
+
+  // Sixth and actually-final first-order-only walkthrough beat, picking up
+  // the instant showSendSpotlight above ends (cupSendStage reaches 'sent'
+  // -- the cup, its contents, and the send zone have all stopped rendering
+  // by then, see their own conditional returns/render guards further down)
+  // and running for the rest of this screen's lifetime (this whole
+  // component unmounts once the player actually leaves for Toppings). Same
+  // "final beat hands the flashing baton to the current-step dot itself"
+  // shape as Matcha Making's own showStationAdvanceSpotlight -- there's
+  // nothing left on screen worth pointing at except the ProgressBar, so
+  // this exempts that instead (see spotlightExempt on <ProgressBar> further
+  // down) and its own new pink callout (milk-progress-callout below) takes
+  // over from the bar's old plain-text currentStepHint, same "new
+  // pink-styled callout replaces the old text hint for the first order
+  // only" treatment every other beat on this screen already uses -- orders
+  // 2/3 (customerNumber !== 1) never set this and keep that old hint
+  // exactly as before.
+  const showAdvanceSpotlight = customerNumber === 1 && cupSendStage === 'sent';
+
   // Matcha poured on top of the milk -- same shape as cupMilk, just its own
   // state so a fresh milk pour doesn't wipe out matcha already poured (or
   // vice versa). { grade: 'cafe-grade' | 'classic-grade' | 'ceremonial-grade' }
@@ -2156,7 +2319,9 @@ const MilkSelection = ({
               draggable={false}
               data-focusable
               tabIndex={0}
-              className={`station-item movable incoming-bowl${bowlDrag ? ' dragging' : ''}${pouringKey === 'bowl' ? ' settling' : ''}`}
+              className={`station-item movable incoming-bowl${bowlDrag ? ' dragging' : ''}${
+                pouringKey === 'bowl' ? ' settling' : ''
+              }${showBowlSpotlight ? ' milk-spotlight-exempt' : ''}`}
               style={{
                 left: `${(bowlDrag || bowlPos).left}%`,
                 top: `${(bowlDrag || bowlPos).top}%`,
@@ -2242,6 +2407,18 @@ const MilkSelection = ({
               alt={alt}
               className={`glass-cup${isActive && cupDragPos ? ' dragging' : ''}${
                 isActive && cupSendStage === 'vanishing' ? ' bowl-vanishing' : ''
+              }${
+                // showCupSpotlight exempts all three (still deciding which
+                // cup to use); showIceSpotlight/showBaseSpotlight/
+                // showBowlSpotlight/showSendSpotlight only ever need the
+                // ACTIVE one exempt (the cup itself, now that it's
+                // confirmed) -- the other two are back to being ordinary
+                // spares sitting on the shelf and should tint like
+                // everything else.
+                showCupSpotlight ||
+                (isActive && (showIceSpotlight || showBaseSpotlight || showBowlSpotlight || showSendSpotlight))
+                  ? ' milk-spotlight-exempt'
+                  : ''
               }`}
               data-focusable
               tabIndex={0}
@@ -2319,6 +2496,16 @@ const MilkSelection = ({
               aria-hidden={placed || undefined}
               className={`ice-cube${dragging ? ' dragging' : ''}${placed ? ' placed' : ''}${
                 leaving ? ' bowl-vanishing' : ''
+              }${
+                // showIceSpotlight exempts every cube (still being placed);
+                // showBaseSpotlight/showBowlSpotlight/showSendSpotlight only
+                // ever need the ones actually IN the cup exempt -- the rest
+                // still sitting in the box are back to being ordinary
+                // unplaced cubes and should tint like everything else.
+                showIceSpotlight ||
+                ((showBaseSpotlight || showBowlSpotlight || showSendSpotlight) && placed)
+                  ? ' milk-spotlight-exempt'
+                  : ''
               }`}
               // Once a cube's placed in the cup, it becomes fully inert to
               // the player and can never be focused at all -- no tabIndex
@@ -2379,7 +2566,9 @@ const MilkSelection = ({
             still-solid fill for a frame. */}
         {cupMilk && cupSpot === 'table' && cupSendStage !== 'sent' && (
           <div
-            className={`cup-milk-fill ${cupMilk.type}${cupSendStage === 'vanishing' ? ' bowl-vanishing' : ''}`}
+            className={`cup-milk-fill ${cupMilk.type}${cupSendStage === 'vanishing' ? ' bowl-vanishing' : ''}${
+              showBowlSpotlight || showSendSpotlight ? ' milk-spotlight-exempt' : ''
+            }`}
             aria-hidden="true"
             style={{
               left: `${cupMilkBox.left}%`,
@@ -2434,7 +2623,9 @@ const MilkSelection = ({
             the milk fill above. */}
         {cupMatcha && cupSpot === 'table' && cupSendStage !== 'sent' && (
           <div
-            className={`cup-matcha-fill ${cupMatcha.grade}${cupSendStage === 'vanishing' ? ' bowl-vanishing' : ''}`}
+            className={`cup-matcha-fill ${cupMatcha.grade}${cupSendStage === 'vanishing' ? ' bowl-vanishing' : ''}${
+              showSendSpotlight ? ' milk-spotlight-exempt' : ''
+            }`}
             aria-hidden="true"
             style={{
               left: `${cupMatchaBox.left}%`,
@@ -2459,7 +2650,9 @@ const MilkSelection = ({
               key={item.key}
               src={item.src}
               alt={`${item.alt}. Drag onto the cup to pour some in once it has ice in it, or select it and press Enter.`}
-              className={`milk-bottle${dragging ? ' dragging' : ''}${settling ? ' settling' : ''}`}
+              className={`milk-bottle${dragging ? ' dragging' : ''}${settling ? ' settling' : ''}${
+                showBaseSpotlight ? ' milk-spotlight-exempt' : ''
+              }`}
               data-focusable
               tabIndex={0}
               draggable={false}
@@ -2620,7 +2813,7 @@ const MilkSelection = ({
             elsewhere on this screen. */}
         {canSendDrink && (
           <div
-            className="make-drink-zone"
+            className={`make-drink-zone${showSendSpotlight ? ' milk-spotlight-exempt' : ''}`}
             aria-hidden="true"
             style={{
               left: `${SEND_DRINK_ZONE.left}%`,
@@ -2645,8 +2838,202 @@ const MilkSelection = ({
           // same opt-in highlightCurrentStep/currentStepHint props
           // MatchaMaking uses for its own matching beat.
           highlightCurrentStep={cupSendStage === 'sent'}
-          currentStepHint="Use your right arrow key to move on to the toppings station."
+          // Suppressed while showAdvanceSpotlight is up -- the new callout
+          // below (milk-progress-callout) takes over this job for the first
+          // order specifically. Orders 2/3 never set showAdvanceSpotlight
+          // (customerNumber !== 1), so they keep this exactly as before.
+          currentStepHint={
+            showAdvanceSpotlight ? null : 'use your right arrow key to move on to the toppings station.'
+          }
+          // Suppressed while showCupSpotlight is up so the current-step
+          // dot's own autoFocus doesn't grab the walkthrough's very first
+          // selection out from under the cup's own focus effect -- same
+          // pairing as Customer Ordering/Matcha Making's own
+          // suppressInitialFocus.
+          suppressInitialFocus={showCupSpotlight}
+          // Exempts the whole bar from the walkthrough spotlight once
+          // showAdvanceSpotlight is up -- the sixth beat's own target, once
+          // there's nothing else left on screen to point at (see that
+          // flag's own comment above).
+          spotlightExempt={showAdvanceSpotlight}
         />
+        {/* First-order-only walkthrough callout -- label + arrow sitting to
+            the LEFT of the cup shelf, arrow pointing right at it, same
+            "arrow at the edge closest to the target, text beside it" shape
+            as .matcha-order-callout/.matcha-scoop-callout in
+            MatchaMaking.css (both also sit beside their target with a
+            sideways-pointing arrow rather than above/below it). Positioned
+            off CUP_SPOTS.shelf's own left/top+height (see the milk-cup-
+            callout comment in MilkSelection.css for the actual numbers) so
+            it stays put regardless of which cup type happens to render
+            first. Gone the instant showCupSpotlight ends (a cup's actually
+            been confirmed onto the table). */}
+        {showCupSpotlight && (
+          <div className="milk-cup-callout">
+            <p className="milk-cup-callout-text">use the arrows and select right cup</p>
+            <svg
+              className="milk-cup-callout-arrow"
+              viewBox="0 0 40 24"
+              preserveAspectRatio="none"
+              aria-hidden="true"
+            >
+              <polygon points="38,12 2,2 2,22" />
+            </svg>
+          </div>
+        )}
+        {/* Second first-order-only walkthrough callout -- see
+            showIceSpotlight above. Text above, arrow below pointing down at
+            the ice box (same "text first, arrow last" shape as
+            .matcha-tin-callout in MatchaMaking.css, whose own target also
+            sits below it). Centered over the ice box's own two-column
+            cluster (ICE_BOX_SPOTS: left 7.18/12.93, each ICE_BOX_SIZE.width
+            5.03 wide, so 12.57 -- rounded to 12.6 -- centers over the
+            midpoint of both columns), sitting just clear of the box's own
+            top edge (73.30) -- eyeballed the same way every other exact
+            position in this project is, may need a small nudge once
+            actually seen against the live render. Gone the instant
+            showIceSpotlight ends (all 3 requested cubes actually placed in
+            the cup). */}
+        {showIceSpotlight && (
+          <div className="milk-ice-callout">
+            <p className="milk-ice-callout-text">place the right number of ice cubes in the cup</p>
+            <svg
+              className="milk-ice-callout-arrow"
+              viewBox="0 0 24 40"
+              preserveAspectRatio="none"
+              aria-hidden="true"
+            >
+              <polygon points="12,38 22,4 2,4" />
+            </svg>
+          </div>
+        )}
+        {/* Third first-order-only walkthrough callout -- see
+            showBaseSpotlight above. Row layout, arrow at the end pointing
+            right at the bottle row, same shape as .milk-cup-callout above
+            (and .matcha-order-callout/.matcha-scoop-callout in
+            MatchaMaking.css). Positioned to the bottle cluster's own left
+            (BOTTLE_ITEMS_BASE's own computed left/top+height in
+            MilkSelection.js works out to roughly left 69.5-96.5, top
+            45-83, so right: 32% lands just clear of its left edge, top: 64%
+            roughly levels with its vertical center) -- eyeballed the same
+            way every other exact position in this project is, may need a
+            small nudge once actually seen against the live render. Gone
+            the instant showBaseSpotlight ends (a base is actually poured). */}
+        {showBaseSpotlight && (
+          <div className="milk-base-callout">
+            <p className="milk-base-callout-text">use the arrows and select the right drink base</p>
+            <svg
+              className="milk-base-callout-arrow"
+              viewBox="0 0 40 24"
+              preserveAspectRatio="none"
+              aria-hidden="true"
+            >
+              <polygon points="38,12 2,2 2,22" />
+            </svg>
+          </div>
+        )}
+        {/* Fourth first-order-only walkthrough callout -- see
+            showBowlSpotlight above. Text above, arrow below pointing down
+            at the bowl (same "text first, arrow last" shape as
+            .milk-ice-callout/.matcha-tin-callout above). Positioned above
+            the bowl's own resting spot (INCOMING_BOWL_SPOT works out to
+            roughly left 23, top 57, width/height ~11.1/21.2 -- see that
+            constant's own comment further up -- so left: 28.5 centers over
+            its horizontal midpoint, top: 44 sits well clear of its own top
+            edge) -- eyeballed the same way every other exact position in
+            this project is, may need a small nudge once actually seen
+            against the live render. Gone the instant showBowlSpotlight ends
+            (the matcha's actually landed in the cup). */}
+        {showBowlSpotlight && (
+          <div className="milk-bowl-callout">
+            <p className="milk-bowl-callout-text">add the matcha mix</p>
+            <svg
+              className="milk-bowl-callout-arrow"
+              viewBox="0 0 24 40"
+              preserveAspectRatio="none"
+              aria-hidden="true"
+            >
+              <polygon points="12,38 22,4 2,4" />
+            </svg>
+          </div>
+        )}
+        {/* Fifth and final first-order-only walkthrough callout -- see
+            showSendSpotlight above. Text above, arrow below pointing down
+            at the cup, same "text first, arrow last" shape as
+            .milk-ice-callout/.milk-bowl-callout above. Positioned above the
+            cup's own table spot (CUP_SPOTS.table: left 40.30, top 40.10,
+            TABLE_SIZE.width 19.40 -- so left: 50 centers over its
+            horizontal midpoint, same for every cup type since plastic/mug's
+            own table spots are each re-centered around that same midpoint
+            -- top: 26 sits well clear of its own top edge) -- eyeballed the
+            same way every other exact position in this project is, may
+            need a small nudge once actually seen against the live render.
+            Gone the instant showSendSpotlight ends (the drink's actually
+            on its way to Toppings). */}
+        {showSendSpotlight && (
+          <div className="milk-send-callout">
+            <p className="milk-send-callout-text">select the drink to take it to the next station</p>
+            <svg
+              className="milk-send-callout-arrow"
+              viewBox="0 0 24 40"
+              preserveAspectRatio="none"
+              aria-hidden="true"
+            >
+              <polygon points="12,38 22,4 2,4" />
+            </svg>
+          </div>
+        )}
+        {/* Sixth and final beat of the walkthrough: once the drink has
+            actually been sent (cupSendStage === 'sent', i.e. the carry/
+            vanish animation has finished and we're one keypress away from
+            Toppings), the pink tint is still up (see showSendSpotlight's
+            own condition above, now extended through 'carrying'/'vanishing'
+            so there's no gap in the tint between beats) but there's nothing
+            left on THIS screen to point at -- the actual next action is the
+            right-arrow key itself, so this callout points down at the
+            ProgressBar/station dots (which spotlightExempt has punched a
+            hole through the tint for, see the ProgressBar call above)
+            instead of at any one element on the counter. Replaces the old
+            plain-text currentStepHint (now suppressed via the
+            showAdvanceSpotlight ? null : ... ternary above) with this same
+            pink-callout treatment so the whole walkthrough stays visually
+            consistent right up to the screen transition. */}
+        {showAdvanceSpotlight && (
+          <div className="milk-progress-callout">
+            <p className="milk-progress-callout-text">use the right arrow to move to the next station</p>
+            <svg
+              className="milk-progress-callout-arrow"
+              viewBox="0 0 24 40"
+              preserveAspectRatio="none"
+              aria-hidden="true"
+            >
+              <polygon points="12,38 22,4 2,4" />
+            </svg>
+          </div>
+        )}
+        {/* First-order-only walkthrough spotlight -- covers every beat on
+            this screen's walkthrough (showCupSpotlight, then
+            showIceSpotlight, then showBaseSpotlight, then showBowlSpotlight,
+            then showSendSpotlight, then showAdvanceSpotlight -- same
+            layered-onto-one-overlay shape Matcha Making uses for its own
+            longer walkthrough). Same flat, full-screen pink tint (no SVG
+            mask, no holes, just a div with a higher-z-index element punched
+            through it) as every other spotlight overlay in this project --
+            see .matcha-spotlight-overlay in MatchaMaking.css for the shared
+            reasoning. Rendered LAST (after ProgressBar and all six callouts
+            above, not before) so it actually paints over everything else on
+            this screen by default -- only whichever elements the active
+            beat exempts (see milk-spotlight-exempt on the cup/ice cube/
+            bottle/milk-fill/matcha-fill/bowl/send-zone classNames above, and
+            spotlightExempt on the ProgressBar call for the final beat)
+            punch through it via a higher z-index. pointer-events: none so it
+            never blocks input while it's up. */}
+        {(showCupSpotlight ||
+          showIceSpotlight ||
+          showBaseSpotlight ||
+          showBowlSpotlight ||
+          showSendSpotlight ||
+          showAdvanceSpotlight) && <div className="milk-spotlight-overlay" aria-hidden="true" />}
       </div>
     </div>
   );

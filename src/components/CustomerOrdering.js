@@ -203,12 +203,19 @@ function joinWithAndSegments(items) {
 // counter yet.
 function generateSpokenOrder(customerNumber, gradeOptions, baseOptions, toppingOptions) {
   const toppingCap = customerNumber === 1 ? pickRandom([2, 3]) : toppingOptions.length;
+  // First order only -- fixed at exactly 3 (rather than rolled) so the
+  // walkthrough's own ice-placement beat on Milk Selection (see
+  // showIceSpotlight/showBaseSpotlight there, which waits for exactly/at
+  // least 3 cubes) always has the same, predictable amount to actually
+  // teach; orders 2/3 keep rolling the full ICE_OPTIONS range, 0 included,
+  // same as before.
+  const ice = customerNumber === 1 ? 3 : pickRandom(ICE_OPTIONS).value;
   return {
     greeting: pickRandom(GREETINGS),
     teaspoons: pickRandom(TEASPOON_OPTIONS).value,
     grade: pickRandom(gradeOptions).value,
     cup: pickRandom(CUP_OPTIONS).value,
-    ice: pickRandom(ICE_OPTIONS).value,
+    ice,
     milk: pickRandom(baseOptions).value,
     toppings: pickRandomSubset(toppingOptions, toppingCap).map((t) => t.value),
   };

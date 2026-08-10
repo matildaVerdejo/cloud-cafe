@@ -1381,6 +1381,39 @@ const ToppingsStation = ({
   // cupMilk/cupMatcha. { key: 'guava-syrup' | 'mint-syrup' | 'honey-syrup' } | null.
   const [cupSyrup, setCupSyrup] = useState(null);
 
+  // ---- First-order-only walkthrough spotlight, Toppings' own first (and so
+  // far only) beat -- same shape as MilkSelection.js's showCupSpotlight/
+  // showBaseSpotlight/etc. and MatchaMaking.js's own beats: full-screen pink
+  // tint with everything except a few specific elements punched through via
+  // a higher z-index (topping-spotlight-exempt), plus a pre-focused element
+  // and a pink label pointing at it. Declared here, right after cupSyrup
+  // itself, rather than up near containerRef, since its condition reads
+  // cupSyrup and this file's own established convention (see MilkSelection.
+  // js's showBaseSpotlight comment for the TDZ bug that taught this) is to
+  // declare each beat right after the state it depends on rather than risk
+  // a ReferenceError from referencing a useState before its own declaration.
+  // Active for the whole time before the player's poured a syrup -- once
+  // cupSyrup is set (whichever syrup they picked), this beat is done; there's
+  // no further Toppings beat yet, so the pink tint just goes away entirely at
+  // that point (see the overlay's own render condition further down).
+  const showSyrupSpotlight = customerNumber === 1 && !cupSyrup;
+
+  // Pre-selects mint-syrup (SYRUP_PAIR_BASE's own first/leftmost item, see
+  // its own comment above) the moment this beat starts, same "focus the
+  // first exempted item so Enter/drag both work immediately with no extra
+  // navigation" reasoning as every other spotlight beat's own focus effect.
+  // Queried by its fixed data-topping-key rather than a shared CSS class
+  // (unlike Milk Selection's cup/ice/bottle queries) since every station
+  // item here -- cup, syrup, foam, powder alike -- shares the exact same
+  // .station-item.movable class, so a class-based query would risk grabbing
+  // the wrong one; data-topping-key is already this file's own established
+  // way of looking up one specific item (see the nav-graph effect above).
+  useEffect(() => {
+    if (showSyrupSpotlight) {
+      containerRef.current?.querySelector('[data-topping-key="mint-syrup"]')?.focus();
+    }
+  }, [showSyrupSpotlight]);
+
   // ---- Syrup pour balance minigame state -- see the big comment on
   // SYRUP_MIX_BAR_WIDTH above. Same ref-driven-direct-DOM-writes shape
   // MatchaMaking's own mixBallRef/mixPositionRef/mixVelocityRef use for the
@@ -2379,7 +2412,9 @@ const ToppingsStation = ({
               key={item.key}
               src={item.src}
               alt={`${item.alt}. Drag onto the drink to pour some in, or select it and press Enter. While it's pouring, use Left/Right to aim the stream.`}
-              className={`station-item movable${dragging ? ' dragging' : ''}${isPouring ? ' settling' : ''}`}
+              className={`station-item movable${dragging ? ' dragging' : ''}${isPouring ? ' settling' : ''}${
+                showSyrupSpotlight ? ' topping-spotlight-exempt' : ''
+              }`}
               data-focusable
               data-topping-key={item.key}
               tabIndex={0}
@@ -2584,7 +2619,7 @@ const ToppingsStation = ({
               }
               className={`station-item movable${drinkDragPos ? ' dragging' : ''}${
                 drinkSendStage === 'vanishing' ? ' bowl-vanishing' : ''
-              }`}
+              }${showSyrupSpotlight ? ' topping-spotlight-exempt' : ''}`}
               data-focusable
               data-topping-key="cup"
               tabIndex={0}
@@ -2636,7 +2671,9 @@ const ToppingsStation = ({
                   src="./IceCube.png"
                   alt=""
                   aria-hidden="true"
-                  className={`ice-cube placed${drinkSendStage === 'vanishing' ? ' bowl-vanishing' : ''}`}
+                  className={`ice-cube placed${drinkSendStage === 'vanishing' ? ' bowl-vanishing' : ''}${
+                    showSyrupSpotlight ? ' topping-spotlight-exempt' : ''
+                  }`}
                   style={{
                     left: `${iceSlotPos.left}%`,
                     top: `${iceSlotPos.top}%`,
@@ -2651,7 +2688,7 @@ const ToppingsStation = ({
               <div
                 className={`cup-milk-fill ${incomingDrink.milk.type}${
                   drinkSendStage === 'vanishing' ? ' bowl-vanishing' : ''
-                }`}
+                }${showSyrupSpotlight ? ' topping-spotlight-exempt' : ''}`}
                 aria-hidden="true"
                 style={{
                   left: `${incomingMilkBox.left}%`,
@@ -2665,7 +2702,7 @@ const ToppingsStation = ({
               <div
                 className={`cup-matcha-fill ${incomingDrink.matcha.grade}${
                   drinkSendStage === 'vanishing' ? ' bowl-vanishing' : ''
-                }`}
+                }${showSyrupSpotlight ? ' topping-spotlight-exempt' : ''}`}
                 aria-hidden="true"
                 style={{
                   left: `${incomingMatchaBox.left}%`,
@@ -2687,7 +2724,9 @@ const ToppingsStation = ({
                 matcha fill above so it paints over it. */}
             {cupFoam && renderedFoamBox && (
               <div
-                className={`cup-foam-fill ${cupFoam.key}${drinkSendStage === 'vanishing' ? ' bowl-vanishing' : ''}`}
+                className={`cup-foam-fill ${cupFoam.key}${drinkSendStage === 'vanishing' ? ' bowl-vanishing' : ''}${
+                  showSyrupSpotlight ? ' topping-spotlight-exempt' : ''
+                }`}
                 aria-hidden="true"
                 style={{
                   left: `${renderedFoamBox.left}%`,
@@ -2706,7 +2745,9 @@ const ToppingsStation = ({
                 Rendered after the body so it paints over that top edge. */}
             {cupFoam && renderedFoamCapBox && (
               <div
-                className={`cup-foam-cap ${cupFoam.key}${drinkSendStage === 'vanishing' ? ' bowl-vanishing' : ''}`}
+                className={`cup-foam-cap ${cupFoam.key}${drinkSendStage === 'vanishing' ? ' bowl-vanishing' : ''}${
+                  showSyrupSpotlight ? ' topping-spotlight-exempt' : ''
+                }`}
                 aria-hidden="true"
                 style={{
                   left: `${renderedFoamCapBox.left}%`,
@@ -2723,7 +2764,9 @@ const ToppingsStation = ({
                 a toppings-specific concept, not a Milk Selection one). */}
             {cupSyrup && incomingSyrupBox && (
               <div
-                className={`cup-syrup-fill ${cupSyrup.key}${drinkSendStage === 'vanishing' ? ' bowl-vanishing' : ''}`}
+                className={`cup-syrup-fill ${cupSyrup.key}${drinkSendStage === 'vanishing' ? ' bowl-vanishing' : ''}${
+                  showSyrupSpotlight ? ' topping-spotlight-exempt' : ''
+                }`}
                 aria-hidden="true"
                 style={{
                   left: `${incomingSyrupBox.left}%`,
@@ -2745,7 +2788,7 @@ const ToppingsStation = ({
                   key={index}
                   className={`cup-powder-fleck ${cupPowder.key}${
                     drinkSendStage === 'vanishing' ? ' bowl-vanishing' : ''
-                  }`}
+                  }${showSyrupSpotlight ? ' topping-spotlight-exempt' : ''}`}
                   aria-hidden="true"
                   style={{ left: `${pos.left}%`, top: `${pos.top}%` }}
                 />
@@ -2762,7 +2805,9 @@ const ToppingsStation = ({
                 alt=""
                 aria-hidden="true"
                 draggable={false}
-                className={`cup-leaf-garnish${drinkSendStage === 'vanishing' ? ' bowl-vanishing' : ''}`}
+                className={`cup-leaf-garnish${drinkSendStage === 'vanishing' ? ' bowl-vanishing' : ''}${
+                  showSyrupSpotlight ? ' topping-spotlight-exempt' : ''
+                }`}
                 style={{
                   left: `${incomingLeafBox.left}%`,
                   top: `${incomingLeafBox.top}%`,
@@ -3010,6 +3055,49 @@ const ToppingsStation = ({
             <span className="spoon-pour-grain spoon-pour-grain-4" style={{ background: powderPourColor }} />
           </div>
         )}
+        {/* First-order-only walkthrough callout, syrup pair -- see
+            showSyrupSpotlight above. Row layout, arrow at the START pointing
+            LEFT at the syrup pair (opposite orientation from Milk
+            Selection's own .milk-cup-callout/.milk-base-callout, which sit
+            to the target's left and point right -- here the label sits to
+            the target's RIGHT per request, so the arrow has to point the
+            other way), same real-SVG-triangle-arrow shape as every other
+            walkthrough callout in this project either way. Positioned off
+            SYRUP_ITEMS_BASE's own layout math (mint-syrup left: 2.01,
+            guava-syrup right edge lands at ~19.7, both sharing SYRUP_TOP: 12
+            and TOPPING_HEIGHT: 30) -- left: 22% clears the pair's own right
+            edge, top: 27% levels with its vertical center
+            (SYRUP_TOP + TOPPING_HEIGHT / 2). Eyeballed the same way every
+            other exact position in this project is, may need a small nudge
+            once actually seen against the live render. Gone the instant
+            showSyrupSpotlight ends (a syrup's been poured). */}
+        {showSyrupSpotlight && (
+          <div className="topping-syrup-callout">
+            <svg
+              className="topping-syrup-callout-arrow"
+              viewBox="0 0 40 24"
+              preserveAspectRatio="none"
+              aria-hidden="true"
+            >
+              <polygon points="2,12 38,2 38,22" />
+            </svg>
+            <p className="topping-syrup-callout-text">pick the right syrup</p>
+          </div>
+        )}
+        {/* First-order-only walkthrough spotlight -- covers this screen's
+            only beat so far (showSyrupSpotlight). Same flat, full-screen
+            pink tint (no SVG mask, no holes, just a div with a higher-
+            z-index element punched through it) as every other spotlight
+            overlay in this project -- see .matcha-spotlight-overlay in
+            MatchaMaking.css for the shared reasoning. Rendered LAST (after
+            ProgressBar and the callout above, not before) so it actually
+            paints over everything else on this screen by default -- only
+            whichever elements this beat exempts (see topping-spotlight-
+            exempt on the cup/ice cube/milk-fill/matcha-fill/foam-fill/foam-
+            cap/syrup-fill/powder-fleck/leaf-garnish/syrup-image classNames
+            above) punch through it via a higher z-index. pointer-events:
+            none so it never blocks input while it's up. */}
+        {showSyrupSpotlight && <div className="topping-spotlight-overlay" aria-hidden="true" />}
         <OrderReceiptButton order={order} />
         <ProgressBar
           activeStep={activeStep}
@@ -3023,7 +3111,13 @@ const ToppingsStation = ({
           // props Milk Selection/MatchaMaking use for their own matching
           // beat.
           highlightCurrentStep={drinkSendStage === 'sent'}
-          currentStepHint="Use your right arrow key to move on to the serving station."
+          currentStepHint="use your right arrow key to move on to the serving station."
+          // Suppresses ProgressBar's own mount-time autoFocus while
+          // showSyrupSpotlight is up, same "the spotlight's own focus effect
+          // owns where focus lands for this beat, not the progress dots"
+          // reasoning as every other station's first walkthrough beat (see
+          // showCupSpotlight in MilkSelection.js).
+          suppressInitialFocus={showSyrupSpotlight}
         />
       </div>
     </div>
