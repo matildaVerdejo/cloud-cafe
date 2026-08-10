@@ -835,7 +835,7 @@
   letter-spacing: 0.01em;
   pointer-events: none;
   z-index: 5;
-  animation: matchaTinHintIn 0.3s ease-out both, matchaTinHintPulse 2s ease-in-out 0.3s infinite;
+  animation: matchaTinHintIn 0.3s ease-out both;
 }
 
 @keyframes matchaTinHintIn {
@@ -889,14 +889,16 @@
   }
 }
 
-@keyframes matchaTinHintPulse {
-  0%,
-  100% {
-    box-shadow: 0 0 0 0 rgba(90, 138, 79, 0.35);
-  }
-  50% {
-    box-shadow: 0 0 0 6px rgba(90, 138, 79, 0);
-  }
+/* Pulsing ring, ::after instead of animating box-shadow directly -- see
+   hintRingPulse's own big comment in App.css. */
+.matcha-tin-hint::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  border: min(3px, 0.16vw) solid rgba(90, 138, 79, 0.55);
+  animation: hintRingPulse 2s ease-in-out 0.3s infinite;
 }
 
 /* Movable items (kettle, bowl, whisk): draggable anywhere on the counter,
@@ -980,7 +982,7 @@
   letter-spacing: 0.01em;
   pointer-events: none;
   z-index: 6;
-  animation: kettleHintIn 0.3s ease-out both, kettleHintPulse 2s ease-in-out 0.3s infinite;
+  animation: kettleHintIn 0.3s ease-out both;
 }
 
 @keyframes kettleHintIn {
@@ -994,14 +996,16 @@
   }
 }
 
-@keyframes kettleHintPulse {
-  0%,
-  100% {
-    box-shadow: 0 0 0 0 rgba(90, 138, 79, 0.35);
-  }
-  50% {
-    box-shadow: 0 0 0 6px rgba(90, 138, 79, 0);
-  }
+/* Pulsing ring, ::after instead of animating box-shadow directly -- see
+   hintRingPulse's own big comment in App.css. */
+.kettle-hint::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  border: min(3px, 0.16vw) solid rgba(90, 138, 79, 0.55);
+  animation: hintRingPulse 2s ease-in-out 0.3s infinite;
 }
 
 /* Eleventh highlight beat (see showWhiskHint in MatchaMaking.js) -- flashes
@@ -1049,7 +1053,7 @@
   letter-spacing: 0.01em;
   pointer-events: none;
   z-index: 6;
-  animation: whiskHintIn 0.3s ease-out both, whiskHintPulse 2s ease-in-out 0.3s infinite;
+  animation: whiskHintIn 0.3s ease-out both;
 }
 
 @keyframes whiskHintIn {
@@ -1063,14 +1067,16 @@
   }
 }
 
-@keyframes whiskHintPulse {
-  0%,
-  100% {
-    box-shadow: 0 0 0 0 rgba(90, 138, 79, 0.35);
-  }
-  50% {
-    box-shadow: 0 0 0 6px rgba(90, 138, 79, 0);
-  }
+/* Pulsing ring, ::after instead of animating box-shadow directly -- see
+   hintRingPulse's own big comment in App.css. */
+.whisk-hint::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  border: min(3px, 0.16vw) solid rgba(90, 138, 79, 0.55);
+  animation: hintRingPulse 2s ease-in-out 0.3s infinite;
 }
 
 /* Thirteenth highlight beat (see showBowlHint in MatchaMaking.js) -- flashes
@@ -1120,7 +1126,7 @@
   letter-spacing: 0.01em;
   pointer-events: none;
   z-index: 6;
-  animation: bowlHintIn 0.3s ease-out both, bowlHintPulse 2s ease-in-out 0.3s infinite;
+  animation: bowlHintIn 0.3s ease-out both;
 }
 
 @keyframes bowlHintIn {
@@ -1134,14 +1140,16 @@
   }
 }
 
-@keyframes bowlHintPulse {
-  0%,
-  100% {
-    box-shadow: 0 0 0 0 rgba(90, 138, 79, 0.35);
-  }
-  50% {
-    box-shadow: 0 0 0 6px rgba(90, 138, 79, 0);
-  }
+/* Pulsing ring, ::after instead of animating box-shadow directly -- see
+   hintRingPulse's own big comment in App.css. */
+.bowl-hint::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  border: min(3px, 0.16vw) solid rgba(90, 138, 79, 0.55);
+  animation: hintRingPulse 2s ease-in-out 0.3s infinite;
 }
 
 /* .bowl-vanishing itself (shared by the bowl and the whisked-liquid overlay
@@ -1291,20 +1299,19 @@
    focus-ring placeholder, on-glow placeholder) rather than needing its own
    zone-style override. Same light-green (rgb(130, 190, 110)) two-layer
    soft glow as every other beat. */
-.heater-button.heater-button-highlight {
-  animation: heaterButtonHaloBlink 1.1s ease-in-out infinite;
-}
-
-@keyframes heaterButtonHaloBlink {
-  0%,
-  100% {
-    box-shadow: 0 2px 3px rgba(0, 0, 0, 0.3), 0 0 0 0 rgba(255, 255, 255, 0), 0 0 0 0 rgba(255, 170, 130, 0),
-      0 0 30px 12px rgba(130, 190, 110, 0.9), 0 0 65px 26px rgba(130, 190, 110, 0.55);
-  }
-  50% {
-    box-shadow: 0 2px 3px rgba(0, 0, 0, 0.3), 0 0 0 0 rgba(255, 255, 255, 0), 0 0 0 0 rgba(255, 170, 130, 0),
-      0 0 0 0 rgba(130, 190, 110, 0), 0 0 0 0 rgba(130, 190, 110, 0);
-  }
+/* Glow now lives on a ::after pseudo-element (heater-button is already
+   position: absolute above) instead of animating this rule's own
+   box-shadow directly -- see haloGlowFade's own big comment in App.css.
+   The button's own resting shadow/placeholder layers (declared on
+   .heater-button itself above) stay untouched and constant. */
+.heater-button.heater-button-highlight::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  box-shadow: 0 0 30px 12px rgba(130, 190, 110, 0.9), 0 0 65px 26px rgba(130, 190, 110, 0.55);
+  animation: haloGlowFade 1.1s ease-in-out infinite;
 }
 
 /* Hint label for the same beat -- anchored below the heater plate/temp bar
@@ -1329,7 +1336,7 @@
   letter-spacing: 0.01em;
   pointer-events: none;
   z-index: 6;
-  animation: heaterButtonHintIn 0.3s ease-out both, heaterButtonHintPulse 2s ease-in-out 0.3s infinite;
+  animation: heaterButtonHintIn 0.3s ease-out both;
 }
 
 @keyframes heaterButtonHintIn {
@@ -1343,14 +1350,16 @@
   }
 }
 
-@keyframes heaterButtonHintPulse {
-  0%,
-  100% {
-    box-shadow: 0 0 0 0 rgba(90, 138, 79, 0.35);
-  }
-  50% {
-    box-shadow: 0 0 0 6px rgba(90, 138, 79, 0);
-  }
+/* Pulsing ring, ::after instead of animating box-shadow directly -- see
+   hintRingPulse's own big comment in App.css. */
+.heater-button-hint::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  border: min(3px, 0.16vw) solid rgba(90, 138, 79, 0.55);
+  animation: hintRingPulse 2s ease-in-out 0.3s infinite;
 }
 
 /* Temperature gauge -- sits on the counter/table in front of the heater
@@ -1428,7 +1437,7 @@
   letter-spacing: 0.01em;
   pointer-events: none;
   z-index: 6;
-  animation: heaterTempBarHintIn 0.3s ease-out both, heaterTempBarHintPulse 2s ease-in-out 0.3s infinite;
+  animation: heaterTempBarHintIn 0.3s ease-out both;
 }
 
 @keyframes heaterTempBarHintIn {
@@ -1442,14 +1451,16 @@
   }
 }
 
-@keyframes heaterTempBarHintPulse {
-  0%,
-  100% {
-    box-shadow: 0 0 0 0 rgba(90, 138, 79, 0.35);
-  }
-  50% {
-    box-shadow: 0 0 0 6px rgba(90, 138, 79, 0);
-  }
+/* Pulsing ring, ::after instead of animating box-shadow directly -- see
+   hintRingPulse's own big comment in App.css. */
+.heater-temp-bar-hint::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  border: min(3px, 0.16vw) solid rgba(90, 138, 79, 0.55);
+  animation: hintRingPulse 2s ease-in-out 0.3s infinite;
 }
 
 /* Solid light-blue fill, hidden (scaleX 0, anchored to the left edge)
@@ -1612,19 +1623,21 @@
    every other beat, with the bar's own two resting inset layers kept as
    constant so they don't vanish between flashes. */
 .scoop-bar.scoop-bar-highlight {
-  animation: scoopBarHaloBlink 1.1s ease-in-out infinite;
 }
 
-@keyframes scoopBarHaloBlink {
-  0%,
-  100% {
-    box-shadow: inset 0 1px 2px rgba(255, 255, 255, 0.35), inset 0 -1px 2px rgba(0, 0, 0, 0.2),
-      0 0 30px 12px rgba(130, 190, 110, 0.9), 0 0 65px 26px rgba(130, 190, 110, 0.55);
-  }
-  50% {
-    box-shadow: inset 0 1px 2px rgba(255, 255, 255, 0.35), inset 0 -1px 2px rgba(0, 0, 0, 0.2),
-      0 0 0 0 rgba(130, 190, 110, 0), 0 0 0 0 rgba(130, 190, 110, 0);
-  }
+/* Glow now lives on a ::after pseudo-element (.scoop-bar is already
+   position: absolute above, no extra positioning needed here) instead of
+   animating this rule's own box-shadow directly -- see haloGlowFade's own
+   big comment in App.css. The bar's own two resting inset bevel layers
+   (declared on .scoop-bar itself above) stay untouched and constant. */
+.scoop-bar.scoop-bar-highlight::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  box-shadow: 0 0 30px 12px rgba(130, 190, 110, 0.9), 0 0 65px 26px rgba(130, 190, 110, 0.55);
+  animation: haloGlowFade 1.1s ease-in-out infinite;
 }
 
 /* Hint label for the same beat -- anchored from the right edge (not
@@ -1652,7 +1665,7 @@
   letter-spacing: 0.01em;
   pointer-events: none;
   z-index: 6;
-  animation: scoopBarHintIn 0.3s ease-out both, scoopBarHintPulse 2s ease-in-out 0.3s infinite;
+  animation: scoopBarHintIn 0.3s ease-out both;
 }
 
 @keyframes scoopBarHintIn {
@@ -1666,14 +1679,16 @@
   }
 }
 
-@keyframes scoopBarHintPulse {
-  0%,
-  100% {
-    box-shadow: 0 0 0 0 rgba(90, 138, 79, 0.35);
-  }
-  50% {
-    box-shadow: 0 0 0 6px rgba(90, 138, 79, 0);
-  }
+/* Pulsing ring, ::after instead of animating box-shadow directly -- see
+   hintRingPulse's own big comment in App.css. */
+.scoop-bar-hint::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  border: min(3px, 0.16vw) solid rgba(90, 138, 79, 0.55);
+  animation: hintRingPulse 2s ease-in-out 0.3s infinite;
 }
 
 /* Clips the fill + marker ticks to the bar's own rounded shape (see the JSX
@@ -1876,7 +1891,7 @@
   letter-spacing: 0.01em;
   pointer-events: none;
   z-index: 6;
-  animation: bigSpoonHintIn 0.3s ease-out both, bigSpoonHintPulse 2s ease-in-out 0.3s infinite;
+  animation: bigSpoonHintIn 0.3s ease-out both;
 }
 
 @keyframes bigSpoonHintIn {
@@ -1890,14 +1905,16 @@
   }
 }
 
-@keyframes bigSpoonHintPulse {
-  0%,
-  100% {
-    box-shadow: 0 0 0 0 rgba(90, 138, 79, 0.35);
-  }
-  50% {
-    box-shadow: 0 0 0 6px rgba(90, 138, 79, 0);
-  }
+/* Pulsing ring, ::after instead of animating box-shadow directly -- see
+   hintRingPulse's own big comment in App.css. */
+.big-spoon-hint::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  border: min(3px, 0.16vw) solid rgba(90, 138, 79, 0.55);
+  animation: hintRingPulse 2s ease-in-out 0.3s infinite;
 }
 
 /* Falling-powder pour effect (see pourLeft/pourTop/pourHeight and
@@ -2099,6 +2116,31 @@
   animation: bowlVanish 0.35s ease-in forwards;
 }
 
+/* Once the carried-over bowl actually pours its matcha into the cup on
+   MilkSelection (bowlPoured in MilkSelection.js, set the instant the pour
+   lands -- see beginPour('bowl')/the pourStage 'pouring' effect there),
+   this overlay fades out and stays hidden for the rest of the visit -- the
+   bowl itself (the plain Bowl.png image, a sibling element) is left on
+   screen empty rather than still showing a full pool of matcha it no
+   longer holds. Opacity-only, no shrink (unlike .bowl-vanishing above,
+   which animates the bowl leaving MatchaMaking's own screen entirely) --
+   the bowl stays put here, just empty. Declared after .bowl-whisked-liquid
+   so it overrides that rule's own `animation` (growFromCenter) on the same
+   equal-specificity/later-in-file tiebreak .bowl-vanishing above relies
+   on. */
+.bowl-whisked-liquid.emptied {
+  animation: bowlLiquidEmpty 0.4s ease-in forwards;
+}
+
+@keyframes bowlLiquidEmpty {
+  0% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
 @keyframes bowlVanish {
   0% {
     opacity: 1;
@@ -2170,7 +2212,7 @@
   letter-spacing: 0.01em;
   pointer-events: none;
   z-index: 6;
-  animation: mixBarHintIn 0.3s ease-out both, mixBarHintPulse 2s ease-in-out 0.3s infinite;
+  animation: mixBarHintIn 0.3s ease-out both;
 }
 
 @keyframes mixBarHintIn {
@@ -2184,14 +2226,16 @@
   }
 }
 
-@keyframes mixBarHintPulse {
-  0%,
-  100% {
-    box-shadow: 0 0 0 0 rgba(90, 138, 79, 0.35);
-  }
-  50% {
-    box-shadow: 0 0 0 6px rgba(90, 138, 79, 0);
-  }
+/* Pulsing ring, ::after instead of animating box-shadow directly -- see
+   hintRingPulse's own big comment in App.css. */
+.mix-bar-hint::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  border: min(3px, 0.16vw) solid rgba(90, 138, 79, 0.55);
+  animation: hintRingPulse 2s ease-in-out 0.3s infinite;
 }
 
 /* The green target zone the ball has to be kept inside of (see
@@ -2387,7 +2431,7 @@
   letter-spacing: 0.02em;
   pointer-events: none;
   z-index: 5;
-  animation: makeDrinkZoneIn 0.3s ease-out both, makeDrinkZonePulse 2.2s ease-in-out 0.3s infinite;
+  animation: makeDrinkZoneIn 0.3s ease-out both;
 }
 
 @keyframes makeDrinkZoneIn {
@@ -2401,12 +2445,16 @@
   }
 }
 
-@keyframes makeDrinkZonePulse {
-  0%, 100% {
-    box-shadow: 0 0 0 0 rgba(90, 138, 79, 0.35);
-  }
-  50% {
-    box-shadow: 0 0 14px 5px rgba(90, 138, 79, 0.35);
-  }
+/* Pulsing ring, ::after instead of animating box-shadow directly -- see
+   hintRingPulse's own big comment in App.css. Keeps this element's own
+   2.2s timing rather than the shared keyframe's usual 2s. */
+.make-drink-zone::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  border: min(3px, 0.16vw) solid rgba(90, 138, 79, 0.55);
+  animation: hintRingPulse 2.2s ease-in-out 0.3s infinite;
 }
 

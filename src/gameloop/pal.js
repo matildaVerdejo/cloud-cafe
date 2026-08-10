@@ -50,7 +50,10 @@ export function getActionFromKeyEvent(e) {
 // press must equal one activation. Call shouldDebounce(e) and skip the action
 // when it returns true.
 let lastEnterAt = 0;
-const ENTER_DEBOUNCE_MS = 350;
+// GameLoop's own TV gameplay envelope recommends ~250ms here (remotes
+// repeat Enter; one physical press should read as one action without
+// feeling laggy on the couch) -- was 350ms, tightened to match.
+const ENTER_DEBOUNCE_MS = 250;
 
 export function shouldDebounceEnter(e) {
   if (e.repeat) return true;

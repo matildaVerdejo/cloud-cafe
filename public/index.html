@@ -25,9 +25,80 @@
       Learn how to configure a non-root public URL by running `npm run build`.
     -->
     <title>Cloud Cafe</title>
+    <!-- Immediate, JS-free splash paint (GameLoop CTV startup policy:
+         "render splash immediately from inline HTML/CSS before heavy app
+         JS"). This is what actually shows on a slow device during the gap
+         between "page requested" and "React has downloaded, parsed, and
+         mounted" -- without it, that gap is a blank white/black screen on
+         a weak Fire TV Stick. Gradient matches SplashScreen.css's own
+         .splash-container exactly (#eef8e6 -> #dcefd0 -> #c9e4bd) so the
+         handoff to the real (React-rendered) SplashScreen is invisible --
+         same background, no flash/pop. System font stack only (no
+         @font-face request here) so this paints with zero network
+         dependency of its own; the real Pixelify Sans swap-in happens once
+         SplashScreen.css loads with the rest of the app. Motion is
+         opacity/transform only (compositor-friendly, no layout/paint cost)
+         per tv-universal's own CTV performance gate. Removed via
+         document.getElementById('pre-splash')?.remove() in App.js's own
+         bridge-init effect, the same moment sendAppReady() fires -- i.e.
+         the instant the real SplashScreen has painted underneath it. -->
+    <style>
+      #pre-splash {
+        position: fixed;
+        inset: 0;
+        z-index: 9999;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        background: linear-gradient(180deg, #eef8e6 0%, #dcefd0 55%, #c9e4bd 100%);
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      }
+      #pre-splash-title {
+        margin-bottom: 24px;
+        font-size: 48px;
+        font-weight: 700;
+        letter-spacing: 0.02em;
+        color: #2f4a28;
+        text-transform: lowercase;
+      }
+      #pre-splash-dots {
+        display: flex;
+        gap: 10px;
+      }
+      #pre-splash-dots span {
+        width: 14px;
+        height: 14px;
+        border-radius: 50%;
+        background: #5a8a4f;
+        animation: preSplashPulse 1.2s ease-in-out infinite;
+      }
+      #pre-splash-dots span:nth-child(2) {
+        animation-delay: 0.15s;
+      }
+      #pre-splash-dots span:nth-child(3) {
+        animation-delay: 0.3s;
+      }
+      @keyframes preSplashPulse {
+        0%,
+        80%,
+        100% {
+          opacity: 0.25;
+          transform: scale(0.85);
+        }
+        40% {
+          opacity: 1;
+          transform: scale(1.1);
+        }
+      }
+    </style>
   </head>
   <body>
     <noscript>You need to enable JavaScript to run this app.</noscript>
+    <div id="pre-splash" aria-hidden="true">
+      <div id="pre-splash-title">cloud cafe</div>
+      <div id="pre-splash-dots"><span></span><span></span><span></span></div>
+    </div>
     <div id="root"></div>
     <!--
       This HTML file is a template.

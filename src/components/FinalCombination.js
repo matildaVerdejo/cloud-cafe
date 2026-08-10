@@ -253,7 +253,7 @@ const FinalCombination = ({
 
       <div className="final-combination-content">
         <img
-          src="./Serving.png"
+          src="./Serving.jpg"
           alt="Serving counter with an empty plate, ready to serve the finished drink"
           className="serving-art"
         />

@@ -221,21 +221,24 @@
    highlight beat across the app (CustomerOrdering.css has the full set:
    .ordering-speech-bubble.pending-ack, .ordering-play-button.tablet-
    highlight, .order-modal.receipt-highlight, .order-place-button's own),
-   with .current's own resting ring (0 0 0 5px rgba(90,138,79,0.25)) kept
-   as the constant layer so it doesn't vanish between flashes. */
+   with .current's own resting ring (0 0 0 5px rgba(90,138,79,0.25),
+   declared on .progress-step-dot itself further up -- untouched here)
+   kept as the constant layer so it doesn't vanish between flashes.
+   Glow now lives on a ::after pseudo-element instead of animating this
+   rule's own box-shadow directly -- see haloGlowFade's own big comment in
+   App.css for why. */
 .progress-step.station-highlight .progress-step-dot {
-  animation: stationHaloBlink 1.1s ease-in-out infinite;
+  position: relative;
 }
 
-@keyframes stationHaloBlink {
-  0%,
-  100% {
-    box-shadow: 0 0 0 5px rgba(90, 138, 79, 0.25), 0 0 30px 12px rgba(130, 190, 110, 0.9),
-      0 0 65px 26px rgba(130, 190, 110, 0.55);
-  }
-  50% {
-    box-shadow: 0 0 0 5px rgba(90, 138, 79, 0.25), 0 0 0 0 rgba(130, 190, 110, 0), 0 0 0 0 rgba(130, 190, 110, 0);
-  }
+.progress-step.station-highlight .progress-step-dot::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  box-shadow: 0 0 30px 12px rgba(130, 190, 110, 0.9), 0 0 65px 26px rgba(130, 190, 110, 0.55);
+  animation: haloGlowFade 1.1s ease-in-out infinite;
 }
 
 /* Hint label for the same fourth beat -- stacks above the bar inside
@@ -245,6 +248,7 @@
    .ordering-tablet-hint/.ordering-receipt-hint in CustomerOrdering.css,
    .make-drink-zone in MatchaMaking.css). */
 .progress-station-hint {
+  position: relative;
   margin: 0;
   box-sizing: border-box;
   max-width: min(520px, 40vw);
@@ -259,7 +263,7 @@
   text-align: center;
   letter-spacing: 0.01em;
   pointer-events: none;
-  animation: stationHintIn 0.3s ease-out both, stationHintPulse 2s ease-in-out 0.3s infinite;
+  animation: stationHintIn 0.3s ease-out both;
 }
 
 @keyframes stationHintIn {
@@ -273,12 +277,14 @@
   }
 }
 
-@keyframes stationHintPulse {
-  0%,
-  100% {
-    box-shadow: 0 0 0 0 rgba(90, 138, 79, 0.35);
-  }
-  50% {
-    box-shadow: 0 0 0 6px rgba(90, 138, 79, 0);
-  }
+/* Pulsing ring, ::after instead of animating this element's own box-shadow
+   -- see hintRingPulse's own big comment in App.css. */
+.progress-station-hint::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  border: min(3px, 0.16vw) solid rgba(90, 138, 79, 0.55);
+  animation: hintRingPulse 2s ease-in-out 0.3s infinite;
 }

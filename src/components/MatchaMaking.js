@@ -2441,7 +2441,7 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
 
       <div className="matcha-making-content">
         <img
-          src="./MatchaBaseStation.png"
+          src="./MatchaBaseStation.jpg"
           alt="Matcha base station counter"
           className="matcha-making-art"
         />

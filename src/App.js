@@ -1,13 +1,8 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, Suspense, lazy } from 'react';
 import './App.css';
 import SplashScreen from './components/SplashScreen';
 import SettingsPanel from './components/SettingsPanel';
 import MainPage from './components/MainPage';
-import CustomerOrdering from './components/CustomerOrdering';
-import MatchaMaking from './components/MatchaMaking';
-import MilkSelection from './components/MilkSelection';
-import ToppingsStation from './components/ToppingsStation';
-import FinalCombination from './components/FinalCombination';
 import { PROGRESS_STEPS, ORDERS_PER_SESSION } from './components/ProgressBar';
 // Debug overlay is currently unused (see the commented-out JSX below) --
 // import left commented out too so CRA's CI lint pass (unused-import) doesn't
@@ -26,12 +21,48 @@ import {
   isEmbedded,
 } from './gameloop/bridge';
 
+// The five station screens are lazy-loaded (GameLoop CTV startup policy:
+// "code-split initial route/screen; preload/prefetch only after shell is
+// visible") -- each is 1,000-2,000+ lines and none of them are needed for
+// first paint (Splash and Main, both still eager above, are). On a cold
+// start this keeps the initial JS bundle to just what's needed to reach
+// Play; each station's own chunk then downloads in the background while
+// the player is still busy on the *previous* screen (React kicks off the
+// fetch for a lazy component as soon as it's about to be rendered, i.e.
+// the moment currentPage flips to it below -- by the time that screen's
+// JSX actually needs to mount, the chunk has usually already arrived).
+// See .route-loading in App.css for the brief-gap fallback UI, and each
+// screen's own <Suspense> wrapper below.
+const CustomerOrdering = lazy(() => import('./components/CustomerOrdering'));
+const MatchaMaking = lazy(() => import('./components/MatchaMaking'));
+const MilkSelection = lazy(() => import('./components/MilkSelection'));
+const ToppingsStation = lazy(() => import('./components/ToppingsStation'));
+const FinalCombination = lazy(() => import('./components/FinalCombination'));
+
 // Same order as the ProgressBar's PROGRESS_STEPS, imported from the same
 // place so the bar and this state machine can't drift apart.
 const STEP_KEYS = PROGRESS_STEPS.map((step) => step.key);
 // How much each press of the Settings panel's volume +/- buttons changes
 // musicVolume by -- 10 presses from empty reaches full volume.
 const VOLUME_STEP = 0.1;
+
+// Shared Suspense fallback for the five lazy station screens above -- a
+// static, dependency-free element (module scope, not recreated per render)
+// wrapped in its own .page-slide the same way every real screen below is,
+// so it sits in exactly the same slot with no layout shift when the real
+// screen's chunk finishes loading and swaps in. See .route-loading in
+// App.css for the actual look.
+const routeLoadingFallback = (
+  <div className="page-slide">
+    <div className="route-loading" aria-hidden="true">
+      <div className="route-loading-dots">
+        <span />
+        <span />
+        <span />
+      </div>
+    </div>
+  </div>
+);
 
 function App() {
   // Splash is the very first thing shown, ahead of MainPage's own
@@ -188,6 +219,13 @@ function App() {
   // ---- GameLoop V1 bridge setup -------------------------------------------
   useEffect(() => {
     initGameLoopBridge();
+    // Hands off from index.html's own inline pre-splash (see that file's
+    // big comment on #pre-splash) to this real, React-rendered SplashScreen
+    // -- both use the exact same gradient, so this removal is invisible.
+    // Runs unconditionally on every mount (there's only ever one App mount
+    // per page load), same "fires the instant there's ANY presentable UI"
+    // timing sendAppReady below already relies on.
+    document.getElementById('pre-splash')?.remove();
     // SplashScreen is the first screen now (see currentPage's own initial
     // value above) and is already painted by the time this effect runs --
     // this effect doesn't depend on currentPage at all, so it fires the
@@ -525,7 +563,7 @@ function App() {
       // product decision, this session's ad breaks are exactly PREROLL (on
       // Play) plus one between each pair of consecutive orders (see
       // FinalCombination's own onStartNextOrder/adGate props below), which
-      // is ORDERS_PER_SESSION - 1 of them. The 7th order's completion is
+      // is ORDERS_PER_SESSION - 1 of them. The final order's completion is
       // the end of the session, not a boundary between two orders, so
       // nothing fires here.
       setCurrentPage('main');
@@ -569,75 +607,86 @@ function App() {
           </div>
         )}
         {currentPage === 'ordering' && (
-          <div className="page-slide">
-            <CustomerOrdering
-              activeStep="ordering"
-              onPlaceOrder={setCurrentOrder}
-              onOrderScored={setOrderTakingScore}
-              {...progressProps}
-            />
-          </div>
+          <Suspense fallback={routeLoadingFallback}>
+            <div className="page-slide">
+              <CustomerOrdering
+                activeStep="ordering"
+                onPlaceOrder={setCurrentOrder}
+                onOrderScored={setOrderTakingScore}
+                {...progressProps}
+              />
+            </div>
+          </Suspense>
         )}
         {currentPage === 'matcha-making' && (
-          <div className="page-slide">
-            <MatchaMaking
-              activeStep="matcha-making"
-              order={currentOrder}
-              onSendToMilk={setMatchaBowl}
-              onScored={setMatchaScore}
-              {...progressProps}
-            />
-          </div>
+          <Suspense fallback={routeLoadingFallback}>
+            <div className="page-slide">
+              <MatchaMaking
+                activeStep="matcha-making"
+                order={currentOrder}
+                onSendToMilk={setMatchaBowl}
+                onScored={setMatchaScore}
+                {...progressProps}
+              />
+            </div>
+          </Suspense>
         )}
         {currentPage === 'milk-selection' && (
-          <div className="page-slide">
-            <MilkSelection
-              activeStep="milk-selection"
-              order={currentOrder}
-              incomingBowl={matchaBowl}
-              onSendToToppings={setFinishedDrink}
-              onScored={setMixingScore}
-              {...progressProps}
-            />
-          </div>
+          <Suspense fallback={routeLoadingFallback}>
+            <div className="page-slide">
+              <MilkSelection
+                activeStep="milk-selection"
+                order={currentOrder}
+                incomingBowl={matchaBowl}
+                onSendToToppings={setFinishedDrink}
+                onScored={setMixingScore}
+                {...progressProps}
+              />
+            </div>
+          </Suspense>
         )}
         {currentPage === 'toppings' && (
-          <div className="page-slide">
-            <ToppingsStation
-              activeStep="toppings"
-              order={currentOrder}
-              incomingDrink={finishedDrink}
-              onSendToFinal={setServedDrink}
-              onScored={setToppingsScore}
-              {...progressProps}
-            />
-          </div>
+          <Suspense fallback={routeLoadingFallback}>
+            <div className="page-slide">
+              <ToppingsStation
+                activeStep="toppings"
+                order={currentOrder}
+                incomingDrink={finishedDrink}
+                onSendToFinal={setServedDrink}
+                onScored={setToppingsScore}
+                {...progressProps}
+              />
+            </div>
+          </Suspense>
         )}
         {currentPage === 'final-combination' && (
-          <div className="page-slide">
-            <FinalCombination
-              activeStep="final-combination"
-              order={currentOrder}
-              incomingDrink={servedDrink}
-              hasNextOrder={customerNumber < ORDERS_PER_SESSION}
-              orderTakingScore={orderTakingScore}
-              matchaScore={matchaScore}
-              mixingScore={mixingScore}
-              toppingsScore={toppingsScore}
-              // Between-order adOpportunity: FinalCombination's own dwell
-              // timer (see that file) waits out the score/sticker reveal
-              // before ever letting this fire, then this requests the ad
-              // and only actually advances (handleAdvance) once it
-              // resolves -- same requestAd/deferred-continuation shape as
-              // PREROLL above, just triggered by this screen's own button
-              // instead of Play. Only meaningful while hasNextOrder is
-              // true; unused (never called) on the 7th order, which has no
-              // "Start order N+1" button at all (see hasNextOrder above).
-              adGate={adGate}
-              onStartNextOrder={() => requestAd('ORDER_COMPLETE', handleAdvance)}
-              {...progressProps}
-            />
-          </div>
+          <Suspense fallback={routeLoadingFallback}>
+            <div className="page-slide">
+              <FinalCombination
+                activeStep="final-combination"
+                order={currentOrder}
+                incomingDrink={servedDrink}
+                hasNextOrder={customerNumber < ORDERS_PER_SESSION}
+                orderTakingScore={orderTakingScore}
+                matchaScore={matchaScore}
+                mixingScore={mixingScore}
+                toppingsScore={toppingsScore}
+                // Between-order adOpportunity: FinalCombination's own dwell
+                // timer (see that file) waits out the score/sticker reveal
+                // before ever letting this fire, then this requests the ad
+                // and only actually advances (handleAdvance) once it
+                // resolves -- same requestAd/deferred-continuation shape as
+                // PREROLL above, just triggered by this screen's own button
+                // instead of Play. Only meaningful while hasNextOrder is
+                // true; unused (never called) on the final order, which has
+                // no "Start order N+1" button at all (see hasNextOrder
+                // above).
+                adGate={adGate}
+                onStartNextOrder={() => requestAd('ORDER_COMPLETE', handleAdvance)}
+                {...progressProps}
+              />
+            </div>
+          </Suspense>
         )}
 
         {/* Rendered once here rather than duplicated into every screen

@@ -476,18 +476,23 @@
    here briefly and then dropped per feedback -- this is just the glow's
    color, not that idea coming back). */
 .ordering-speech-bubble.pending-ack {
-  animation: orderingSpeechBubbleIn 0.4s ease-out both, orderingSpeechHaloBlink 1.1s ease-in-out infinite;
+  animation: orderingSpeechBubbleIn 0.4s ease-out both;
 }
 
-@keyframes orderingSpeechHaloBlink {
-  0%,
-  100% {
-    box-shadow: 0 5px 14px rgba(0, 0, 0, 0.18), 0 0 30px 12px rgba(130, 190, 110, 0.9),
-      0 0 65px 26px rgba(130, 190, 110, 0.55);
-  }
-  50% {
-    box-shadow: 0 5px 14px rgba(0, 0, 0, 0.18), 0 0 0 0 rgba(130, 190, 110, 0), 0 0 0 0 rgba(130, 190, 110, 0);
-  }
+/* Glow now lives on a ::after pseudo-element (this bubble is already
+   position: relative above) instead of animating this rule's own
+   box-shadow directly -- see haloGlowFade's own big comment in App.css.
+   The bubble's own resting drop shadow (0 5px 14px rgba(0,0,0,0.18),
+   declared on .ordering-speech-bubble itself above) stays untouched and
+   constant, same "doesn't vanish between flashes" intent as before. */
+.ordering-speech-bubble.pending-ack::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  box-shadow: 0 0 30px 12px rgba(130, 190, 110, 0.9), 0 0 65px 26px rgba(130, 190, 110, 0.55);
+  animation: haloGlowFade 1.1s ease-in-out infinite;
 }
 
 /* Read-acknowledgment hint label -- sits directly under the bubble (see
@@ -501,6 +506,7 @@
    the whole bubble, and max-width shrank to match since it's a small side
    note now rather than a banner. */
 .ordering-order-hint {
+  position: relative;
   align-self: flex-end;
   margin: 0;
   box-sizing: border-box;
@@ -516,7 +522,7 @@
   text-align: center;
   letter-spacing: 0.01em;
   pointer-events: none;
-  animation: orderingOrderHintIn 0.3s ease-out both, orderingOrderHintPulse 2s ease-in-out 0.3s infinite;
+  animation: orderingOrderHintIn 0.3s ease-out both;
 }
 
 @keyframes orderingOrderHintIn {
@@ -530,14 +536,19 @@
   }
 }
 
-@keyframes orderingOrderHintPulse {
-  0%,
-  100% {
-    box-shadow: 0 0 0 0 rgba(90, 138, 79, 0.35);
-  }
-  50% {
-    box-shadow: 0 0 0 6px rgba(90, 138, 79, 0);
-  }
+/* Pulsing ring, ::after instead of animating box-shadow directly -- see
+   hintRingPulse's own big comment in App.css. Shared between this hint
+   and .ordering-receipt-hint below (both used orderingOrderHintPulse
+   before this conversion, see that keyframe's own removed comment). */
+.ordering-order-hint::after,
+.ordering-receipt-hint::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  border: min(3px, 0.16vw) solid rgba(90, 138, 79, 0.55);
+  animation: hintRingPulse 2s ease-in-out 0.3s infinite;
 }
 
 .ordering-speech-bubble-text {
@@ -895,7 +906,7 @@
   text-align: center;
   letter-spacing: 0.01em;
   pointer-events: none;
-  animation: orderingOrderHintIn 0.3s ease-out both, orderingOrderHintPulse 2s ease-in-out 0.3s infinite;
+  animation: orderingOrderHintIn 0.3s ease-out both;
 }
 
 /* The order modal's dedicated close (X) button that used to sit here was

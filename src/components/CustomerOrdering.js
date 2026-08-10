@@ -371,6 +371,47 @@ const CustomerOrdering = ({ activeStep, customerNumber, onNavigate, onAdvance, o
   const baseRef = useRef(null);
   const toppingsAddRef = useRef(null);
   const placeOrderRef = useRef(null);
+  // Ref (not state) purely so the lockdown handler right below -- which
+  // has to be declared/registered up here, before the "each leg" Up/Down
+  // handler and useFlatFocusNav(containerRef) further down, same ordering
+  // reasons as those two -- can read the CURRENT value without needing
+  // showReadPhase/showButtonPhase (both declared much further down this
+  // component, past the order-builder state) in its own dependency array.
+  // Kept in sync every render by the effect sitting right after
+  // showButtonPhase's own declaration below.
+  const restrictNavigationRef = useRef(false);
+
+  // First-order-only walkthrough lockdown -- while the "read the order" or
+  // "find the button" beats are up (i.e. before the order form's ever been
+  // opened this visit), arrow keys shouldn't move focus anywhere at all:
+  // Enter on the play button (once it's focused -- see the showButtonPhase
+  // effect further down) is the only thing that should do anything at that
+  // point. Without this, Up/Down would still fall through to the "each leg"
+  // handler right below (jumping the still-fresh play-button focus up to
+  // the gear or down to the station dot) or, with nothing focused yet
+  // during the read phase, to useFlatFocusNav's own defensive "nothing
+  // focused, land on the first focusable element" fallback further down --
+  // both read as the walkthrough letting the player wander off before it's
+  // actually pointed them anywhere yet. Once the order form opens, this
+  // flag is already false (see the ref-sync effect below), so the form's
+  // own nav trap and every control inside it behaves exactly as normal.
+  //
+  // Registered here, before both of those, for the exact same "attach the
+  // window listener first so it runs first" reasoning the "each leg"
+  // effect's own comment right below explains -- stopImmediatePropagation
+  // makes this a hard stop rather than merely a first opinion those other
+  // handlers could still override.
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (!restrictNavigationRef.current) return;
+      const action = getActionFromKeyEvent(e);
+      if (action !== 'Up' && action !== 'Down' && action !== 'Left' && action !== 'Right') return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   // Bridges between this screen's own containerRef scope and the two
   // things outside it that keyboard nav needs to reach: the Settings gear
@@ -738,6 +779,29 @@ const CustomerOrdering = ({ activeStep, customerNumber, onNavigate, onAdvance, o
   }, [orderFormOpen]);
   const showButtonPhase = customerNumber === 1 && !showReadPhase && !hasOpenedOrderForm;
 
+  // Moves focus onto the play button the instant showButtonPhase turns on,
+  // same "rising edge only" pattern as orderFormOpen's own grade-toggle
+  // effect above -- pairs with ProgressBar's suppressInitialFocus (passed
+  // below) so the station dot never grabs the walkthrough's very first
+  // selection instead: nothing is focused during showReadPhase, then this
+  // hands focus straight to the play button (its :focus-visible halo, see
+  // .ordering-play-button in CustomerOrdering.css) the moment the "Move up
+  // to take the order" callout appears, ready for Enter.
+  useEffect(() => {
+    if (showButtonPhase) {
+      playButtonRef.current?.focus();
+    }
+  }, [showButtonPhase]);
+
+  // Keeps restrictNavigationRef (declared/read far above the lockdown
+  // handler -- see that ref's own comment for why it exists at all) in
+  // sync with the two flags it actually gates on. No dependency array --
+  // this just re-reads both every render, which is cheap and means the ref
+  // can never go stale a render behind either flag.
+  useEffect(() => {
+    restrictNavigationRef.current = showReadPhase || showButtonPhase;
+  });
+
   // Third walkthrough beat, first order only -- once the order
   // form modal is actually open, its own backdrop (see .order-modal-backdrop
   // below) already covers literally everything on screen except the modal
@@ -845,7 +909,7 @@ const CustomerOrdering = ({ activeStep, customerNumber, onNavigate, onAdvance, o
 
       <div className="ordering-content">
         <img
-          src="./TakeOrderFrame.png"
+          src="./TakeOrderFrame.jpg"
           alt="The take-order counter, with an ordering computer terminal"
           className="ordering-art"
         />
@@ -1163,6 +1227,13 @@ const CustomerOrdering = ({ activeStep, customerNumber, onNavigate, onAdvance, o
           // getting this plain text hint exactly as before.
           currentStepHint={showProgressPhase ? null : 'Use your right arrow key to head to the matcha station.'}
           spotlightExempt={showProgressPhase}
+          // See ProgressBar's own comment on this prop -- suppresses the
+          // station dot's autoFocus while the first two walkthrough beats
+          // (read the order / find the button) are up, so it isn't the
+          // thing holding the initial selection; showButtonPhase's own
+          // effect above hands focus to the play button instead once its
+          // callout appears.
+          suppressInitialFocus={showReadPhase || showButtonPhase}
         />
 
         {/* First-order-only walkthrough spotlight -- a single light

@@ -7,7 +7,7 @@ import { playButtonClick } from '../gameloop/sfx';
 // imports this (rather than keeping its own local copy) so its
 // hasNextOrder/session-reset logic can't drift from what this bar (and
 // ScoreCard.js's own order badge, which imports it too) actually displays.
-export const ORDERS_PER_SESSION = 7;
+export const ORDERS_PER_SESSION = 5;
 
 // Single source of truth for step order/labels -- App.js imports this same
 // list (as STEP_KEYS) for its own navigation logic, so the bar and the
@@ -67,6 +67,19 @@ const ProgressBar = ({
   // screen's own walkthrough. Every other screen leaves this false and
   // renders exactly as before.
   spotlightExempt = false,
+  // Opt-in -- passed true by CustomerOrdering during its first-order-only
+  // "read"/"button" walkthrough beats (showReadPhase || showButtonPhase),
+  // before the player's actually placed the order. Normally the current
+  // step's dot grabs focus (and its :focus-visible halo) the instant this
+  // bar mounts (see autoFocus below) -- during those two beats that read as
+  // a stray, unexplained selection sitting on screen before the walkthrough
+  // has pointed at anything yet, so this suppresses it; CustomerOrdering's
+  // own showButtonPhase effect moves focus onto the play button instead
+  // once its callout appears. Only matters at mount (autoFocus is a
+  // one-time DOM attribute, not reapplied on rerender), which lines up
+  // exactly with when this bar first mounts for order 1 anyway. Every other
+  // screen/order leaves this false and keeps the original behavior.
+  suppressInitialFocus = false,
 }) => {
   const activeIndex = PROGRESS_STEPS.findIndex((step) => step.key === activeStep);
   const barRef = useRef(null);
@@ -163,7 +176,7 @@ const ProgressBar = ({
                   highlightCurrentStep && isCurrent ? ' station-highlight' : ''
                 }`}
                 data-focusable
-                autoFocus={isCurrent}
+                autoFocus={isCurrent && !suppressInitialFocus}
                 aria-current={isCurrent ? 'step' : undefined}
                 onClick={() => {
                   if (isCurrent) {

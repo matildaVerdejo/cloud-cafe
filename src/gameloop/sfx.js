@@ -30,15 +30,47 @@ export function setSfxVolume(v) {
   sfxVolume = v;
 }
 
-// Fresh `new Audio()` per call (rather than one shared/reused instance) so
-// rapid repeat clicks each get their own full playback instead of cutting
-// each other off mid-clip. .catch(() => {}) swallows the same
-// autoplay-block possibility every one-shot Audio() call in this project
-// already guards against -- if it's blocked, that one clip just plays
-// silently. Returns the Audio instance so callers that need to hang onto
-// it (e.g. to pause a longer voice line on unmount) can.
+// Small, fixed-size pool of pre-created Audio() elements per clip, reused
+// forever -- NOT a fresh `new Audio()` on every call. Each `new Audio()` +
+// .play() creates a real native media-player instance under the hood
+// (AwMediaPlayerBridge/WebMediaPlayer on Chromium WebView, which is what
+// every CTV platform's in-app browser runs on); those aren't free the
+// instant the JS object goes out of scope, they linger until the engine's
+// own cleanup catches up. On a real Fire TV Stick this actually crashed
+// the app: the device log showed 33 distinct "Creating new AWV Browser
+// message manager for player_id" entries (one per button click/pour/voice
+// line) in under 4 minutes, immediately followed by the app's own process
+// dropping out of the log entirely -- i.e. it died. Capping the number of
+// native players any one clip can ever create to POOL_SIZE, round-robin
+// reused via .currentTime = 0 + .play() again, fixes that at the root
+// instead of hoping GC keeps up. POOL_SIZE (4) just needs to comfortably
+// exceed how many times the *same* clip could ever legitimately overlap
+// itself (rapid repeat button clicks) -- callers get back the exact Audio
+// instance that will actually play, so pausing it later (playVoiceLine/
+// playLiquidPouring/playMatchaWhisking's own callers) still works exactly
+// as before; only the never-reclaimed `new Audio()` growth is gone.
+const POOL_SIZE = 4;
+const audioPools = new Map(); // src -> { elements: HTMLAudioElement[], next: number }
+
+function getPooledAudio(src) {
+  let pool = audioPools.get(src);
+  if (!pool) {
+    pool = { elements: Array.from({ length: POOL_SIZE }, () => new Audio(src)), next: 0 };
+    audioPools.set(src, pool);
+  }
+  const audio = pool.elements[pool.next];
+  pool.next = (pool.next + 1) % POOL_SIZE;
+  return audio;
+}
+
+// .catch(() => {}) swallows the same autoplay-block possibility every
+// one-shot Audio() call in this project already guards against -- if it's
+// blocked, that one clip just plays silently. Returns the Audio instance
+// so callers that need to hang onto it (e.g. to pause a longer voice line
+// on unmount) can.
 function playClip(src) {
-  const audio = new Audio(src);
+  const audio = getPooledAudio(src);
+  audio.currentTime = 0;
   audio.volume = sfxVolume;
   audio.play().catch(() => {});
   return audio;
@@ -105,13 +137,22 @@ export function playIceCubeDrop() {
 // (WHISK_MIX_DURATION_MS) isn't guaranteed to line up with the clip's own
 // length. Returns the Audio instance so the caller can .pause() it the
 // moment whisking actually stops -- normal completion or an early unmount --
-// same "caller owns stopping it" contract as playLiquidPouring.
+// same "caller owns stopping it" contract as playLiquidPouring. Reuses one
+// persistent Audio element across every whisking session (rather than a
+// fresh `new Audio()` per call) for the same reason playClip's own pool
+// does -- see that comment above. No pooling needed here specifically
+// (unlike the one-shot clips, only one whisking session is ever active at
+// once, so there's nothing to round-robin), just a single cached instance.
+let whiskingAudio = null;
 export function playMatchaWhisking() {
-  const audio = new Audio(MATCHA_WHISKING_SRC);
-  audio.volume = sfxVolume;
-  audio.loop = true;
-  audio.play().catch(() => {});
-  return audio;
+  if (!whiskingAudio) {
+    whiskingAudio = new Audio(MATCHA_WHISKING_SRC);
+    whiskingAudio.loop = true;
+  }
+  whiskingAudio.currentTime = 0;
+  whiskingAudio.volume = sfxVolume;
+  whiskingAudio.play().catch(() => {});
+  return whiskingAudio;
 }
 
 // Plays when the big spoon actually dumps its scoop of matcha powder into

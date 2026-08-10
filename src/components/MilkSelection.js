@@ -1521,6 +1521,14 @@ const MilkSelection = ({
   // carried-over matcha), alongside the shared pourStage above.
   const [pourStage, setPourStage] = useState('idle');
   const [pouringKey, setPouringKey] = useState(null); // 'oat' | 'dairy' | 'almond' | 'coconut' | 'bowl' | null
+  // Whether the carried-over bowl has actually poured its matcha into the
+  // cup yet this visit -- flips true the instant the pour lands (same
+  // moment cupMatcha is set below), never resets (local state, so a fresh
+  // order re-mounting this screen with a new incomingBowl starts over).
+  // Drives the .bowl-whisked-liquid overlay's fade-out (see the JSX further
+  // down) so the bowl reads as empty once its contents are actually in the
+  // cup, instead of still showing a full pool of matcha sitting in it.
+  const [bowlPoured, setBowlPoured] = useState(false);
 
   // ---- Milk pour hold-to-fill gauge (see MILK_FILL_DURATION_MS above) ------
   // 0-100 live reading, updated every animation frame while pourStage is
@@ -1605,10 +1613,16 @@ const MilkSelection = ({
   // Matcha only pours once there's actually a base to pour it onto -- same
   // "pour the topping after the base" ordering the user asked for -- plus
   // the usual cup-on-table/nothing-else-mid-pour preconditions, an actual
-  // bowl to pour from, and (same as canPourMilk) the drink not already
-  // being sent off.
+  // bowl to pour from, the bowl not already emptied (see bowlPoured above --
+  // it only ever holds one pour's worth), and (same as canPourMilk) the
+  // drink not already being sent off.
   const canPourMatcha =
-    cupSpot === 'table' && !!cupMilk && pourStage === 'idle' && !!incomingBowl && cupSendStage === 'idle';
+    cupSpot === 'table' &&
+    !!cupMilk &&
+    pourStage === 'idle' &&
+    !!incomingBowl &&
+    !bowlPoured &&
+    cupSendStage === 'idle';
   // The cup counts as "finished enough to send" once there's at least a
   // milk/water base in it -- matcha's an optional finishing touch on top,
   // not a requirement, same reasoning canPourMatcha itself already leans
@@ -1742,6 +1756,11 @@ const MilkSelection = ({
       pourAudioRef.current = playLiquidPouring();
       if (pouringKey === 'bowl') {
         setCupMatcha({ grade: incomingBowl?.grade ?? 'classic-grade' });
+        // The matcha has now left the bowl and landed in the cup -- fade
+        // the whisked-liquid overlay out (see .bowl-whisked-liquid.emptied
+        // in MatchaMaking.css) so the bowl reads as empty for the rest of
+        // this visit, same moment the cup's own matcha fill appears.
+        setBowlPoured(true);
       } else {
         // fillZone keys both the fill-height scale (MILK_FILL_SCALE_BY_ZONE)
         // and spillCount (0 unless fillZone is 'over' -- see
@@ -2047,7 +2066,7 @@ const MilkSelection = ({
 
       <div className="milk-selection-content">
         <img
-          src="./MilkMixingStation.png"
+          src="./MilkMixingStation.jpg"
           alt="Milk mixing station with sink and cabinet"
           className="milk-selection-art"
         />
@@ -2095,7 +2114,7 @@ const MilkSelection = ({
               alt=""
               aria-hidden="true"
               draggable={false}
-              className="bowl-whisked-liquid"
+              className={`bowl-whisked-liquid${bowlPoured ? ' emptied' : ''}`}
               style={{
                 left: `${incomingRimLeft}%`,
                 top: `${incomingRimTop}%`,

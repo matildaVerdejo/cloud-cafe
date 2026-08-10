@@ -62,7 +62,7 @@ const MainPage = ({ onPlayClick, disabled = false }) => {
 
       <div className="main-content">
         <img
-          src="./CloudCafeHome.png"
+          src="./CloudCafeHome.jpg"
           alt="Cloud Cafe storefront"
           className="home-art"
         />

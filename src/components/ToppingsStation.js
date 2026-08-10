@@ -69,7 +69,7 @@ const DRINK_SEND_VANISH_MS = 350; // same value as Milk Selection's own CUP_SEND
 // station uses) -- per request, now that the six topping items below have
 // been separated out into their own PNGs and are placed on top instead of
 // being baked into the background art itself.
-const TOPPINGS_BACKGROUND_SRC = './MatchaBaseStation.png';
+const TOPPINGS_BACKGROUND_SRC = './MatchaBaseStation.jpg';
 
 // The six topping items, one pre-made PNG each -- canvasAspect is each
 // source image's own width/height (measured directly off the file), used

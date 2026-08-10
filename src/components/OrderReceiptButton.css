@@ -47,21 +47,23 @@
    currently only passed by MatchaMaking) -- same light-green
    (rgb(130, 190, 110)) soft glow used for every other highlight beat
    across the app (CustomerOrdering.css has the full set), with this
-   button's own resting shadow (0 4px 10px rgba(0,0,0,0.15)) kept as the
-   constant layer so it doesn't vanish between flashes. */
+   button's own resting shadow (0 4px 10px rgba(0,0,0,0.15), declared on
+   .order-receipt-button itself above -- untouched here) kept as the
+   constant layer so it doesn't vanish between flashes. Glow now lives on
+   a ::after pseudo-element instead of animating this rule's own
+   box-shadow directly -- see haloGlowFade's own big comment in App.css. */
 .order-receipt-button.highlight {
-  animation: orderReceiptHaloBlink 1.1s ease-in-out infinite;
+  position: relative;
 }
 
-@keyframes orderReceiptHaloBlink {
-  0%,
-  100% {
-    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.15), 0 0 30px 12px rgba(130, 190, 110, 0.9),
-      0 0 65px 26px rgba(130, 190, 110, 0.55);
-  }
-  50% {
-    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.15), 0 0 0 0 rgba(130, 190, 110, 0), 0 0 0 0 rgba(130, 190, 110, 0);
-  }
+.order-receipt-button.highlight::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  box-shadow: 0 0 30px 12px rgba(130, 190, 110, 0.9), 0 0 65px 26px rgba(130, 190, 110, 0.55);
+  animation: haloGlowFade 1.1s ease-in-out infinite;
 }
 
 /* Hint label for the same highlight -- stacks below the button inside
@@ -71,6 +73,7 @@
    for every other hint in this project (CustomerOrdering.css/
    ProgressBar.css/.make-drink-zone in MatchaMaking.css). */
 .order-receipt-hint {
+  position: relative;
   margin-top: min(14px, 0.67vw);
   max-width: min(320px, 15.3vw);
   box-sizing: border-box;
@@ -85,7 +88,7 @@
   text-align: center;
   letter-spacing: 0.01em;
   pointer-events: none;
-  animation: orderReceiptHintIn 0.3s ease-out both, orderReceiptHintPulse 2s ease-in-out 0.3s infinite;
+  animation: orderReceiptHintIn 0.3s ease-out both;
 }
 
 @keyframes orderReceiptHintIn {
@@ -99,14 +102,16 @@
   }
 }
 
-@keyframes orderReceiptHintPulse {
-  0%,
-  100% {
-    box-shadow: 0 0 0 0 rgba(90, 138, 79, 0.35);
-  }
-  50% {
-    box-shadow: 0 0 0 6px rgba(90, 138, 79, 0);
-  }
+/* Pulsing ring, ::after instead of animating this element's own box-shadow
+   -- see hintRingPulse's own big comment in App.css. */
+.order-receipt-hint::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  border: min(3px, 0.16vw) solid rgba(90, 138, 79, 0.55);
+  animation: hintRingPulse 2s ease-in-out 0.3s infinite;
 }
 
 /* Pulls down like a hanging receipt when opened, and retracts back up when
