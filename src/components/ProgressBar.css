@@ -186,10 +186,10 @@
 }
 
 .progress-step.current .progress-step-dot {
-  background: #e8f8e0;
-  border-color: #5a8a4f;
-  color: #2f4a28;
-  box-shadow: 0 0 0 5px rgba(90, 138, 79, 0.25);
+  background: #ffd3e2;
+  border-color: #e8aaca;
+  color: #7a3b54;
+  box-shadow: 0 0 0 5px rgba(232, 170, 202, 0.25);
 }
 
 /* .progress-step.current and .progress-step:focus-visible are the same
@@ -201,7 +201,7 @@
    the glow taking priority. This selector is one class more specific than
    both, so it always wins regardless of source order. */
 .progress-step.current:focus-visible .progress-step-dot {
-  box-shadow: 0 0 0 5px rgba(90, 138, 79, 0.9), 0 0 20px 6px rgba(90, 138, 79, 0.6);
+  box-shadow: 0 0 0 5px rgba(232, 170, 202, 0.9), 0 0 20px 6px rgba(232, 170, 202, 0.6);
 }
 
 .progress-step.current .progress-step-label {
@@ -237,7 +237,7 @@
   inset: 0;
   border-radius: inherit;
   pointer-events: none;
-  box-shadow: 0 0 30px 12px rgba(130, 190, 110, 0.9), 0 0 65px 26px rgba(130, 190, 110, 0.55);
+  box-shadow: 0 0 30px 12px rgba(232, 170, 202, 0.9), 0 0 65px 26px rgba(232, 170, 202, 0.55);
   animation: haloGlowFade 1.1s ease-in-out infinite;
 }
 

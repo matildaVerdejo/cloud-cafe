@@ -92,7 +92,7 @@
    own literal z-index: 26 too. */
 .matcha-order-callout {
   position: absolute;
-  right: 15%;
+  right: 14%;
   top: 3%;
   width: 24%;
   z-index: 26;
@@ -251,8 +251,8 @@
    the same way every other exact position in this project is. */
 .matcha-scoop-callout {
   position: absolute;
-  right: 9%;
-  top: 55%;
+  right: 14%;
+  top: 43%;
   transform: translateY(-50%);
   width: 24%;
   z-index: 26;
@@ -685,8 +685,8 @@
    itself and sitting just above its own top edge). */
 .matcha-progress-callout {
   position: absolute;
-  left: 32%;
-  bottom: 24%;
+  left: 35%;
+  bottom: 20%;
   transform: translateX(-50%);
   width: 26%;
   z-index: 26;
@@ -791,11 +791,11 @@
 /* Fifth highlight beat (see showTinHint in MatchaMaking.js) -- all three
    tins flash at once until a grade's picked. filter: drop-shadow rather
    than box-shadow since these are <img> elements (drop-shadow follows the
-   art's own alpha shape instead of drawing a box), but otherwise the same
-   light-green (rgb(130, 190, 110)) two-layer soft glow used for every other
-   highlight beat across the app, with the item's own resting drop-shadow
-   (0 4px 6px rgba(0,0,0,0.18)) kept as the constant first layer so it
-   doesn't vanish between flashes. */
+   art's own alpha shape instead of drawing a box), white two-layer soft
+   glow (was the same light-green (rgb(130, 190, 110)) glow every other
+   beat uses, switched to white per request), with the item's own resting
+   drop-shadow (0 4px 6px rgba(0,0,0,0.18)) kept as the constant first layer
+   so it doesn't vanish between flashes. */
 .station-item.selectable.tin-highlight {
   animation: tinHaloBlink 1.1s ease-in-out infinite;
 }
@@ -803,12 +803,12 @@
 @keyframes tinHaloBlink {
   0%,
   100% {
-    filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.18)) drop-shadow(0 0 14px rgba(130, 190, 110, 0.9))
-      drop-shadow(0 0 28px rgba(130, 190, 110, 0.55));
+    filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.18)) drop-shadow(0 0 14px rgba(255, 255, 255, 0.9))
+      drop-shadow(0 0 28px rgba(255, 255, 255, 0.55));
   }
   50% {
-    filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.18)) drop-shadow(0 0 0 rgba(130, 190, 110, 0))
-      drop-shadow(0 0 0 rgba(130, 190, 110, 0));
+    filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.18)) drop-shadow(0 0 0 rgba(255, 255, 255, 0))
+      drop-shadow(0 0 0 rgba(255, 255, 255, 0));
   }
 }
 
@@ -1082,9 +1082,10 @@
 /* Thirteenth highlight beat (see showBowlHint in MatchaMaking.js) -- flashes
    the bowl the instant whisking finishes, retiring the instant the player
    sends it off. Same filter: drop-shadow approach as .kettle-highlight/
-   .whisk-highlight (this is an <img> too), same light-green
-   (rgb(130, 190, 110)) two-layer soft glow as every other beat, with the
-   item's own resting drop-shadow kept as the constant first layer. */
+   .whisk-highlight (this is an <img> too), white two-layer soft glow (was
+   the same light-green (rgb(130, 190, 110)) glow every other beat uses,
+   switched to white per request), with the item's own resting drop-shadow
+   kept as the constant first layer. */
 .station-item.movable.bowl-highlight {
   animation: bowlHaloBlink 1.1s ease-in-out infinite;
 }
@@ -1092,12 +1093,12 @@
 @keyframes bowlHaloBlink {
   0%,
   100% {
-    filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.18)) drop-shadow(0 0 14px rgba(130, 190, 110, 0.9))
-      drop-shadow(0 0 28px rgba(130, 190, 110, 0.55));
+    filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.18)) drop-shadow(0 0 14px rgba(255, 255, 255, 0.9))
+      drop-shadow(0 0 28px rgba(255, 255, 255, 0.55));
   }
   50% {
-    filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.18)) drop-shadow(0 0 0 rgba(130, 190, 110, 0))
-      drop-shadow(0 0 0 rgba(130, 190, 110, 0));
+    filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.18)) drop-shadow(0 0 0 rgba(255, 255, 255, 0))
+      drop-shadow(0 0 0 rgba(255, 255, 255, 0));
   }
 }
 
@@ -1256,13 +1257,13 @@
 }
 
 .heater-button.on {
-  background: radial-gradient(circle at 35% 30%, #ffe8db 0%, #ffc9a8 55%, #f4966b 100%);
-  box-shadow: 0 2px 3px rgba(0, 0, 0, 0.3), 0 0 0 0 rgba(255, 255, 255, 0), 0 0 10px 4px rgba(255, 170, 130, 0.85);
+  background: radial-gradient(circle at 35% 30%, #ffffff 0%, #fbfbfa 55%, #f0efec 100%);
+  box-shadow: 0 2px 3px rgba(0, 0, 0, 0.3), 0 0 0 0 rgba(255, 255, 255, 0), 0 0 10px 4px rgba(255, 255, 255, 0.85);
 }
 
 .heater-button.on:focus-visible {
   box-shadow: 0 2px 3px rgba(0, 0, 0, 0.3), 0 0 10px 4px rgba(255, 255, 255, 0.85),
-    0 0 10px 4px rgba(255, 170, 130, 0.85);
+    0 0 10px 4px rgba(255, 255, 255, 0.85);
 }
 
 /* Temp-zone override -- while the button is on, the peachy "heating" look
@@ -1297,8 +1298,9 @@
    state (showHeaterHint requires !heaterOn), so it's safe to just append
    two more box-shadow layers after the plain state's own three (depth,
    focus-ring placeholder, on-glow placeholder) rather than needing its own
-   zone-style override. Same light-green (rgb(130, 190, 110)) two-layer
-   soft glow as every other beat. */
+   zone-style override. White two-layer soft glow (was the same light-green
+   (rgb(130, 190, 110)) glow every other beat uses, switched to white per
+   request). */
 /* Glow now lives on a ::after pseudo-element (heater-button is already
    position: absolute above) instead of animating this rule's own
    box-shadow directly -- see haloGlowFade's own big comment in App.css.
@@ -1310,7 +1312,7 @@
   inset: 0;
   border-radius: inherit;
   pointer-events: none;
-  box-shadow: 0 0 30px 12px rgba(130, 190, 110, 0.9), 0 0 65px 26px rgba(130, 190, 110, 0.55);
+  box-shadow: 0 0 30px 12px rgba(255, 255, 255, 0.9), 0 0 65px 26px rgba(255, 255, 255, 0.55);
   animation: haloGlowFade 1.1s ease-in-out infinite;
 }
 
@@ -1396,8 +1398,9 @@
 
 /* Ninth highlight beat (see barRunning in MatchaMaking.js) -- flashes the
    instant the temp gauge appears, retiring the instant the player stops
-   it. Same light-green (rgb(130, 190, 110)) two-layer soft glow as the
-   scoop bar's own matching beat, with this bar's two resting inset layers
+   it. White two-layer soft glow (was the same light-green
+   (rgb(130, 190, 110)) glow the scoop bar's own matching beat uses,
+   switched to white per request), with this bar's two resting inset layers
    kept as constant so they don't vanish between flashes. */
 .heater-temp-bar.heater-temp-bar-highlight {
   animation: heaterTempBarHaloBlink 1.1s ease-in-out infinite;
@@ -1407,11 +1410,11 @@
   0%,
   100% {
     box-shadow: inset 0 1px 2px rgba(255, 255, 255, 0.35), inset 0 -1px 2px rgba(0, 0, 0, 0.2),
-      0 0 30px 12px rgba(130, 190, 110, 0.9), 0 0 65px 26px rgba(130, 190, 110, 0.55);
+      0 0 30px 12px rgba(255, 255, 255, 0.9), 0 0 65px 26px rgba(255, 255, 255, 0.55);
   }
   50% {
     box-shadow: inset 0 1px 2px rgba(255, 255, 255, 0.35), inset 0 -1px 2px rgba(0, 0, 0, 0.2),
-      0 0 0 0 rgba(130, 190, 110, 0), 0 0 0 0 rgba(130, 190, 110, 0);
+      0 0 0 0 rgba(255, 255, 255, 0), 0 0 0 0 rgba(255, 255, 255, 0);
   }
 }
 
@@ -1619,9 +1622,11 @@
 
 /* Sixth highlight beat (see scoopRunning in MatchaMaking.js) -- flashes the
    instant the measuring game opens, retiring the instant the player stops
-   the slider. Same light-green (rgb(130, 190, 110)) two-layer soft glow as
-   every other beat, with the bar's own two resting inset layers kept as
-   constant so they don't vanish between flashes. */
+   the slider. Plain white two-layer soft glow (was the same light-green
+   (rgb(130, 190, 110)) glow every other beat uses, switched to white per
+   request so it doesn't compete/alternate with the bar's own green fill
+   color), with the bar's own two resting inset layers kept as constant so
+   they don't vanish between flashes. */
 .scoop-bar.scoop-bar-highlight {
 }
 
@@ -1636,7 +1641,7 @@
   inset: 0;
   border-radius: inherit;
   pointer-events: none;
-  box-shadow: 0 0 30px 12px rgba(130, 190, 110, 0.9), 0 0 65px 26px rgba(130, 190, 110, 0.55);
+  box-shadow: 0 0 30px 12px rgba(255, 255, 255, 0.9), 0 0 65px 26px rgba(255, 255, 255, 0.55);
   animation: haloGlowFade 1.1s ease-in-out infinite;
 }
 
@@ -1856,9 +1861,10 @@
 /* Seventh highlight beat (see showSpoonHint in MatchaMaking.js) -- flashes
    the instant the spoon appears, retiring the instant the player starts
    the pour. filter: drop-shadow (this is an <img>, same reasoning as
-   .station-item.selectable.tin-highlight above) with the same light-green
-   (rgb(130, 190, 110)) two-layer soft glow used for every other beat, and
-   the spoon's own resting drop-shadow kept as the constant first layer. */
+   .station-item.selectable.tin-highlight above) with a white two-layer soft
+   glow (was the same light-green (rgb(130, 190, 110)) glow every other beat
+   uses, switched to white per request) and the spoon's own resting
+   drop-shadow kept as the constant first layer. */
 .big-spoon.big-spoon-highlight {
   animation: bigSpoonHaloBlink 1.1s ease-in-out infinite;
 }
@@ -1866,12 +1872,12 @@
 @keyframes bigSpoonHaloBlink {
   0%,
   100% {
-    filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.18)) drop-shadow(0 0 14px rgba(130, 190, 110, 0.9))
-      drop-shadow(0 0 28px rgba(130, 190, 110, 0.55));
+    filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.18)) drop-shadow(0 0 14px rgba(255, 255, 255, 0.9))
+      drop-shadow(0 0 28px rgba(255, 255, 255, 0.55));
   }
   50% {
-    filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.18)) drop-shadow(0 0 0 rgba(130, 190, 110, 0))
-      drop-shadow(0 0 0 rgba(130, 190, 110, 0));
+    filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.18)) drop-shadow(0 0 0 rgba(255, 255, 255, 0))
+      drop-shadow(0 0 0 rgba(255, 255, 255, 0));
   }
 }
 
@@ -2176,9 +2182,10 @@
 /* Twelfth highlight beat (see the JSX comment in MatchaMaking.js) -- flashes
    for the bar's whole time on screen rather than retiring on a keypress,
    since there's no single "confirm" action here (arrow keys are the
-   ongoing gameplay itself). Same light-green (rgb(130, 190, 110)) two-layer
-   soft glow as every other beat, with the bar's own two resting inset
-   layers kept as constant so they don't vanish between flashes. */
+   ongoing gameplay itself). White two-layer soft glow (was the same
+   light-green (rgb(130, 190, 110)) glow every other beat uses, switched to
+   white per request), with the bar's own two resting inset layers kept as
+   constant so they don't vanish between flashes. */
 .mix-bar.mix-bar-highlight {
   animation: mixBarHaloBlink 1.1s ease-in-out infinite;
 }
@@ -2187,11 +2194,11 @@
   0%,
   100% {
     box-shadow: inset 0 1px 2px rgba(255, 255, 255, 0.35), inset 0 -1px 2px rgba(0, 0, 0, 0.2),
-      0 0 30px 12px rgba(130, 190, 110, 0.9), 0 0 65px 26px rgba(130, 190, 110, 0.55);
+      0 0 30px 12px rgba(255, 255, 255, 0.9), 0 0 65px 26px rgba(255, 255, 255, 0.55);
   }
   50% {
     box-shadow: inset 0 1px 2px rgba(255, 255, 255, 0.35), inset 0 -1px 2px rgba(0, 0, 0, 0.2),
-      0 0 0 0 rgba(130, 190, 110, 0), 0 0 0 0 rgba(130, 190, 110, 0);
+      0 0 0 0 rgba(255, 255, 255, 0), 0 0 0 0 rgba(255, 255, 255, 0);
   }
 }
 

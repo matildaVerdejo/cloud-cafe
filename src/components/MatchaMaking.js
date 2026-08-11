@@ -88,6 +88,13 @@ const TIN_LABEL_GAP = 2;
 const TIN_HINT_LEFT = 75;
 const TIN_HINT_TOP = 13;
 
+// First-order-only walkthrough callout (.matcha-tin-callout) uses its own
+// anchor, nudged up and left of TIN_HINT_LEFT/TOP above per request --
+// deliberately separate constants so orders 2/3's plain-text .matcha-tin-hint
+// (which still uses TIN_HINT_LEFT/TOP directly) doesn't move too.
+const TIN_CALLOUT_LEFT = 63;
+const TIN_CALLOUT_TOP = 9;
+
 // Scoop gauge -- the matcha-measuring counterpart to the heater's
 // .heater-temp-bar, sitting to the right of the tins with a clear gap
 // (ceremonial-grade, the rightmost tin, ends at 79.45 + 6.9 = 86.35) so it
@@ -490,6 +497,12 @@ const MOVABLE_START = MOVABLE_ITEMS.reduce((acc, item) => {
 // tin hint above already uses.
 const KETTLE_HINT_LEFT = MOVABLE_ITEMS[0].left + MOVABLE_ITEMS[0].width / 2;
 const KETTLE_HINT_TOP = MOVABLE_ITEMS[0].top - 12;
+
+// First-order-only walkthrough callout (.matcha-kettle-callout) uses its
+// own left anchor, nudged left of KETTLE_HINT_LEFT above per request --
+// deliberately a separate constant so orders 2/3's plain-text .kettle-hint
+// (which still uses KETTLE_HINT_LEFT directly) doesn't move too.
+const KETTLE_CALLOUT_LEFT = KETTLE_HINT_LEFT - 5;
 
 // Anchor for the "start whisking" hint (see showWhiskHint further down) --
 // same "fixed at the item's own spawn spot" simplicity as the kettle hint
@@ -955,6 +968,16 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
   // own declaration below. Same "ref declared early, synced late" pattern
   // as Customer Ordering's own restrictNavigationRef.
   const restrictNavigationRef = useRef(false);
+  // Narrower sibling of restrictNavigationRef above -- same "ref declared
+  // early, synced late" pattern (see showTinSpotlight's own sync effect
+  // further down), but only traps Up/Down while a tin is focused during the
+  // tin-picking walkthrough beat (showTinSpotlight), leaving Left/Right free
+  // so the player can still cycle between the three tins to compare grades.
+  // Without this, Up/Down on a focused tin would fall through to the "Any
+  // matcha tin" branch of the nav-graph handler right below and let the
+  // player wander off to the Order button/whisk before actually picking a
+  // grade.
+  const restrictTinVerticalNavRef = useRef(false);
 
   // First-order-only walkthrough lockdown -- same idea as Customer
   // Ordering's own restrictNavigationRef (see that file's matching comment):
@@ -1045,12 +1068,55 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
         } else if (action === 'Up') {
           e.preventDefault();
           e.stopImmediatePropagation();
-          orderButton?.focus();
+          if (!restrictTinVerticalNavRef.current) orderButton?.focus();
         } else if (action === 'Down') {
           e.preventDefault();
           e.stopImmediatePropagation();
-          whiskRef.current?.focus();
+          if (!restrictTinVerticalNavRef.current) whiskRef.current?.focus();
         }
+        return;
+      }
+
+      // Matcha-measuring mini-game (the scoop gauge/lever itself) -- full
+      // directional lockdown per request, same shape as the big spoon's own
+      // trap right below: while this mini-game is up the player shouldn't
+      // be able to arrow away from it at all, only Enter (see
+      // handleScoopKeyDown) to stop the slider. Mounted only while
+      // !scoopConfirmed (see the JSX), so trapping "focus is currently on
+      // it" covers exactly the mini-game's own duration and releases itself
+      // the instant a reading's confirmed and this element unmounts (focus
+      // moves on to the big spoon via its own effect right after).
+      if (active === scoopBarRef.current) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        return;
+      }
+
+      // Heater temperature gauge (barRef) -- same full directional lockdown
+      // while the mini-game's in play, per request. Only Enter (see
+      // handleBarKeyDown) should do anything until the player locks in a
+      // reading -- mirrors the scoop-bar trap above exactly, just for this
+      // gauge's own ref.
+      if (active === barRef.current) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        return;
+      }
+
+      // Big carryable spoon (scoop gauge's replacement once a reading's
+      // confirmed) -- full directional lockdown per request: the player
+      // shouldn't be able to navigate away from it at all while it's up,
+      // whether still sitting there selected/idle or already mid-pour
+      // (bigSpoonStage 'moving'/'pouring') -- only Enter/Space (see
+      // handleBigSpoonKeyDown) should do anything. This element only exists
+      // in the DOM at all while scoopConfirmed && bigSpoonStage !== 'done'
+      // (see the JSX), so trapping "focus is currently on it" naturally
+      // covers exactly that whole window and releases itself the instant
+      // the pour finishes and the spoon unmounts (focus moves on to the
+      // heater button via its own effect right after).
+      if (active === bigSpoonRef.current) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
         return;
       }
 
@@ -1082,77 +1148,47 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
         return;
       }
 
+      // Whisk (chasen) -- full directional lockdown per request: once it's
+      // selected the player shouldn't be able to arrow away to the bowl/
+      // tins/progress dot like before. Only its own native Enter/Space
+      // handling (handleWhiskKeyDown) should do anything while it has
+      // focus.
       if (active === whiskRef.current) {
-        if (action === 'Left') {
-          e.preventDefault();
-          e.stopImmediatePropagation();
-          bowlRef.current?.focus();
-        } else if (action === 'Up') {
-          e.preventDefault();
-          e.stopImmediatePropagation();
-          firstTin?.focus();
-        } else if (action === 'Down') {
-          e.preventDefault();
-          e.stopImmediatePropagation();
-          document.querySelector('.progress-step.current')?.focus();
-        } else if (action === 'Right') {
-          // Trapped (a no-op) -- the whisk is the rightmost item in this
-          // row, so it shouldn't fall through to useFlatFocusNav's generic
-          // spatial fallback, which was jumping Right straight to whatever
-          // ProgressBar dot happened to be nearest (station 5/Serve) once
-          // whisking finished and moved the bowl/dropzone layout around --
-          // same "don't let an unhandled direction escape this row" trap as
-          // guava-powder's/banana-foam's own Right trap in ToppingsStation.js.
-          e.preventDefault();
-          e.stopImmediatePropagation();
-        }
+        e.preventDefault();
+        e.stopImmediatePropagation();
         return;
       }
 
+      // Bowl -- full directional lockdown per request: once it's selected
+      // the player shouldn't be able to arrow away to the heater/whisk/
+      // progress dot like before. Only its own native Enter/Space handling
+      // (handleBowlKeyDown) should do anything while it has focus.
       if (active === bowlRef.current) {
-        if (action === 'Left') {
-          e.preventDefault();
-          e.stopImmediatePropagation();
-          heaterButtonRef.current?.focus();
-        } else if (action === 'Right') {
-          e.preventDefault();
-          e.stopImmediatePropagation();
-          whiskRef.current?.focus();
-        } else if (action === 'Down') {
-          e.preventDefault();
-          e.stopImmediatePropagation();
-          document.querySelector('.progress-step.current')?.focus();
-        }
+        e.preventDefault();
+        e.stopImmediatePropagation();
         return;
       }
 
+      // Heater/kettle button -- full directional lockdown per request: once
+      // it's selected (focused), the player shouldn't be able to arrow away
+      // to the bowl/kettle/progress dot like before. Same shape as the
+      // scoop-bar/big-spoon traps above -- only the button's own native
+      // Enter/Space toggle (see its onClick in the JSX) should do anything
+      // while it has focus.
       if (active === heaterButtonRef.current) {
-        if (action === 'Right') {
-          e.preventDefault();
-          e.stopImmediatePropagation();
-          bowlRef.current?.focus();
-        } else if (action === 'Up') {
-          e.preventDefault();
-          e.stopImmediatePropagation();
-          kettleRef.current?.focus();
-        } else if (action === 'Down') {
-          e.preventDefault();
-          e.stopImmediatePropagation();
-          document.querySelector('.progress-step.current')?.focus();
-        }
+        e.preventDefault();
+        e.stopImmediatePropagation();
         return;
       }
 
+      // Kettle (the movable item itself, not the heater button) -- same
+      // full directional lockdown as the heater button above, per request:
+      // once it's selected the player shouldn't be able to arrow away from
+      // it. Only its own native Enter/Space handling (handleKettleKeyDown)
+      // should do anything while it has focus.
       if (active === kettleRef.current) {
-        if (action === 'Up') {
-          e.preventDefault();
-          e.stopImmediatePropagation();
-          gearButton?.focus();
-        } else if (action === 'Down') {
-          e.preventDefault();
-          e.stopImmediatePropagation();
-          heaterButtonRef.current?.focus();
-        }
+        e.preventDefault();
+        e.stopImmediatePropagation();
       }
     };
     window.addEventListener('keydown', handleKeyDown);
@@ -1956,6 +1992,15 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
     }
   }, [showTinSpotlight]);
 
+  // Keeps restrictTinVerticalNavRef (declared/read far above, alongside
+  // restrictNavigationRef, for the same early-registration ordering reasons)
+  // in sync with showTinSpotlight. No dependency array -- re-reads every
+  // render, same "cheap and never a render behind" shape as
+  // restrictNavigationRef's own sync effect below.
+  useEffect(() => {
+    restrictTinVerticalNavRef.current = showTinSpotlight;
+  });
+
   // The bowl's own persistent "what's in it" state -- deliberately *not*
   // reset when selectedTin changes (unlike the state above), so closing the
   // tin selector or picking a different tin doesn't erase matcha that's
@@ -2448,12 +2493,19 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
     // both push the ball AND move the D-pad focus off the whisk entirely,
     // since useFlatFocusNav listens for exactly those same two actions.
     // stopPropagation here is what keeps that listener from ever seeing
-    // the event at all while the minigame is running.
+    // the event at all while the minigame is running. Up/Down are trapped
+    // here too (preventDefault/stopPropagation only, no ball physics) --
+    // per request, the player shouldn't be able to navigate anywhere else
+    // with any arrow key for the whole time this minigame is up, and
+    // trapping directly here (rather than relying solely on the whisk
+    // keeping DOM focus throughout) guarantees that regardless of focus
+    // state.
     const handleKeyDown = (e) => {
       const action = getActionFromKeyEvent(e);
-      if (action !== 'Left' && action !== 'Right') return;
+      if (action !== 'Left' && action !== 'Right' && action !== 'Up' && action !== 'Down') return;
       e.preventDefault();
       e.stopPropagation();
+      if (action !== 'Left' && action !== 'Right') return;
       const until = performance.now() + MIX_HOLD_GRACE_MS;
       if (action === 'Right') {
         rightHeldUntil = until;
@@ -2750,7 +2802,7 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
                 >
                   <polygon points="12,2 22,36 2,36" />
                 </svg>
-                <p className="matcha-temp-callout-text">press enter to stop it at the right temperature</p>
+                <p className="matcha-temp-callout-text">stop it at the right temperature</p>
               </div>
             )}
           </>
@@ -2812,11 +2864,11 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
             arrow below, pointing down at the thing below it" shape as
             .ordering-progress-callout in CustomerOrdering.css). Gone the
             instant showTinSpotlight ends (a grade's actually been picked).
-            Reuses TIN_HINT_LEFT/TOP's own general neighborhood -- above the
-            tins, roughly centered on the cluster -- rather than a
-            freestanding new position. */}
+            Uses its own TIN_CALLOUT_LEFT/TOP anchor (nudged up/left of
+            TIN_HINT_LEFT/TOP per request) rather than sharing the plain-text
+            hint's position. */}
         {showTinSpotlight && (
-          <div className="matcha-tin-callout" style={{ left: `${TIN_HINT_LEFT}%`, top: `${TIN_HINT_TOP}%` }}>
+          <div className="matcha-tin-callout" style={{ left: `${TIN_CALLOUT_LEFT}%`, top: `${TIN_CALLOUT_TOP}%` }}>
             <p className="matcha-tin-callout-text">use the arrows and pick the correct grade</p>
             <svg
               className="matcha-tin-callout-arrow"
@@ -2915,9 +2967,7 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
                     confirmed). */}
                 {showScoopSpotlight && (
                   <div className="matcha-scoop-callout">
-                    <p className="matcha-scoop-callout-text">
-                      press enter to stop the lever at the right amount
-                    </p>
+                    <p className="matcha-scoop-callout-text">stop at the right amount</p>
                     <svg
                       className="matcha-scoop-callout-arrow"
                       viewBox="0 0 40 24"
@@ -2934,7 +2984,7 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
                     src="./Spoon.png"
                     alt=""
                     aria-hidden="true"
-                    className="station-item"
+                    className={`station-item${showScoopSpotlight ? ' matcha-spotlight-exempt' : ''}`}
                     style={{
                       left: `${item.left}%`,
                       top: `${item.top}%`,
@@ -2946,7 +2996,7 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
                 {SCOOP_SPOON_LABELS.map((label) => (
                   <span
                     key={label.key}
-                    className="scoop-spoon-label"
+                    className={`scoop-spoon-label${showScoopSpotlight ? ' matcha-spotlight-exempt' : ''}`}
                     aria-hidden="true"
                     style={{
                       left: `${label.left}%`,
@@ -3212,7 +3262,7 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
             landed -- see showKettlePourSpotlight above, which takes over
             from here). */}
         {showKettleSpotlight && (
-          <div className="matcha-kettle-callout" style={{ left: `${KETTLE_HINT_LEFT}%`, top: `${KETTLE_HINT_TOP}%` }}>
+          <div className="matcha-kettle-callout" style={{ left: `${KETTLE_CALLOUT_LEFT}%`, top: `${KETTLE_HINT_TOP}%` }}>
             <p className="matcha-kettle-callout-text">pour the water</p>
             <svg
               className="matcha-kettle-callout-arrow"
@@ -3244,8 +3294,9 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
             className="matcha-whisk-callout"
             // Shifted further left than WHISK_HINT_LEFT itself (the old
             // hint's own anchor, still used as-is for orders 2/3) per
-            // feedback that this callout needed to sit more to the left.
-            style={{ left: `${WHISK_HINT_LEFT - 10}%`, top: `${WHISK_HINT_TOP}%` }}
+            // feedback that this callout needed to sit more to the left,
+            // and a little lower than WHISK_HINT_TOP per further feedback.
+            style={{ left: `${WHISK_HINT_LEFT - 10}%`, top: `${WHISK_HINT_TOP + 4}%` }}
           >
             <p className="matcha-whisk-callout-text">use the chasen to froth your matcha</p>
             <svg
@@ -3278,7 +3329,10 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
         {showBowlCarrySpotlight && (
           <div
             className="matcha-bowl-callout"
-            style={{ left: `${bowlPos.left + bowlItem.width / 2}%`, top: `${bowlPos.top - 6}%` }}
+            // Shifted up/left of the bowlPos-derived anchor itself (the old
+            // hint's own position, still used as-is for orders 2/3) per
+            // feedback.
+            style={{ left: `${bowlPos.left + bowlItem.width / 2 - 10}%`, top: `${bowlPos.top - 15}%` }}
           >
             <p className="matcha-bowl-callout-text">select the bowl to carry it over to the next station</p>
             <svg
@@ -3577,12 +3631,11 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
                 className="matcha-mix-callout"
                 // Shifted further up/left than the mixBarPos-derived anchor
                 // itself (the old hint's own position, still used as-is for
-                // orders 2/3) per feedback.
-                style={{ left: `${mixBarPos.left + MIX_BAR_WIDTH / 2 - 8}%`, top: `${mixBarPos.top - 16}%` }}
+                // orders 2/3) per feedback, then further left again per
+                // additional feedback.
+                style={{ left: `${mixBarPos.left + MIX_BAR_WIDTH / 2 - 14}%`, top: `${mixBarPos.top - 16}%` }}
               >
-                <p className="matcha-mix-callout-text">
-                  use your left and right arrows to keep the ball in the green area without spilling
-                </p>
+                <p className="matcha-mix-callout-text">use the arrow keys to whisk without spilling</p>
                 <svg
                   className="matcha-mix-callout-arrow"
                   viewBox="0 0 24 40"
@@ -3706,7 +3759,7 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
             (button opened and closed once). */}
         {showStationSpotlight && (
           <div className="matcha-order-callout">
-            <p className="matcha-order-callout-text">use the order button to check back at any time</p>
+            <p className="matcha-order-callout-text">double check matcha grade and amount</p>
             <svg
               className="matcha-order-callout-arrow"
               viewBox="0 0 40 24"

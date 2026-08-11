@@ -63,8 +63,8 @@ const BASE_OPTIONS_WITH_YUZU = [...BASE_OPTIONS_WITH_STRAWBERRY, { value: 'yuzu'
 const TOPPING_OPTIONS_BASE = [
   { value: 'guava-syrup', label: 'guava syrup' },
   { value: 'mint-syrup', label: 'mint syrup' },
-  { value: 'reg-foam', label: 'reg cold foam' },
-  { value: 'matcha-foam', label: 'matcha cold foam' },
+  { value: 'reg-foam', label: 'reg foam' },
+  { value: 'matcha-foam', label: 'matcha foam' },
   { value: 'guava-powder', label: 'guava powder' },
   { value: 'matcha-powder', label: 'matcha powder' },
 ];
@@ -1171,9 +1171,17 @@ const CustomerOrdering = ({ activeStep, customerNumber, onNavigate, onAdvance, o
               </div>
             )}
             {showFormPhase && isOrderComplete && (
-              <p className="ordering-form-callout-text ordering-form-callout-text--lower">
-                press the button below to place the order
-              </p>
+              <div className="ordering-form-callout ordering-form-callout--lower">
+                <svg
+                  className="ordering-form-callout-arrow"
+                  viewBox="0 0 40 24"
+                  preserveAspectRatio="none"
+                  aria-hidden="true"
+                >
+                  <polygon points="2,12 36,2 36,22" />
+                </svg>
+                <p className="ordering-form-callout-text">place the order to make the drink</p>
+              </div>
             )}
             <div
               className="order-modal"
@@ -1457,7 +1465,7 @@ const CustomerOrdering = ({ activeStep, customerNumber, onNavigate, onAdvance, o
             screen. */}
         {showProgressPhase && (
           <div className="ordering-progress-callout">
-            <p className="ordering-progress-callout-text">head to the next station to start making the drink</p>
+            <p className="ordering-progress-callout-text">use the right arrow to head to the next station</p>
             <svg
               className="ordering-progress-callout-arrow"
               viewBox="0 0 24 40"
