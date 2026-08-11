@@ -51,21 +51,13 @@ const INCOMING_DRINK_SPOT = {
 // extend into the bottom-right corner either -- the powder pair is the only
 // one on the right edge, and it sits well above this, see TOPPING_ROW_BOTTOM
 // above), and the same pattern as MatchaMaking's MAKE_DRINK_ZONE before
-// that: the lower-right-corner label/drop-target that carries the current
+// that: the lower-right-corner marker/drop-target that carries the current
 // station's finished item on to the next screen's own incoming-item prop,
 // without navigating there itself -- the player still moves screens via the
-// ProgressBar/Back-key, same as ever.
-const SEND_TO_FINAL_ZONE = { left: 78, top: 85, width: 19, height: 13 };
-
-function isOverSendToFinalZone(leftPct, topPct) {
-  const margin = 3;
-  return (
-    leftPct >= SEND_TO_FINAL_ZONE.left - margin &&
-    leftPct <= SEND_TO_FINAL_ZONE.left + SEND_TO_FINAL_ZONE.width + margin &&
-    topPct >= SEND_TO_FINAL_ZONE.top - margin &&
-    topPct <= SEND_TO_FINAL_ZONE.top + SEND_TO_FINAL_ZONE.height + margin
-  );
-}
+// ProgressBar/Back-key, same as ever. width/height chosen so the marker
+// renders as a true square in real on-screen pixels, same reasoning as
+// SEND_DRINK_ZONE's own updated comment there.
+const SEND_TO_FINAL_ZONE = { left: 89.7, top: 85, width: 7.3, height: 13 };
 
 const DRINK_SEND_MOVE_MS = 350; // time to glide to the zone -- same value as Milk Selection's own CUP_SEND_MOVE_MS
 const DRINK_SEND_VANISH_MS = 350; // same value as Milk Selection's own CUP_SEND_VANISH_MS
@@ -353,18 +345,6 @@ function getSyrupHoverPos(item) {
   };
 }
 
-// Generous hit-test box for "was the bottle dropped on the cup", same
-// margin-based approach as Milk Selection's own isOverCup.
-function isOverIncomingCup(leftPct, topPct) {
-  const margin = 3;
-  return (
-    leftPct >= INCOMING_DRINK_SPOT.left - margin &&
-    leftPct <= INCOMING_DRINK_SPOT.left + INCOMING_DRINK_SIZE.width + margin &&
-    topPct >= INCOMING_DRINK_SPOT.top - margin &&
-    topPct <= INCOMING_DRINK_SPOT.top + INCOMING_DRINK_SIZE.height + margin
-  );
-}
-
 const SYRUP_MOVE_MS = 350; // time to glide to the hover spot
 // How long 'pouring' holds -- the whole balance-minigame window (see
 // SYRUP_MIX_BAR_WIDTH below) -- before gliding back home. Matches
@@ -376,8 +356,6 @@ const SYRUP_POUR_MS = 10000;
 // below), just the clamp range the balance minigame's ball position gets
 // mapped into.
 const SYRUP_MOVE_RANGE = 8;
-const SYRUP_SNAP_FRACTION = 0.5; // same "drop close to home, it snaps the rest of the way" idea as Milk Selection's BOTTLE_SNAP_FRACTION
-const SYRUP_CLICK_MAX_MOVE_PCT = 1; // below this much movement, a pointer-down -> up is a click, not a drag
 
 // Colors for the falling syrup stream -- reused directly (no extra alpha
 // adjustment) for .cup-syrup-fill's own gradient solid-color stop too,
@@ -580,8 +558,6 @@ const FOAM_POUR_MS = 2200;
 // the old per-keypress nudge, is gone now that the lever drives this
 // directly instead of stepped keypresses).
 const FOAM_MOVE_RANGE = 8;
-const FOAM_SNAP_FRACTION = 0.5;
-const FOAM_CLICK_MAX_MOVE_PCT = 1;
 
 // Colors for the falling foam stream -- reused directly for the
 // .cup-foam-fill/.cup-foam-cap color modifier classes too (see
@@ -631,8 +607,6 @@ const POWDER_POUR_MS = 2200;
 // Same "lever drives this directly now" note as FOAM_MOVE_RANGE's own
 // comment above -- the old POWDER_MOVE_STEP per-keypress nudge is gone.
 const POWDER_MOVE_RANGE = 8;
-const POWDER_SNAP_FRACTION = 0.5;
-const POWDER_CLICK_MAX_MOVE_PCT = 1;
 
 // Colors for the falling powder stream and the settled flecks alike (see
 // .cup-powder-fleck in ToppingsStation.css), same "one palette, one source
@@ -1263,8 +1237,6 @@ const ToppingsStation = ({
   //                  layered onto it) stops rendering entirely, same as the
   //                  bowl/cup once their own stages reach 'sent' one screen
   //                  earlier.
-  const [drinkDragPos, setDrinkDragPos] = useState(null); // { left, top } | null, while actively pointer-dragged
-  const drinkDragStartRef = useRef({ pointerX: 0, pointerY: 0, left: 0, top: 0 });
   const [drinkSendStage, setDrinkSendStage] = useState('idle');
   const [drinkSendPos, setDrinkSendPos] = useState(null);
 
@@ -1296,7 +1268,7 @@ const ToppingsStation = ({
   // than only the glass image moving while its contents stay behind at the
   // old spot (which is what would happen if these boxes stayed anchored to
   // the home spot constant during a drag/carry).
-  const incomingDrinkRenderPos = drinkDragPos || drinkSendPos || incomingDrinkHomeSpot;
+  const incomingDrinkRenderPos = drinkSendPos || incomingDrinkHomeSpot;
 
   // ---- Carried-over cup from Milk Selection (see incomingDrink above) ----
   // The finished cup (glass + milk/water fill + optional matcha fill),
@@ -1353,11 +1325,7 @@ const ToppingsStation = ({
     }
     return positions;
   });
-  const [syrupDrag, setSyrupDrag] = useState(null); // { key, left, top } | null
-  const syrupDragStartRef = useRef({ pointerX: 0, pointerY: 0, left: 0, top: 0 });
-
-  //   'idle'     -- normal, whichever syrup sits wherever it was left, freely
-  //                 draggable.
+  //   'idle'     -- normal, whichever syrup sits wherever it was left.
   //   'moving'   -- confirmed (dropped on the cup, or Enter/Space) -- gliding
   //                 to the hover-over-cup spot and flipping upside-down.
   //   'pouring'  -- arrived; cupSyrup is set (the fill appears) and it holds
@@ -1466,8 +1434,6 @@ const ToppingsStation = ({
     }
     return positions;
   });
-  const [foamDrag, setFoamDrag] = useState(null); // { key, left, top } | null
-  const foamDragStartRef = useRef({ pointerX: 0, pointerY: 0, left: 0, top: 0 });
   const [foamPourStage, setFoamPourStage] = useState('idle'); // 'idle' | 'moving' | 'pouring'
   const [foamPouringKey, setFoamPouringKey] = useState(null); // 'matcha-cold-foam' | 'reg-cold-foam' | null
   const [foamPourOffset, setFoamPourOffset] = useState(0);
@@ -1532,8 +1498,6 @@ const ToppingsStation = ({
     }
     return positions;
   });
-  const [powderDrag, setPowderDrag] = useState(null); // { key, left, top } | null
-  const powderDragStartRef = useRef({ pointerX: 0, pointerY: 0, left: 0, top: 0 });
   const [powderPourStage, setPowderPourStage] = useState('idle'); // 'idle' | 'moving' | 'pouring'
   const [powderPouringKey, setPowderPouringKey] = useState(null); // 'matcha-powder' | 'guava-powder' | null
   const [powderPourOffset, setPowderPourOffset] = useState(0);
@@ -2003,53 +1967,6 @@ const ToppingsStation = ({
     };
   }, [pourStage, pouringKey]);
 
-  const handleSyrupPointerDown = (item) => (e) => {
-    if (pouringKey === item.key) return; // can't re-grab mid-pour
-    const base = syrupPositions[item.key];
-    e.currentTarget.setPointerCapture(e.pointerId);
-    syrupDragStartRef.current = { pointerX: e.clientX, pointerY: e.clientY, left: base.left, top: base.top };
-    setSyrupDrag({ key: item.key, left: base.left, top: base.top });
-  };
-
-  const handleSyrupPointerMove = (item) => (e) => {
-    if (!syrupDrag || syrupDrag.key !== item.key) return;
-    const rect = containerRef.current?.getBoundingClientRect();
-    if (!rect) return;
-    const dxPct = ((e.clientX - syrupDragStartRef.current.pointerX) / rect.width) * 100;
-    const dyPct = ((e.clientY - syrupDragStartRef.current.pointerY) / rect.height) * 100;
-    setSyrupDrag({
-      key: item.key,
-      left: syrupDragStartRef.current.left + dxPct,
-      top: syrupDragStartRef.current.top + dyPct,
-    });
-  };
-
-  const handleSyrupPointerUp = (item) => (e) => {
-    if (!syrupDrag || syrupDrag.key !== item.key) return;
-    e.currentTarget.releasePointerCapture?.(e.pointerId);
-    if (canPourSyrup && isOverIncomingCup(syrupDrag.left, syrupDrag.top)) {
-      setSyrupDrag(null);
-      beginSyrupPour(item.key);
-      return;
-    }
-    const home = { left: item.left, top: item.top };
-    const totalMove = Math.max(
-      Math.abs(e.clientX - syrupDragStartRef.current.pointerX),
-      Math.abs(e.clientY - syrupDragStartRef.current.pointerY)
-    );
-    const rect = containerRef.current?.getBoundingClientRect();
-    const totalMovePct = rect ? (totalMove / Math.max(rect.width, rect.height)) * 100 : 0;
-    const snapBack =
-      totalMovePct < SYRUP_CLICK_MAX_MOVE_PCT ||
-      (Math.abs(syrupDrag.left - home.left) < item.width * SYRUP_SNAP_FRACTION &&
-        Math.abs(syrupDrag.top - home.top) < item.height * SYRUP_SNAP_FRACTION);
-    setSyrupPositions((prev) => ({
-      ...prev,
-      [item.key]: snapBack ? home : { left: syrupDrag.left, top: syrupDrag.top },
-    }));
-    setSyrupDrag(null);
-  };
-
   const handleSyrupKeyDown = (item) => (e) => {
     const action = getActionFromKeyEvent(e);
     if (action !== 'Enter') return;
@@ -2122,53 +2039,6 @@ const ToppingsStation = ({
     return undefined;
   }, [foamPourStage, foamPouringKey, toppingItems]);
 
-  const handleFoamPointerDown = (item) => (e) => {
-    if (foamPouringKey === item.key) return; // can't re-grab mid-pour
-    const base = foamPositions[item.key];
-    e.currentTarget.setPointerCapture(e.pointerId);
-    foamDragStartRef.current = { pointerX: e.clientX, pointerY: e.clientY, left: base.left, top: base.top };
-    setFoamDrag({ key: item.key, left: base.left, top: base.top });
-  };
-
-  const handleFoamPointerMove = (item) => (e) => {
-    if (!foamDrag || foamDrag.key !== item.key) return;
-    const rect = containerRef.current?.getBoundingClientRect();
-    if (!rect) return;
-    const dxPct = ((e.clientX - foamDragStartRef.current.pointerX) / rect.width) * 100;
-    const dyPct = ((e.clientY - foamDragStartRef.current.pointerY) / rect.height) * 100;
-    setFoamDrag({
-      key: item.key,
-      left: foamDragStartRef.current.left + dxPct,
-      top: foamDragStartRef.current.top + dyPct,
-    });
-  };
-
-  const handleFoamPointerUp = (item) => (e) => {
-    if (!foamDrag || foamDrag.key !== item.key) return;
-    e.currentTarget.releasePointerCapture?.(e.pointerId);
-    if (canPourFoam && isOverIncomingCup(foamDrag.left, foamDrag.top)) {
-      setFoamDrag(null);
-      beginFoamPour(item.key);
-      return;
-    }
-    const home = { left: item.left, top: item.top };
-    const totalMove = Math.max(
-      Math.abs(e.clientX - foamDragStartRef.current.pointerX),
-      Math.abs(e.clientY - foamDragStartRef.current.pointerY)
-    );
-    const rect = containerRef.current?.getBoundingClientRect();
-    const totalMovePct = rect ? (totalMove / Math.max(rect.width, rect.height)) * 100 : 0;
-    const snapBack =
-      totalMovePct < FOAM_CLICK_MAX_MOVE_PCT ||
-      (Math.abs(foamDrag.left - home.left) < item.width * FOAM_SNAP_FRACTION &&
-        Math.abs(foamDrag.top - home.top) < item.height * FOAM_SNAP_FRACTION);
-    setFoamPositions((prev) => ({
-      ...prev,
-      [item.key]: snapBack ? home : { left: foamDrag.left, top: foamDrag.top },
-    }));
-    setFoamDrag(null);
-  };
-
   const handleFoamKeyDown = (item) => (e) => {
     const action = getActionFromKeyEvent(e);
     if (action !== 'Enter') return;
@@ -2235,53 +2105,6 @@ const ToppingsStation = ({
     return undefined;
   }, [powderPourStage, powderPouringKey, toppingItems]);
 
-  const handlePowderPointerDown = (item) => (e) => {
-    if (powderPouringKey === item.key) return; // can't re-grab mid-pour
-    const base = powderPositions[item.key];
-    e.currentTarget.setPointerCapture(e.pointerId);
-    powderDragStartRef.current = { pointerX: e.clientX, pointerY: e.clientY, left: base.left, top: base.top };
-    setPowderDrag({ key: item.key, left: base.left, top: base.top });
-  };
-
-  const handlePowderPointerMove = (item) => (e) => {
-    if (!powderDrag || powderDrag.key !== item.key) return;
-    const rect = containerRef.current?.getBoundingClientRect();
-    if (!rect) return;
-    const dxPct = ((e.clientX - powderDragStartRef.current.pointerX) / rect.width) * 100;
-    const dyPct = ((e.clientY - powderDragStartRef.current.pointerY) / rect.height) * 100;
-    setPowderDrag({
-      key: item.key,
-      left: powderDragStartRef.current.left + dxPct,
-      top: powderDragStartRef.current.top + dyPct,
-    });
-  };
-
-  const handlePowderPointerUp = (item) => (e) => {
-    if (!powderDrag || powderDrag.key !== item.key) return;
-    e.currentTarget.releasePointerCapture?.(e.pointerId);
-    if (canPourPowder && isOverIncomingCup(powderDrag.left, powderDrag.top)) {
-      setPowderDrag(null);
-      beginPowderPour(item.key);
-      return;
-    }
-    const home = { left: item.left, top: item.top };
-    const totalMove = Math.max(
-      Math.abs(e.clientX - powderDragStartRef.current.pointerX),
-      Math.abs(e.clientY - powderDragStartRef.current.pointerY)
-    );
-    const rect = containerRef.current?.getBoundingClientRect();
-    const totalMovePct = rect ? (totalMove / Math.max(rect.width, rect.height)) * 100 : 0;
-    const snapBack =
-      totalMovePct < POWDER_CLICK_MAX_MOVE_PCT ||
-      (Math.abs(powderDrag.left - home.left) < item.width * POWDER_SNAP_FRACTION &&
-        Math.abs(powderDrag.top - home.top) < item.height * POWDER_SNAP_FRACTION);
-    setPowderPositions((prev) => ({
-      ...prev,
-      [item.key]: snapBack ? home : { left: powderDrag.left, top: powderDrag.top },
-    }));
-    setPowderDrag(null);
-  };
-
   const handlePowderKeyDown = (item) => (e) => {
     const action = getActionFromKeyEvent(e);
     if (action !== 'Enter') return;
@@ -2338,12 +2161,10 @@ const ToppingsStation = ({
     beginLeafPlace();
   };
 
-  // ---- Sending the finished drink on to Serving -- drag/Enter handlers,
-  // same shape as Milk Selection's own handleCupPointerDown/Move/Up/
-  // KeyDown + beginSendDrink, just without that screen's extra shelf<->
-  // table toggle (the drink here only ever has the one resting spot,
-  // incomingDrinkHomeSpot, so a drop that doesn't land on the zone always
-  // just snaps back there instead of choosing between two spots).
+  // ---- Sending the finished drink on to Serving -- select + Enter, same
+  // shape as Milk Selection's own handleCupKeyDown + beginSendDrink, just
+  // without that screen's extra shelf<->table toggle (the drink here only
+  // ever has the one resting spot, incomingDrinkHomeSpot).
   const beginSendToFinal = () => {
     if (!canSendToFinal) return;
     // Snapshotted right away (same "fired at the moment the item starts its
@@ -2417,45 +2238,6 @@ const ToppingsStation = ({
     }
     return undefined;
   }, [drinkSendStage]);
-
-  const handleDrinkPointerDown = (e) => {
-    if (drinkSendStage !== 'idle') return; // can't re-grab mid-carry/vanishing/gone
-    e.currentTarget.setPointerCapture(e.pointerId);
-    drinkDragStartRef.current = {
-      pointerX: e.clientX,
-      pointerY: e.clientY,
-      left: incomingDrinkHomeSpot.left,
-      top: incomingDrinkHomeSpot.top,
-    };
-    setDrinkDragPos({ left: incomingDrinkHomeSpot.left, top: incomingDrinkHomeSpot.top });
-  };
-
-  const handleDrinkPointerMove = (e) => {
-    if (!drinkDragPos) return;
-    const rect = containerRef.current?.getBoundingClientRect();
-    if (!rect) return;
-    const dxPct = ((e.clientX - drinkDragStartRef.current.pointerX) / rect.width) * 100;
-    const dyPct = ((e.clientY - drinkDragStartRef.current.pointerY) / rect.height) * 100;
-    setDrinkDragPos({
-      left: drinkDragStartRef.current.left + dxPct,
-      top: drinkDragStartRef.current.top + dyPct,
-    });
-  };
-
-  const handleDrinkPointerUp = (e) => {
-    if (!drinkDragPos) return;
-    e.currentTarget.releasePointerCapture?.(e.pointerId);
-    if (canSendToFinal && isOverSendToFinalZone(drinkDragPos.left, drinkDragPos.top)) {
-      setDrinkDragPos(null);
-      beginSendToFinal();
-      return;
-    }
-    // No second resting spot to choose between here (unlike Milk
-    // Selection's shelf/table cup) -- any drop that isn't the Serving zone
-    // just snaps back to incomingDrinkHomeSpot, the only spot there is to
-    // land on.
-    setDrinkDragPos(null);
-  };
 
   const handleDrinkKeyDown = (e) => {
     const action = getActionFromKeyEvent(e);
@@ -2574,38 +2356,36 @@ const ToppingsStation = ({
 
       <div className="toppings-content">
         <img src={TOPPINGS_BACKGROUND_SRC} alt="Toppings station counter" className="toppings-art" />
-        {/* All six topping items are now fully interactive (drag-onto-the-
-            drink or Enter to pour) -- matcha-powder/guava-powder were the
-            last two still on the old "just a selectable, non-draggable
+        {/* All six topping items are now fully interactive (select and
+            press Enter to pour) -- matcha-powder/guava-powder were the
+            last two still on the old "just a selectable, non-interactive
             placeholder" treatment (see .station-item.selectable in
             ToppingsStation.css, still used elsewhere for genuinely inert
             items), so that placeholder block that used to render them
             (and, before that, the syrup/foam pairs too) has been removed
             entirely rather than left rendering an always-empty filtered
             list. */}
-        {/* Guava/mint syrup -- draggable onto the drink (or Enter to pour)
-            same as Milk Selection's own bottles, reusing MatchaMaking.css's
-            .station-item.movable (drag cursor, focus glow, .dragging/
-            .settling) rather than this file's own local .selectable, since
-            that's the exact drag/focus treatment this needs and it's
-            already loaded globally (see the comment on the carried-over cup
-            below for that same reasoning). The 180deg flip (WHISK_FLIP_DEG,
-            imported from MatchaMaking.js) plays while settling/pouring --
-            see the big comment on SYRUP_HOVER_GAP above for why a full flip
-            rather than milk bottles' own partial tilt. */}
+        {/* Guava/mint syrup -- select and press Enter to pour, reusing
+            MatchaMaking.css's .station-item.movable (focus glow, .settling)
+            rather than this file's own local .selectable, since that's the
+            exact focus treatment this needs and it's already loaded
+            globally (see the comment on the carried-over cup below for that
+            same reasoning). The 180deg flip (WHISK_FLIP_DEG, imported from
+            MatchaMaking.js) plays while settling/pouring -- see the big
+            comment on SYRUP_HOVER_GAP above for why a full flip rather than
+            milk bottles' own partial tilt. */}
         {toppingItems
           .filter((item) => item.key === 'guava-syrup' || item.key === 'mint-syrup' || item.key === 'honey-syrup')
           .map((item) => {
-          const dragging = syrupDrag?.key === item.key;
           const isPouring = pouringKey === item.key;
-          const basePos = dragging ? syrupDrag : syrupPositions[item.key];
+          const basePos = syrupPositions[item.key];
           const pos = isPouring ? { left: basePos.left + pourOffset, top: basePos.top } : basePos;
           return (
             <img
               key={item.key}
               src={item.src}
-              alt={`${item.alt}. Drag onto the drink to pour some in, or select it and press Enter. While it's pouring, use Left/Right to aim the stream.`}
-              className={`station-item movable${dragging ? ' dragging' : ''}${isPouring ? ' settling' : ''}${
+              alt={`${item.alt}. Select it and press Enter to pour some in. While it's pouring, use Left/Right to aim the stream.`}
+              className={`station-item movable${isPouring ? ' settling' : ''}${
                 showSyrupSpotlight ? ' topping-spotlight-exempt' : ''
               }`}
               data-focusable
@@ -2619,17 +2399,14 @@ const ToppingsStation = ({
                 height: `${item.height}%`,
                 ...(isPouring ? { transform: `rotate(${WHISK_FLIP_DEG}deg)` } : {}),
               }}
-              onPointerDown={handleSyrupPointerDown(item)}
-              onPointerMove={handleSyrupPointerMove(item)}
-              onPointerUp={handleSyrupPointerUp(item)}
               onKeyDown={handleSyrupKeyDown(item)}
               onFocus={() => setFocusedTopping(item.key)}
               onBlur={() => setFocusedTopping((prev) => (prev === item.key ? null : prev))}
             />
           );
         })}
-        {/* Matcha-cold-foam/reg-cold-foam/banana-foam -- drag onto the drink
-            or Enter to pour like the syrup pair above, but landing is now
+        {/* Matcha-cold-foam/reg-cold-foam/banana-foam -- select and press
+            Enter to pour like the syrup pair above, but landing is now
             decided by the shared aim-lever minigame (see LEVER_PERIOD_MS's
             own big comment) rather than a Left/Right-steered stream; see the
             big comment above FOAM_HOVER_GAP for what's different about where
@@ -2646,16 +2423,15 @@ const ToppingsStation = ({
             own target). */}
         {toppingItems.filter((item) => item.key === 'matcha-cold-foam' || item.key === 'reg-cold-foam' || item.key === 'banana-foam').map(
           (item) => {
-            const dragging = foamDrag?.key === item.key;
             const isPouring = foamPouringKey === item.key;
-            const basePos = dragging ? foamDrag : foamPositions[item.key];
+            const basePos = foamPositions[item.key];
             const pos = isPouring ? { left: basePos.left + foamPourOffset, top: basePos.top } : basePos;
             return (
               <img
                 key={item.key}
                 src={item.src}
-                alt={`${item.alt}. Drag onto the drink to pour some in, or select it and press Enter. While it's pouring, catch the lever right in the middle to land it clean.`}
-                className={`station-item movable${dragging ? ' dragging' : ''}${isPouring ? ' settling' : ''}${
+                alt={`${item.alt}. Select it and press Enter to pour some in. While it's pouring, catch the lever right in the middle to land it clean.`}
+                className={`station-item movable${isPouring ? ' settling' : ''}${
                   showFoamSpotlight ? ' topping-spotlight-exempt' : ''
                 }`}
                 data-focusable
@@ -2669,9 +2445,6 @@ const ToppingsStation = ({
                   height: `${item.height}%`,
                   ...(isPouring ? { transform: `rotate(${WHISK_FLIP_DEG}deg)` } : {}),
                 }}
-                onPointerDown={handleFoamPointerDown(item)}
-                onPointerMove={handleFoamPointerMove(item)}
-                onPointerUp={handleFoamPointerUp(item)}
                 onKeyDown={handleFoamKeyDown(item)}
                 onFocus={() => setFocusedTopping(item.key)}
                 onBlur={() => setFocusedTopping((prev) => (prev === item.key ? null : prev))}
@@ -2679,29 +2452,28 @@ const ToppingsStation = ({
             );
           }
         )}
-        {/* Matcha-powder/guava-powder -- drag onto the drink or Enter to
-            pour like the syrup/foam pairs above, but landing is now decided
-            by the same shared aim-lever minigame foam uses (see
-            LEVER_PERIOD_MS's own big comment) rather than a Left/Right-
-            steered stream; see the big comment above POWDER_HOVER_GAP for
-            what's different about powder itself (particle stream,
-            foam-dependent landing spot). topping-spotlight-exempt applied
-            whenever showPowderSpotlight is up, same "punch the pick-phase
-            target through the pink tint" treatment the syrup/foam pairs'
-            own images get from their own beats -- deliberately not exempt
-            during showSyrupSpotlight/showFoamSpotlight, same mutual-
-            exclusivity reasoning as those two beats' own images. */}
+        {/* Matcha-powder/guava-powder -- select and press Enter to pour like
+            the syrup/foam pairs above, but landing is now decided by the
+            same shared aim-lever minigame foam uses (see LEVER_PERIOD_MS's
+            own big comment) rather than a Left/Right-steered stream; see the
+            big comment above POWDER_HOVER_GAP for what's different about
+            powder itself (particle stream, foam-dependent landing spot).
+            topping-spotlight-exempt applied whenever showPowderSpotlight is
+            up, same "punch the pick-phase target through the pink tint"
+            treatment the syrup/foam pairs' own images get from their own
+            beats -- deliberately not exempt during
+            showSyrupSpotlight/showFoamSpotlight, same mutual-exclusivity
+            reasoning as those two beats' own images. */}
         {toppingItems.filter((item) => POWDER_PAIR.some((p) => p.key === item.key)).map((item) => {
-          const dragging = powderDrag?.key === item.key;
           const isPouring = powderPouringKey === item.key;
-          const basePos = dragging ? powderDrag : powderPositions[item.key];
+          const basePos = powderPositions[item.key];
           const pos = isPouring ? { left: basePos.left + powderPourOffset, top: basePos.top } : basePos;
           return (
             <img
               key={item.key}
               src={item.src}
-              alt={`${item.alt}. Drag onto the drink to pour some in, or select it and press Enter. While it's pouring, catch the lever right in the middle to land it clean.`}
-              className={`station-item movable${dragging ? ' dragging' : ''}${isPouring ? ' settling' : ''}${
+              alt={`${item.alt}. Select it and press Enter to pour some in. While it's pouring, catch the lever right in the middle to land it clean.`}
+              className={`station-item movable${isPouring ? ' settling' : ''}${
                 showPowderSpotlight ? ' topping-spotlight-exempt' : ''
               }`}
               data-focusable
@@ -2715,9 +2487,6 @@ const ToppingsStation = ({
                 height: `${item.height}%`,
                 ...(isPouring ? { transform: `rotate(${WHISK_FLIP_DEG}deg)` } : {}),
               }}
-              onPointerDown={handlePowderPointerDown(item)}
-              onPointerMove={handlePowderPointerMove(item)}
-              onPointerUp={handlePowderPointerUp(item)}
               onKeyDown={handlePowderKeyDown(item)}
               onFocus={() => setFocusedTopping(item.key)}
               onBlur={() => setFocusedTopping((prev) => (prev === item.key ? null : prev))}
@@ -2752,22 +2521,18 @@ const ToppingsStation = ({
             foam". A single block covering all six items (rather than one
             per pair) since exactly one of them can be focused at a time;
             pos is worked out the same way each pair's own .map() above
-            works it out (drag position if mid-drag, else its resting
-            position, shifted by that pair's own pourOffset while it's
-            actually pouring). */}
+            works it out (its resting position, shifted by that pair's own
+            pourOffset while it's actually pouring). */}
         {toppingItems.filter((item) => item.key === focusedTopping).map((item) => {
           let pos;
           if (item.key === 'guava-syrup' || item.key === 'mint-syrup' || item.key === 'honey-syrup') {
-            const dragging = syrupDrag?.key === item.key;
-            const basePos = dragging ? syrupDrag : syrupPositions[item.key];
+            const basePos = syrupPositions[item.key];
             pos = pouringKey === item.key ? { left: basePos.left + pourOffset, top: basePos.top } : basePos;
           } else if (item.key === 'matcha-cold-foam' || item.key === 'reg-cold-foam' || item.key === 'banana-foam') {
-            const dragging = foamDrag?.key === item.key;
-            const basePos = dragging ? foamDrag : foamPositions[item.key];
+            const basePos = foamPositions[item.key];
             pos = foamPouringKey === item.key ? { left: basePos.left + foamPourOffset, top: basePos.top } : basePos;
           } else {
-            const dragging = powderDrag?.key === item.key;
-            const basePos = dragging ? powderDrag : powderPositions[item.key];
+            const basePos = powderPositions[item.key];
             pos = powderPouringKey === item.key ? { left: basePos.left + powderPourOffset, top: basePos.top } : basePos;
           }
           return (
@@ -2800,36 +2565,36 @@ const ToppingsStation = ({
             mint leaves
           </p>
         )}
-        {/* Carried-over drink -- now interactive (drag onto the Send to
-            Serving zone below, or select + Enter), same treatment the bowl/
-            cup themselves get one screen earlier once they're ready to move
-            on. Every fill/fleck below is positioned off incomingMilkBox/
-            incomingMatchaBox/etc., which are themselves computed off
-            incomingDrinkRenderPos (see the big comment on that above) --
-            not the fixed home spot -- so the whole assembled drink
-            glides/vanishes together as one piece instead of just the cup
-            image moving while its contents stay behind. src/width/height
-            come from CUP_TYPES[incomingCupType] (see the big comment on
-            incomingCupType above) rather than always GlassCup.png/
-            INCOMING_DRINK_SIZE, so this actually renders the same cup type
-            (glass, plastic, or mug) the player used on Milk Selection instead of
-            always showing the glass one. Stops rendering entirely once
-            drinkSendStage reaches 'sent' (same "gone once sent" treatment
-            the bowl/cup get). While 'carrying'/'vanishing' the cup is still
-            rendered but pointer-events: none (inline) so it can't be
-            grabbed mid-transit, and everything here picks up
-            .bowl-vanishing (reused from MatchaMaking.css, already loaded
-            globally) once 'vanishing' starts. */}
+        {/* Carried-over drink -- now interactive (select + Enter to send),
+            same treatment the bowl/cup themselves get one screen earlier
+            once they're ready to move on. Every fill/fleck below is
+            positioned off incomingMilkBox/incomingMatchaBox/etc., which are
+            themselves computed off incomingDrinkRenderPos (see the big
+            comment on that above) -- not the fixed home spot -- so the
+            whole assembled drink glides/vanishes together as one piece
+            instead of just the cup image moving while its contents stay
+            behind. src/width/height come from CUP_TYPES[incomingCupType]
+            (see the big comment on incomingCupType above) rather than
+            always GlassCup.png/INCOMING_DRINK_SIZE, so this actually
+            renders the same cup type (glass, plastic, or mug) the player
+            used on Milk Selection instead of always showing the glass one.
+            Stops rendering entirely once drinkSendStage reaches 'sent'
+            (same "gone once sent" treatment the bowl/cup get). While
+            'carrying'/'vanishing' the cup is still rendered but
+            pointer-events: none (inline) so it can't be re-selected mid-
+            transit, and everything here picks up .bowl-vanishing (reused
+            from MatchaMaking.css, already loaded globally) once 'vanishing'
+            starts. */}
         {incomingDrink && drinkSendStage !== 'sent' && (
           <>
             <img
               src={CUP_TYPES[incomingCupType].src}
               alt={
                 canSendToFinal
-                  ? 'Finished drink. Drag onto the Send to Serving zone to send it out, or select it and press Enter.'
+                  ? 'Finished drink. Select it and press Enter to send it to Serving.'
                   : 'Finished drink.'
               }
-              className={`station-item movable${drinkDragPos ? ' dragging' : ''}${
+              className={`station-item movable${
                 drinkSendStage === 'vanishing' ? ' bowl-vanishing' : ''
               }${showSyrupSpotlight || showFoamSpotlight || showPowderSpotlight || showSendSpotlight ? ' topping-spotlight-exempt' : ''}`}
               data-focusable
@@ -2843,9 +2608,6 @@ const ToppingsStation = ({
                 height: `${incomingDrinkSize.height}%`,
                 ...(drinkSendStage !== 'idle' ? { pointerEvents: 'none' } : {}),
               }}
-              onPointerDown={handleDrinkPointerDown}
-              onPointerMove={handleDrinkPointerMove}
-              onPointerUp={handleDrinkPointerUp}
               onKeyDown={handleDrinkKeyDown}
             />
             {/* Ice cubes carried over from Milk Selection -- incomingDrink
@@ -3037,11 +2799,13 @@ const ToppingsStation = ({
             already loaded globally). Appears once there's a drink to send
             and disappears the instant it actually heads there
             (drinkSendStage leaving 'idle'). Not itself focusable -- it's a
-            drop target the drink gets dragged onto or sent to via its own
-            Enter press. topping-spotlight-exempt applied whenever
-            showSendSpotlight is up -- the "bottom right area to take it to
-            the next station" per request, one of only two things (along
-            with the cup itself) this final beat exempts. */}
+            drop target the drink gets sent to via its own Enter press.
+            topping-spotlight-exempt applied whenever showSendSpotlight is
+            up -- the "bottom right area to take it to the next station" per
+            request, one of only two things (along with the cup itself) this
+            final beat exempts. Just a plain gray square with a thick arrow
+            pointing at it -- no text, no animation (see .make-drink-zone's
+            own comment in MatchaMaking.css). */}
         {canSendToFinal && (
           <div
             className={`make-drink-zone${showSendSpotlight ? ' topping-spotlight-exempt' : ''}`}
@@ -3053,7 +2817,9 @@ const ToppingsStation = ({
               height: `${SEND_TO_FINAL_ZONE.height}%`,
             }}
           >
-            send to serving
+            <svg className="make-drink-zone-arrow" viewBox="0 0 60 40" preserveAspectRatio="none">
+              <polygon points="0,12 32,12 32,2 58,20 32,38 32,28 0,28" />
+            </svg>
           </div>
         )}
         {/* Falling syrup stream -- see the big comment on

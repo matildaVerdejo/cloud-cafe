@@ -60,7 +60,7 @@ export const TABLE_SIZE = { width: 19.40, height: 37.16 }; // same aspect ratio,
 
 // ---- Plastic cup: second cup option in the cubby -------------------------
 // A second slot in the same shelf cubby as the glass cup, with the exact
-// same shelf<->table drag/Enter-toggle, milk/matcha pour targeting, ice
+// same shelf<->table Enter-toggle, milk/matcha pour targeting, ice
 // placement, and send-to-Toppings mechanics -- see activeCup in the
 // component below for how one shared set of cup logic (unchanged from
 // before this was added) now just applies to whichever cup type is
@@ -114,7 +114,7 @@ const PLASTIC_CUP_SPOTS = {
 // ---- Mug: third cup option in the cubby -----------------------------------
 // The cabinet's third (rightmost) compartment in MilkMixingStation.png --
 // previously empty, now filled the same way slot 2 (plastic) filled the
-// cabinet's middle one. Exact same shelf<->table drag/Enter-toggle, milk/
+// cabinet's middle one. Exact same shelf<->table Enter-toggle, milk/
 // matcha pour targeting, ice placement, and send-to-Toppings mechanics as
 // glass/plastic (all of that is already generic over CUP_TYPES[activeCup],
 // see the big comment above it -- adding this third entry there is what
@@ -178,7 +178,7 @@ const MUG_CUP_BODY_FRAC = { left: 0.028, right: 0.712 };
 // One entry per cup type -- all three sit in the cubby, but only one is ever
 // "the" cup actually in play (see activeCup in the component below).
 // Bundling each type's own art/positions/sizes here is what lets the
-// shelf<->table drag, milk/matcha pour targeting, ice placement, and
+// shelf<->table Enter-toggle, milk/matcha pour targeting, ice placement, and
 // send-to-Toppings logic stay written once, generically, keyed off
 // whichever type is currently active, rather than duplicated per cup.
 // Exported so ToppingsStation.js/FinalCombination.js can look up the right
@@ -373,9 +373,8 @@ function layoutBottles(keys, bottleWidth = BOTTLE_WIDTH, bottleHeight = BOTTLE_H
   }));
 
   // Each bottle's counter spot, keyed for lookup -- both the starting
-  // position on mount and the "home" a bottle snaps back to once it's been
-  // picked up and set back down (see BOTTLE_SNAP_FRACTION/BOTTLE_CLICK_MAX_
-  // MOVE_PCT below).
+  // position on mount and the "home" a bottle snaps back to on Enter when
+  // the pour preconditions aren't met (see handleBottleKeyDown below).
   const home = items.reduce((acc, item) => {
     acc[item.key] = { left: item.left, top: item.top };
     return acc;
@@ -700,20 +699,6 @@ export function getMatchaBoxFor(milkBox) {
   };
 }
 
-// Same idea as MatchaMaking's kettle/bowl/whisk: drop a bottle back close
-// to its home spot and it snaps the rest of the way in, scaled to the
-// bottle's own footprint. A drop anywhere else just leaves it there.
-const BOTTLE_SNAP_FRACTION = 0.5;
-// Below this much total pointer movement (in container %), a pointer-down
-// -> pointer-up is treated as a plain click/tap rather than a drag -- lets
-// players snap a displaced bottle straight home with a single click/Select
-// press instead of having to drag it all the way back themselves.
-const BOTTLE_CLICK_MAX_MOVE_PCT = 1;
-
-function clampPct(value, size) {
-  return Math.min(Math.max(value, 0), 100 - size);
-}
-
 // Seven ice cubes start piled inside the ice box in two vertical columns
 // (4 left, 3 right), each cube overlapping the one above it so the stack
 // stays within the box's shallow depth without spilling past its bottom
@@ -730,6 +715,33 @@ const ICE_BOX_SPOTS = [
   { left: 12.93, top: 75.21 },
   { left: 12.93, top: 77.13 },
 ];
+
+// Explicit fixed adjacency graph for arrow-key movement between the seven
+// piled cubes -- same "exact fixed graph, not generic spatial nearest-
+// neighbor matching" approach as every other row/column of items in this
+// file (bottles, shelf cups, etc.), rather than leaning on
+// useFlatFocusNav's own generic spatial fallback, which isn't reliable
+// against this pile's ragged bottom edge (left column has 4 cubes, right
+// only 3 -- see ICE_BOX_SPOTS above). Left column is indices 0-3 top to
+// bottom, right column is indices 4-6 top to bottom, and each left-column
+// cube pairs with the right-column cube at the same row (0<->4, 1<->5,
+// 2<->6); index 3 (bottom of the taller left column) has no right-column
+// partner, and neither column has anything further left/right, so those
+// directions are `null` (trap -- keeps focus right where it is). 'gear'/
+// 'station' mean "leave the pile entirely" (top row -> the settings gear,
+// bottom row -> the ProgressBar's current station dot, matching the nav-
+// graph effect's other legs) -- gated by restrictIceVerticalNavRef so the
+// first-order ice-placing walkthrough beat (showIceSpotlight) can trap the
+// player inside the pile and only allow moving between cubes.
+const ICE_ADJACENCY = {
+  0: { up: 'gear', down: 1, left: null, right: 4 },
+  1: { up: 0, down: 2, left: null, right: 5 },
+  2: { up: 1, down: 3, left: null, right: 6 },
+  3: { up: 2, down: 'station', left: null, right: null },
+  4: { up: 'gear', down: 5, left: 0, right: null },
+  5: { up: 4, down: 6, left: 1, right: null },
+  6: { up: 5, down: 'station', left: 2, right: null },
+};
 const ICE_BOX_SIZE = { width: 5.03, height: 9.196 };
 // width/height are percentages of the container's own width/height
 // respectively (1920x1080 -- see .mixing-stage's aspect-ratio in
@@ -834,27 +846,10 @@ export function getIceCupSlotPos(
   };
 }
 
-// Generous hit-test box for "is this drop point inside the cup" -- the cup
-// itself only counts as a valid target while it's on the table (there's
-// nothing to drop ice into while it's still up on the shelf). tableSpot/
-// tableSize are now passed in (rather than always CUP_SPOTS.table/
-// TABLE_SIZE) so this tests against whichever cup type is currently active
-// -- see CUP_TYPES/activeCup in the component.
-function isOverCup(leftPct, topPct, cupSpot, tableSpot, tableSize) {
-  if (cupSpot !== 'table') return false;
-  const margin = 3; // percentage points of extra forgiveness on each side
-  return (
-    leftPct >= tableSpot.left - margin &&
-    leftPct <= tableSpot.left + tableSize.width + margin &&
-    topPct >= tableSpot.top - margin &&
-    topPct <= tableSpot.top + tableSize.height + margin
-  );
-}
-
 // Bounding box around every ICE_BOX_SPOTS position, derived automatically
-// so it stays correct if the pile's layout changes again later. Used as the
-// symmetric "is this drop point back over the ice box" hit-test for
-// dragging a placed cube back out of the cup.
+// so it stays correct if the pile's layout changes again later. Used to
+// position other elements relative to the ice box (see BOTTLE_BOTTOM/
+// bottleHome below).
 const ICE_BOX_BOUNDS = {
   left: Math.min(...ICE_BOX_SPOTS.map((s) => s.left)),
   top: Math.min(...ICE_BOX_SPOTS.map((s) => s.top)),
@@ -862,36 +857,21 @@ const ICE_BOX_BOUNDS = {
   bottom: Math.max(...ICE_BOX_SPOTS.map((s) => s.top)) + ICE_BOX_SIZE.height,
 };
 
-function isOverIceBox(leftPct, topPct) {
-  const margin = 3;
-  return (
-    leftPct >= ICE_BOX_BOUNDS.left - margin &&
-    leftPct <= ICE_BOX_BOUNDS.right + margin &&
-    topPct >= ICE_BOX_BOUNDS.top - margin &&
-    topPct <= ICE_BOX_BOUNDS.bottom + margin
-  );
-}
-
 // "Send to Toppings" drop-zone -- same idea as MatchaMaking's own "Make
-// Drink" zone (MAKE_DRINK_ZONE/isOverMakeDrinkZone there), just carrying
-// the finished cup forward to the Toppings station instead of the bowl to
-// this one. Bottom-right corner, clear of the milk bottle cluster above it
+// Drink" zone (MAKE_DRINK_ZONE there), just carrying the finished cup
+// forward to the Toppings station instead of the bowl to this one.
+// Bottom-right corner, clear of the milk bottle cluster above it
 // (BOTTLE_ITEMS work out to roughly left 69.5-96.5, top 45-83 -- see
 // BOTTLE_CLUSTER_CENTER/BOTTLE_BOTTOM above) and clear of the ProgressBar
 // (bottom-center, same ~77.3%-from-center-at-most reasoning as
 // MAKE_DRINK_ZONE's own comment in MatchaMaking.js, since it's the same
-// component/width here too).
-const SEND_DRINK_ZONE = { left: 78, top: 85, width: 19, height: 13 };
-
-function isOverSendDrinkZone(leftPct, topPct) {
-  const margin = 3;
-  return (
-    leftPct >= SEND_DRINK_ZONE.left - margin &&
-    leftPct <= SEND_DRINK_ZONE.left + SEND_DRINK_ZONE.width + margin &&
-    topPct >= SEND_DRINK_ZONE.top - margin &&
-    topPct <= SEND_DRINK_ZONE.top + SEND_DRINK_ZONE.height + margin
-  );
-}
+// component/width here too). width/height chosen so the marker renders as
+// a true square in real on-screen pixels, same "convert through actual
+// pixels" reasoning as MAKE_DRINK_ZONE's own updated comment -- 7.3% of
+// 1920 (140.2px) is very close to 13% of 1080 (140.4px). left is derived
+// to keep the marker's own right edge exactly where it always was
+// (78 + 19 = 97) despite the narrower width.
+const SEND_DRINK_ZONE = { left: 89.7, top: 85, width: 7.3, height: 13 };
 
 const MilkSelection = ({
   activeStep,
@@ -904,6 +884,70 @@ const MilkSelection = ({
   onScored,
 }) => {
   const containerRef = useRef(null);
+  // Traps Up/Down while a shelf cup is focused during the first-order
+  // walkthrough's own cup-picking beat (showCupSpotlight, declared much
+  // further down) -- per request, the player shouldn't be able to arrow
+  // away from the shelf cups at all during that beat, only cycle Left/Right
+  // among the three. Declared here (rather than only where showCupSpotlight
+  // itself lives) so the nav-graph effect right below -- which has to be
+  // registered before useFlatFocusNav for the same ordering reasons as
+  // every other leg of that graph -- can read the CURRENT value without
+  // needing showCupSpotlight in its own dependency array. Kept in sync
+  // every render by a small effect declared right after showCupSpotlight
+  // itself, same "ref declared early, synced late" pattern used in
+  // MatchaMaking.js for its own restrictTinVerticalNavRef.
+  const restrictCupVerticalNavRef = useRef(false);
+
+  // Same idea, for the ice cubes during the first-order walkthrough's own
+  // ice-placing beat (showIceSpotlight, declared much further down) -- per
+  // request, the player shouldn't be able to arrow away from the ice cube
+  // pile at all during that beat, only move between the cubes themselves.
+  // Only needs to gate Up/Down (see the ice-cube leg of the nav-graph
+  // effect below) since Left/Right can never escape the pile in the first
+  // place -- the pile's own explicit adjacency graph has no left target for
+  // the left column or right target for the right column. Kept in sync the
+  // same "ref declared early, synced late" way as restrictCupVerticalNavRef
+  // above, by a small effect declared right after showIceSpotlight itself.
+  const restrictIceVerticalNavRef = useRef(false);
+
+  // Same idea again, for the milk/water bottles during the first-order
+  // walkthrough's own base-picking beat (showBaseSpotlight, declared much
+  // further down) -- per request, the player shouldn't be able to arrow
+  // away from the bottle row at all during that beat, only cycle Left/Right
+  // among the bottles. Unlike restrictCupVerticalNavRef/
+  // restrictIceVerticalNavRef this one also has to gate a *horizontal*
+  // escape (Left from the very first bottle normally continues on to the
+  // bowl -- see the bottle leg of the nav-graph effect below), not just
+  // Up/Down, since Left/Right doesn't only mean "cycle siblings" for
+  // bottles the way it does for the shelf cups. Kept in sync the same "ref
+  // declared early, synced late" way, by a small effect declared right
+  // after showBaseSpotlight itself.
+  const restrictBaseNavRef = useRef(false);
+
+  // Same idea again, for the matcha bowl during the first-order
+  // walkthrough's own bowl-pouring beat (showBowlSpotlight, declared much
+  // further down) -- per request, the player shouldn't be able to arrow
+  // away from the bowl at all during that beat. Unlike the other three
+  // restrict refs above there's only ever one bowl to land on (no siblings
+  // to cycle between), so this is a full directional lockdown -- every
+  // arrow press is swallowed outright while it's true -- same
+  // "unconditional trap of Up/Down/Left/Right" shape MatchaMaking.js uses
+  // for its own single-item locks (the kettle button, the whisk, etc.).
+  // Kept in sync the same "ref declared early, synced late" way, by a small
+  // effect declared right after showBowlSpotlight itself.
+  const restrictBowlNavRef = useRef(false);
+
+  // Same idea again, for the active cup (now sitting on the table) during
+  // the first-order walkthrough's own final send-to-Toppings beat
+  // (showSendSpotlight, declared much further down) -- per request, the
+  // player shouldn't be able to arrow away from the cup at all during that
+  // beat. Same full directional lockdown shape as restrictBowlNavRef above
+  // -- only one cup to land on at this point, no siblings to cycle between
+  // (see the cup leg of the nav-graph effect below, the
+  // cupSpotRef.current === 'table' branch). Kept in sync the same "ref
+  // declared early, synced late" way, by a small effect declared right
+  // after showSendSpotlight itself.
+  const restrictSendNavRef = useRef(false);
 
   // Strawberry milk (order 2 onward) and sparkling yuzu (order 4 onward,
   // added per request, stacking on top of strawberry rather than
@@ -997,32 +1041,46 @@ const MilkSelection = ({
       // to the order button. The one exception is Left from the first
       // bottle (oat) -- rather than trapping that one too, it continues on
       // to the bowl. Up from any of them goes to the first (glass) cup up
-      // on the shelf, Down goes back to the station dot.
+      // on the shelf, Down goes back to the station dot. All three escape
+      // routes (Left-from-first, Up, Down) are gated behind
+      // !restrictBaseNavRef.current -- during the first-order walkthrough's
+      // base-picking beat (showBaseSpotlight) that ref is true, so those
+      // presses still get swallowed (preventDefault/stopImmediatePropagation
+      // already fired below) but leave focus right where it is, trapping
+      // the player among the bottles per that beat's own request.
       const bottleIndex = bottles.indexOf(active);
       if (bottleIndex !== -1) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        // Per request: every bottle shows the halo until the player's first
+        // arrow press, then it collapses to just the focused one -- see
+        // baseSpotlightMoved's own comment above.
+        setBaseSpotlightMoved(true);
         if (action === 'Left' && bottleIndex === 0) {
-          e.preventDefault();
-          e.stopImmediatePropagation();
-          bowl?.focus();
+          if (!restrictBaseNavRef.current) bowl?.focus();
         } else if (action === 'Left' || action === 'Right') {
-          e.preventDefault();
-          e.stopImmediatePropagation();
           const nextIndex = action === 'Right' ? bottleIndex + 1 : bottleIndex - 1;
           bottles[nextIndex]?.focus();
         } else if (action === 'Up') {
-          e.preventDefault();
-          e.stopImmediatePropagation();
-          firstCup?.focus();
+          if (!restrictBaseNavRef.current) firstCup?.focus();
         } else if (action === 'Down') {
-          e.preventDefault();
-          e.stopImmediatePropagation();
-          document.querySelector('.progress-step.current')?.focus();
+          if (!restrictBaseNavRef.current) document.querySelector('.progress-step.current')?.focus();
         }
         return;
       }
 
       // Bowl: Left -> first ice cube, Up -> settings, Down -> station dot.
+      // Right is deliberately left unhandled (nothing sits further right of
+      // the bowl in this graph). Fully locked down (every direction
+      // swallowed, none of the branches below run) during the first-order
+      // walkthrough's own bowl-pouring beat -- see restrictBowlNavRef's own
+      // comment above.
       if (active === bowl) {
+        if (restrictBowlNavRef.current) {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          return;
+        }
         if (action === 'Left') {
           e.preventDefault();
           e.stopImmediatePropagation();
@@ -1039,27 +1097,39 @@ const MilkSelection = ({
         return;
       }
 
-      // Any ice cube: Up -> settings, but only from the first row of the
-      // pile -- ICE_BOX_SPOTS stacks the cubes in two overlapping vertical
-      // columns (4 left, 3 right, see its own comment above), so the
-      // "first row" is the topmost/rearmost cube in each column: index 0
-      // (top of the 4-cube left column) and index 4 (top of the 3-cube
-      // right column). Down -> station dot, only from the last row --
-      // the frontmost/bottommost cube in each column: index 3 (bottom of
-      // the left column) and index 6 (bottom of the right column). Every
-      // other cube leaves both directions unhandled (falls through to
-      // whatever useFlatFocusNav's generic fallback already did before
-      // this).
+      // Any ice cube: moves along ICE_ADJACENCY above -- Up/Down/Left/Right
+      // all fully handled (and trapped/swallowed) right here rather than
+      // partially falling through to useFlatFocusNav's own generic spatial
+      // fallback, so the pile's navigation is airtight regardless of
+      // restrictIceVerticalNavRef. 'gear'/'station' targets (top row Up,
+      // bottom row Down) only actually move focus when
+      // !restrictIceVerticalNavRef.current -- during the first-order
+      // walkthrough's ice-placing beat that ref is true, so those two
+      // presses still get swallowed (preventDefault/stopImmediatePropagation
+      // already fired below) but leave focus right where it is, trapping
+      // the player inside the pile per that beat's own request. A `null`
+      // target (no cube that direction, and not a gear/station edge either)
+      // is always just a trap regardless of the ref.
       const iceIndex = iceCubes.indexOf(active);
       if (iceIndex !== -1) {
-        if (action === 'Up' && (iceIndex === 0 || iceIndex === 4)) {
-          e.preventDefault();
-          e.stopImmediatePropagation();
-          gearButton?.focus();
-        } else if (action === 'Down' && (iceIndex === 3 || iceIndex === 6)) {
-          e.preventDefault();
-          e.stopImmediatePropagation();
-          document.querySelector('.progress-step.current')?.focus();
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        // Per request: every still-unplaced cube shows the halo until the
+        // player's first arrow press, then it collapses to just the
+        // focused one -- see iceSpotlightMoved's own comment above.
+        setIceSpotlightMoved(true);
+        const dirKey = action.toLowerCase();
+        const target = ICE_ADJACENCY[iceIndex]?.[dirKey];
+        if (target === 'gear') {
+          if (!restrictIceVerticalNavRef.current) gearButton?.focus();
+        } else if (target === 'station') {
+          if (!restrictIceVerticalNavRef.current) document.querySelector('.progress-step.current')?.focus();
+        } else if (typeof target === 'number' && !icePlacedRef.current[target]) {
+          // Placed cubes are fully inert (no tabIndex/data-focusable -- see
+          // the big comment on the ice-cube JSX further down) and can't
+          // take focus at all, so a move onto one is just a trap too rather
+          // than a no-op .focus() call.
+          iceCubes[target]?.focus();
         }
         return;
       }
@@ -1094,6 +1164,14 @@ const MilkSelection = ({
       const cupIndex = shelfCups.indexOf(active);
       if (cupIndex !== -1) {
         if (cupSpotRef.current === 'table') {
+          // Fully locked down (every direction swallowed, Left included)
+          // during the first-order walkthrough's own final send-to-Toppings
+          // beat -- see restrictSendNavRef's own comment above.
+          if (restrictSendNavRef.current) {
+            e.preventDefault();
+            e.stopImmediatePropagation();
+            return;
+          }
           if (action === 'Left') {
             e.preventDefault();
             e.stopImmediatePropagation();
@@ -1109,11 +1187,11 @@ const MilkSelection = ({
         } else if (action === 'Down') {
           e.preventDefault();
           e.stopImmediatePropagation();
-          firstBottle?.focus();
+          if (!restrictCupVerticalNavRef.current) firstBottle?.focus();
         } else if (action === 'Up') {
           e.preventDefault();
           e.stopImmediatePropagation();
-          orderButton?.focus();
+          if (!restrictCupVerticalNavRef.current) orderButton?.focus();
         }
         return;
       }
@@ -1216,8 +1294,6 @@ const MilkSelection = ({
   // left wherever it's dropped -- there's nowhere else meaningful for it to
   // sit, so any drop that doesn't land a pour just snaps it home.
   const [bowlPos, setBowlPos] = useState(INCOMING_BOWL_SPOT);
-  const [bowlDrag, setBowlDrag] = useState(null); // { left, top } | null
-  const bowlDragStartRef = useRef({ pointerX: 0, pointerY: 0, left: 0, top: 0 });
 
   // ---- Cup: shelf <-> table, glass or plastic ----------------------------
   // Two cup graphics now sit in the cubby (see CUP_TYPES/PLASTIC_CUP_SPOTS
@@ -1276,8 +1352,15 @@ const MilkSelection = ({
     }
   }, [showCupSpotlight]);
 
-  const [cupDragPos, setCupDragPos] = useState(null);
-  const cupDragStartRef = useRef({ pointerX: 0, pointerY: 0, cupLeft: 0, cupTop: 0 });
+  // Keeps restrictCupVerticalNavRef (declared/read far above, alongside
+  // containerRef, for the same early-registration ordering reasons) in sync
+  // with showCupSpotlight. No dependency array -- re-reads every render,
+  // same "cheap and never a render behind" shape as MatchaMaking.js's own
+  // restrictTinVerticalNavRef sync effect.
+  useEffect(() => {
+    restrictCupVerticalNavRef.current = showCupSpotlight;
+  });
+
   // Which cup type (if any) currently has the white focus halo -- drives
   // the name label above it (CUP_LABELS/.cup-label), same focus-not-active
   // distinction as focusedBottle/focusedTopping elsewhere: this is about
@@ -1308,58 +1391,8 @@ const MilkSelection = ({
   // logically.
   const [cupSendStage, setCupSendStage] = useState('idle');
   // Live position while gliding to/sitting in the Send Drink zone -- same
-  // role as bowlPos, kept separate from cupDragPos (which specifically
-  // means "actively being pointer-dragged right now", and whose truthiness
-  // also toggles .glass-cup.dragging elsewhere) so this doesn't fight with
-  // that class's own meaning.
+  // role as bowlPos.
   const [cupSendPos, setCupSendPos] = useState(null);
-
-  const handleCupPointerDown = (e) => {
-    // Can't pick the cup back up once it's mid-carry/vanishing/gone -- same
-    // "settling" reasoning as .milk-bottle.settling/.station-item.movable.
-    // settling elsewhere (pointer-events: none on the cup while sending, see
-    // the JSX below, is the other half of this -- this guard is a backstop
-    // in case something still calls the handler directly).
-    if (cupSendStage !== 'idle') return;
-    const base = cupSpot === 'shelf' ? CUP_TYPES[activeCup].shelfSpot : CUP_TYPES[activeCup].tableSpot;
-    e.currentTarget.setPointerCapture(e.pointerId);
-    cupDragStartRef.current = {
-      pointerX: e.clientX,
-      pointerY: e.clientY,
-      cupLeft: base.left,
-      cupTop: base.top,
-    };
-    setCupDragPos({ left: base.left, top: base.top });
-  };
-
-  const handleCupPointerMove = (e) => {
-    if (!cupDragPos) return;
-    const rect = containerRef.current?.getBoundingClientRect();
-    if (!rect) return;
-    const dxPct = ((e.clientX - cupDragStartRef.current.pointerX) / rect.width) * 100;
-    const dyPct = ((e.clientY - cupDragStartRef.current.pointerY) / rect.height) * 100;
-    setCupDragPos({
-      left: cupDragStartRef.current.cupLeft + dxPct,
-      top: cupDragStartRef.current.cupTop + dyPct,
-    });
-  };
-
-  const handleCupPointerUp = (e) => {
-    if (!cupDragPos) return;
-    e.currentTarget.releasePointerCapture?.(e.pointerId);
-    // Dropping the finished cup on the Send Drink zone (once there's a
-    // base poured -- see canSendDrink above) carries it off instead of the
-    // ordinary shelf/table placement below -- same "special-cased drop
-    // target" pattern as the bottles' own drop-on-cup branch.
-    if (canSendDrink && isOverSendDrinkZone(cupDragPos.left, cupDragPos.top)) {
-      setCupDragPos(null);
-      beginSendDrink();
-      return;
-    }
-    const midpoint = (CUP_TYPES[activeCup].shelfSpot.top + CUP_TYPES[activeCup].tableSpot.top) / 2;
-    setCupSpot(cupDragPos.top > midpoint ? 'table' : 'shelf');
-    setCupDragPos(null);
-  };
 
   const handleCupKeyDown = (e) => {
     const action = getActionFromKeyEvent(e);
@@ -1376,6 +1409,12 @@ const MilkSelection = ({
       beginSendDrink();
       return;
     }
+    // Same rule as handleCupPointerUp's own drag guard just above -- once
+    // anything's been placed in the cup, Enter can no longer toggle it back
+    // to the shelf. A cup with contents just stays put here (canSendDrink
+    // above already handles the "ready to send" case; a partially-filled
+    // one, e.g. ice but no milk yet, has nothing else for Enter to do).
+    if (cupSpot === 'table' && cupHasContents) return;
     setCupSpot((prev) => (prev === 'shelf' ? 'table' : 'shelf'));
   };
 
@@ -1393,26 +1432,6 @@ const MilkSelection = ({
     setIcePlaced(new Array(ICE_BOX_SPOTS.length).fill(false));
     setCupSendStage('idle');
     setCupSendPos(null);
-    setCupDragPos(null);
-  };
-
-  const handleCupSwitchPointerDown = (type) => (e) => {
-    // Same "can't touch anything mid-carry/vanishing" backstop as
-    // handleCupPointerDown -- switching away from the active cup while it's
-    // mid-send would be a confusing thing to allow.
-    if (cupSendStage !== 'idle') return;
-    resetCupContents();
-    setActiveCup(type);
-    setCupSpot('shelf');
-    const base = CUP_TYPES[type].shelfSpot;
-    e.currentTarget.setPointerCapture(e.pointerId);
-    cupDragStartRef.current = {
-      pointerX: e.clientX,
-      pointerY: e.clientY,
-      cupLeft: base.left,
-      cupTop: base.top,
-    };
-    setCupDragPos({ left: base.left, top: base.top });
   };
 
   // D-pad/keyboard equivalent -- switches to this cup and moves it straight
@@ -1430,7 +1449,7 @@ const MilkSelection = ({
     setCupSpot('table');
   };
 
-  const cupRenderPos = cupDragPos || cupSendPos || (cupSpot === 'shelf' ? CUP_TYPES[activeCup].shelfSpot : CUP_TYPES[activeCup].tableSpot);
+  const cupRenderPos = cupSendPos || (cupSpot === 'shelf' ? CUP_TYPES[activeCup].shelfSpot : CUP_TYPES[activeCup].tableSpot);
   // Sized by the cup's current spot the whole time -- cupSpot only flips on
   // drop (see handleCupPointerUp/handleCupKeyDown), so grabbing it off the
   // table keeps it at the table size for the full drag instead of snapping
@@ -1482,6 +1501,20 @@ const MilkSelection = ({
   // never actually told the player.
   const showIceSpotlight = customerNumber === 1 && cupSpot === 'table' && icePlacedCount < 3;
 
+  // Whether the player has actually pressed an arrow key or Enter yet
+  // during this beat -- per request, every still-unplaced cube shows the
+  // white focus halo (see milk-ice-focus-halo on the ice-cube JSX
+  // further down) the instant showIceSpotlight turns on, and collapses down
+  // to just the one actually focused cube the moment the player makes their
+  // first move (see the ice-cube leg of the nav-graph effect above, and
+  // handleIceKeyDown below, both of which flip this true). Reset back to
+  // false every time showIceSpotlight itself turns on, so it's ready fresh
+  // if this beat were ever to run again.
+  const [iceSpotlightMoved, setIceSpotlightMoved] = useState(false);
+  useEffect(() => {
+    if (showIceSpotlight) setIceSpotlightMoved(false);
+  }, [showIceSpotlight]);
+
   // Moves focus onto the first still-unplaced ice cube the instant
   // showIceSpotlight turns on -- pairs with the exempt styling on the ice
   // cubes themselves (see milk-spotlight-exempt on their own className
@@ -1498,105 +1531,31 @@ const MilkSelection = ({
     }
   }, [showIceSpotlight]);
 
-  // Which cube (if any) is being dragged right now, and its live position.
-  const [iceDrag, setIceDrag] = useState(null); // { index, left, top } | null
-  const iceDragStartRef = useRef({ pointerX: 0, pointerY: 0, left: 0, top: 0 });
+  // Keeps restrictIceVerticalNavRef (declared/read far above, alongside
+  // containerRef, for the same early-registration ordering reasons) in sync
+  // with showIceSpotlight. No dependency array -- re-reads every render,
+  // same "cheap and never a render behind" shape as
+  // restrictCupVerticalNavRef's own sync effect above.
+  useEffect(() => {
+    restrictIceVerticalNavRef.current = showIceSpotlight;
+  });
 
-  const handleIcePointerDown = (index) => (e) => {
-    // Base position is wherever the cube currently is -- its ice box spot
-    // if it hasn't been placed yet, or its cup slot if it has, so grabbing
-    // a placed cube picks it up from the cup instead of jumping back to
-    // the box.
-    const base = icePlaced[index]
-      ? getIceCupSlotPos(
-          index,
-          cupRenderPos,
-          cupRenderSize,
-          CUP_TYPES[activeCup].bodyFrac,
-          CUP_TYPES[activeCup].iceYOffsetFrac,
-          CUP_TYPES[activeCup].iceSpreadScale,
-          getIceCubeSize(activeCup)
-        )
-      : ICE_BOX_SPOTS[index];
-    e.currentTarget.setPointerCapture(e.pointerId);
-    iceDragStartRef.current = {
-      pointerX: e.clientX,
-      pointerY: e.clientY,
-      left: base.left,
-      top: base.top,
-    };
-    setIceDrag({ index, left: base.left, top: base.top });
-  };
-
-  const handleIcePointerMove = (e) => {
-    if (!iceDrag) return;
-    const rect = containerRef.current?.getBoundingClientRect();
-    if (!rect) return;
-    const dxPct = ((e.clientX - iceDragStartRef.current.pointerX) / rect.width) * 100;
-    const dyPct = ((e.clientY - iceDragStartRef.current.pointerY) / rect.height) * 100;
-    setIceDrag((prev) => ({
-      ...prev,
-      left: iceDragStartRef.current.left + dxPct,
-      top: iceDragStartRef.current.top + dyPct,
-    }));
-  };
-
-  const handleIcePointerUp = (e) => {
-    if (!iceDrag) return;
-    e.currentTarget.releasePointerCapture?.(e.pointerId);
-    if (isOverIceBox(iceDrag.left, iceDrag.top)) {
-      // Dropped back over the ice box -- this only ever fires for a cube
-      // that was already unplaced to begin with (a placed cube no longer
-      // gets onPointerDown at all -- see the JSX below), so this is just a
-      // harmless no-op snap-back in practice, kept for safety.
-      setIcePlaced((prev) => {
-        const next = [...prev];
-        next[iceDrag.index] = false;
-        return next;
-      });
-    } else if (isOverCup(iceDrag.left, iceDrag.top, cupSpot, CUP_TYPES[activeCup].tableSpot, CUP_TYPES[activeCup].tableSize)) {
-      playIceCubeDrop();
-      setIcePlaced((prev) => {
-        const next = [...prev];
-        next[iceDrag.index] = true;
-        return next;
-      });
-      // Same focus handoff as the keyboard path in handleIceKeyDown below
-      // -- dragging normally focuses the cube via its own pointerdown, and
-      // this cube's about to lose tabIndex/data-focusable/its pointer
-      // handlers entirely the instant it's marked placed, so without
-      // moving focus off it here first, document.activeElement would be
-      // left pointing at a now-inert node, which useFlatFocusNav treats as
-      // "focus belongs to something else" and stops responding to arrow
-      // keys entirely.
-      if (document.activeElement?.classList.contains('ice-cube')) {
-        const cubes = containerRef.current
-          ? Array.from(containerRef.current.querySelectorAll('.ice-cube'))
-          : [];
-        const nextCube = cubes.find((el, i) => i !== iceDrag.index && !icePlaced[i]);
-        nextCube?.focus();
-      }
-    }
-    // Otherwise (dropped somewhere ambiguous) leave placement as it was --
-    // the cube just snaps back to wherever it already was once the drag
-    // position below is cleared.
-    setIceDrag(null);
-  };
-
-  // D-pad / keyboard equivalent of dragging a cube: select it, press Enter
-  // to place it in the cup. Only works once the cup is actually on the
-  // table, same precondition as the drag-and-drop path. Once a cube's
-  // actually placed, this (and the pointer handlers -- see the JSX below)
-  // no longer gets attached to it at all -- a placed cube can no longer be
-  // reselected or taken back out, since letting it stay grabbable was
-  // stealing the focus landing spot from the rest of this screen's own
-  // navigation.
+  // D-pad / keyboard: select a cube, press Enter to place it in the cup.
+  // Only works once the cup is actually on the table. Once a cube's
+  // actually placed, this handler no longer gets attached to it at all --
+  // a placed cube can no longer be reselected or taken back out, since
+  // letting it stay grabbable was stealing the focus landing spot from the
+  // rest of this screen's own navigation.
   const handleIceKeyDown = (index) => (e) => {
     const action = getActionFromKeyEvent(e);
     if (action !== 'Enter') return;
     if (shouldDebounceEnter(e)) return;
     if (cupSpot !== 'table') return;
     e.preventDefault();
+    // Same "first move collapses the halo down to just the focused one"
+    // rule as the nav-graph effect's own ice-cube leg -- Enter counts as a
+    // move too.
+    setIceSpotlightMoved(true);
     playButtonClick();
     playIceCubeDrop();
     setIcePlaced((prev) => {
@@ -1616,11 +1575,8 @@ const MilkSelection = ({
     nextCube?.focus();
   };
 
-  // ---- Milk/water bottles: pick up, move anywhere, snap back home -------
+  // ---- Milk/water bottles: select, Enter to pour, or snaps back home -----
   const [bottlePositions, setBottlePositions] = useState(bottleHome);
-  // Which bottle (if any) is being dragged right now, and its live position.
-  const [bottleDrag, setBottleDrag] = useState(null); // { key, left, top } | null
-  const bottleDragStartRef = useRef({ pointerX: 0, pointerY: 0, left: 0, top: 0 });
   // Which bottle (if any) currently has the white focus halo -- drives the
   // name label under it (BOTTLE_LABELS/.milk-bottle-label), same
   // focus-not-confirm distinction as MatchaMaking.js's own focusedTin. The
@@ -1686,27 +1642,25 @@ const MilkSelection = ({
   const pourAudioRef = useRef(null);
 
   // The bowl grows to its true, full MatchaMaking size (incomingBowlFull
-  // Width/Height) the moment it's actually being handled -- either mid
-  // manual drag (bowlDrag set) or partway through the automated glide-to-
-  // cup/pour sequence (pouringKey === 'bowl', true across both the
-  // 'moving' and 'pouring' beats above, only clearing once the whole cycle
-  // finishes and it's back home) -- and shrinks back down to its small
-  // counter-resting size (incomingBowlRestWidth/Height) otherwise.
+  // Width/Height) the moment it's actually being handled -- partway through
+  // the automated glide-to-cup/pour sequence (pouringKey === 'bowl', true
+  // across both the 'moving' and 'pouring' beats above, only clearing once
+  // the whole cycle finishes and it's back home) -- and shrinks back down to
+  // its small counter-resting size (incomingBowlRestWidth/Height) otherwise.
   // incomingBowlWidth/Height (used below for the rim overlay, and further
   // down in the JSX for the bowl's own rendered size) always reflect
   // whichever of the two currently applies. Placed here, after pouringKey/
   // pourStage are declared, rather than back up alongside bowlPos, since
   // this depends on both.
-  const bowlIsBig = !!bowlDrag || pouringKey === 'bowl';
+  const bowlIsBig = pouringKey === 'bowl';
   const incomingBowlWidth = bowlIsBig ? incomingBowlFullWidth : incomingBowlRestWidth;
   const incomingBowlHeight = bowlIsBig ? incomingBowlFullHeight : incomingBowlRestHeight;
 
-  // Rim math follows the bowl's own live position -- bowlDrag while it's
-  // actively being pointer-dragged, otherwise bowlPos (its resting or
-  // gliding-to-pour spot) -- and its own current (possibly grown) size, so
-  // the whisked-matcha overlay travels, tilts, and resizes together with
-  // the bowl through both a manual drag and the automated pour glide.
-  const incomingBowlRenderPos = bowlDrag || bowlPos;
+  // Rim math follows the bowl's own live position -- bowlPos (its resting
+  // or gliding-to-pour spot) -- and its own current (possibly grown) size,
+  // so the whisked-matcha overlay travels, tilts, and resizes together with
+  // the bowl through the automated pour glide.
+  const incomingBowlRenderPos = bowlPos;
   const incomingRimLeft = incomingBowlRenderPos.left + BOWL_INNER_RIM_CENTER.leftFrac * incomingBowlWidth;
   const incomingRimTop = incomingBowlRenderPos.top + BOWL_INNER_RIM_CENTER.topFrac * incomingBowlHeight;
   const incomingRimWidth = BOWL_INNER_RIM_WIDTH_FRAC * incomingBowlWidth;
@@ -1722,6 +1676,16 @@ const MilkSelection = ({
   // "doesn't accumulate" simplification).
   const [cupMilk, setCupMilk] = useState(null);
 
+  // Whether anything at all has been placed in the active cup yet -- ice,
+  // milk, or both. Referenced by handleCupKeyDown/handleCupPointerUp above
+  // (same "declared later, already in scope for an earlier-defined handler's
+  // closure" pattern this file already uses for canSendDrink below) to block
+  // sending a cup with contents back up to the shelf, on both the keyboard
+  // (Enter-toggle) and drag paths -- per request, once something's been put
+  // in the cup the player shouldn't be able to put it back, for every order,
+  // not just the first-order walkthrough.
+  const cupHasContents = icePlacedCount > 0 || !!cupMilk;
+
   // Third first-order-only walkthrough beat, picking up the instant
   // showIceSpotlight above ends (all 3 ice cubes placed) and retiring the
   // instant a base is actually poured (cupMilk flips non-null, same state
@@ -1731,6 +1695,16 @@ const MilkSelection = ({
   // than back up alongside showCupSpotlight/showIceSpotlight, since it
   // needs that state in scope.
   const showBaseSpotlight = customerNumber === 1 && cupSpot === 'table' && icePlacedCount >= 3 && !cupMilk;
+
+  // Same "every item shows the halo until the first move" rule as
+  // iceSpotlightMoved above, just for the bottles during this beat -- see
+  // milk-bottle-focus-halo on the bottle JSX further down, and the
+  // bottle leg of the nav-graph effect/handleBottleKeyDown below, both of
+  // which flip this true.
+  const [baseSpotlightMoved, setBaseSpotlightMoved] = useState(false);
+  useEffect(() => {
+    if (showBaseSpotlight) setBaseSpotlightMoved(false);
+  }, [showBaseSpotlight]);
 
   // Moves focus onto the first (oat) milk bottle the instant
   // showBaseSpotlight turns on -- same pairing/reasoning as
@@ -1743,6 +1717,15 @@ const MilkSelection = ({
       containerRef.current?.querySelector('.milk-bottle')?.focus();
     }
   }, [showBaseSpotlight]);
+
+  // Keeps restrictBaseNavRef (declared/read far above, alongside
+  // containerRef, for the same early-registration ordering reasons) in sync
+  // with showBaseSpotlight. No dependency array -- re-reads every render,
+  // same "cheap and never a render behind" shape as
+  // restrictCupVerticalNavRef/restrictIceVerticalNavRef's own sync effects.
+  useEffect(() => {
+    restrictBaseNavRef.current = showBaseSpotlight;
+  });
 
   // Fourth first-order-only walkthrough beat, picking up the instant
   // showBaseSpotlight above ends (a base is actually poured) and retiring
@@ -1764,6 +1747,15 @@ const MilkSelection = ({
       containerRef.current?.querySelector('.incoming-bowl')?.focus();
     }
   }, [showBowlSpotlight]);
+
+  // Keeps restrictBowlNavRef (declared/read far above, alongside
+  // containerRef, for the same early-registration ordering reasons) in sync
+  // with showBowlSpotlight. No dependency array -- re-reads every render,
+  // same "cheap and never a render behind" shape as this screen's other
+  // restrict refs' own sync effects.
+  useEffect(() => {
+    restrictBowlNavRef.current = showBowlSpotlight;
+  });
 
   // Fifth first-order-only walkthrough beat on this screen, picking up the
   // instant showBowlSpotlight above ends (the matcha's actually landed in
@@ -1806,6 +1798,15 @@ const MilkSelection = ({
       cups[['glass', 'plastic', 'mug'].indexOf(activeCup)]?.focus();
     }
   }, [showSendSpotlight, activeCup]);
+
+  // Keeps restrictSendNavRef (declared/read far above, alongside
+  // containerRef, for the same early-registration ordering reasons) in sync
+  // with showSendSpotlight. No dependency array -- re-reads every render,
+  // same "cheap and never a render behind" shape as this screen's other
+  // restrict refs' own sync effects.
+  useEffect(() => {
+    restrictSendNavRef.current = showSendSpotlight;
+  });
 
   // Sixth and actually-final first-order-only walkthrough beat, picking up
   // the instant showSendSpotlight above ends (cupSendStage reaches 'sent'
@@ -2163,62 +2164,6 @@ const MilkSelection = ({
     return undefined;
   }, [cupSendStage]);
 
-  const handleBottlePointerDown = (item) => (e) => {
-    const base = bottlePositions[item.key];
-    e.currentTarget.setPointerCapture(e.pointerId);
-    bottleDragStartRef.current = {
-      pointerX: e.clientX,
-      pointerY: e.clientY,
-      left: base.left,
-      top: base.top,
-    };
-    setBottleDrag({ key: item.key, left: base.left, top: base.top });
-  };
-
-  const handleBottlePointerMove = (item) => (e) => {
-    if (!bottleDrag || bottleDrag.key !== item.key) return;
-    const rect = containerRef.current?.getBoundingClientRect();
-    if (!rect) return;
-    const dxPct = ((e.clientX - bottleDragStartRef.current.pointerX) / rect.width) * 100;
-    const dyPct = ((e.clientY - bottleDragStartRef.current.pointerY) / rect.height) * 100;
-    setBottleDrag({
-      key: item.key,
-      left: clampPct(bottleDragStartRef.current.left + dxPct, item.width),
-      top: clampPct(bottleDragStartRef.current.top + dyPct, item.height),
-    });
-  };
-
-  const handleBottlePointerUp = (item) => (e) => {
-    if (!bottleDrag || bottleDrag.key !== item.key) return;
-    e.currentTarget.releasePointerCapture?.(e.pointerId);
-    // Dropping any bottle on the cup (once it's on the table, has ice in
-    // it, and nothing else is already mid-pour) starts the pour sequence
-    // instead of the ordinary placement below -- same "special-cased drop
-    // target" pattern as MatchaMaking's kettle-onto-bowl/whisk-onto-bowl
-    // branches.
-    if (canPourMilk && isOverCup(bottleDrag.left, bottleDrag.top, cupSpot, CUP_TYPES[activeCup].tableSpot, CUP_TYPES[activeCup].tableSize)) {
-      setBottleDrag(null);
-      beginPour(item.key);
-      return;
-    }
-    const home = bottleHome[item.key];
-    const totalMove = Math.max(
-      Math.abs(e.clientX - bottleDragStartRef.current.pointerX),
-      Math.abs(e.clientY - bottleDragStartRef.current.pointerY)
-    );
-    const rect = containerRef.current?.getBoundingClientRect();
-    const totalMovePct = rect ? (totalMove / Math.max(rect.width, rect.height)) * 100 : 0;
-    const snapBack =
-      totalMovePct < BOTTLE_CLICK_MAX_MOVE_PCT || // barely moved -- treat as a click, snap home
-      (Math.abs(bottleDrag.left - home.left) < item.width * BOTTLE_SNAP_FRACTION &&
-        Math.abs(bottleDrag.top - home.top) < item.height * BOTTLE_SNAP_FRACTION);
-    setBottlePositions((prev) => ({
-      ...prev,
-      [item.key]: snapBack ? { left: home.left, top: home.top } : { left: bottleDrag.left, top: bottleDrag.top },
-    }));
-    setBottleDrag(null);
-  };
-
   // D-pad / keyboard equivalent of a click -- once the pour preconditions
   // are met (see canPourMilk above), Enter pours whichever bottle is
   // focused -- same "no keyboard equivalent of a partial drag, so Enter
@@ -2231,6 +2176,10 @@ const MilkSelection = ({
     if (action !== 'Enter') return;
     if (shouldDebounceEnter(e)) return;
     e.preventDefault();
+    // Same "first move collapses the halo down to just the focused one"
+    // rule as the nav-graph effect's own bottle leg -- Enter counts as a
+    // move too.
+    setBaseSpotlightMoved(true);
     playButtonClick();
     if (canPourMilk) {
       beginPour(item.key);
@@ -2240,45 +2189,8 @@ const MilkSelection = ({
     setBottlePositions((prev) => ({ ...prev, [item.key]: { left: home.left, top: home.top } }));
   };
 
-  // ---- Matcha bowl: pick up, pour onto the cup (once there's already a
-  // milk/water base), or snap back home -- same shape as the milk bottles'
-  // own handlers, just simpler since there's only one bowl and it always
-  // returns to the same spot rather than staying wherever it's dropped
-  // (see the bowlPos comment above). ------------------------------------
-  const handleBowlPointerDown = (e) => {
-    const base = bowlPos;
-    e.currentTarget.setPointerCapture(e.pointerId);
-    bowlDragStartRef.current = { pointerX: e.clientX, pointerY: e.clientY, left: base.left, top: base.top };
-    setBowlDrag({ left: base.left, top: base.top });
-  };
-
-  const handleBowlPointerMove = (e) => {
-    if (!bowlDrag) return;
-    const rect = containerRef.current?.getBoundingClientRect();
-    if (!rect) return;
-    const dxPct = ((e.clientX - bowlDragStartRef.current.pointerX) / rect.width) * 100;
-    const dyPct = ((e.clientY - bowlDragStartRef.current.pointerY) / rect.height) * 100;
-    setBowlDrag({
-      left: bowlDragStartRef.current.left + dxPct,
-      top: bowlDragStartRef.current.top + dyPct,
-    });
-  };
-
-  const handleBowlPointerUp = (e) => {
-    if (!bowlDrag) return;
-    e.currentTarget.releasePointerCapture?.(e.pointerId);
-    if (canPourMatcha && isOverCup(bowlDrag.left, bowlDrag.top, cupSpot, CUP_TYPES[activeCup].tableSpot, CUP_TYPES[activeCup].tableSize)) {
-      setBowlDrag(null);
-      beginPour('bowl');
-      return;
-    }
-    // Any other drop (missed the cup, or the pour preconditions aren't met
-    // yet) just snaps it back home -- unlike the bottles, there's nowhere
-    // else on this counter that makes sense for the bowl to sit.
-    setBowlPos(INCOMING_BOWL_SPOT);
-    setBowlDrag(null);
-  };
-
+  // ---- Matcha bowl: select and press Enter to pour onto the cup (once
+  // there's already a milk/water base). --------------------------------
   const handleBowlKeyDown = (e) => {
     const action = getActionFromKeyEvent(e);
     if (action !== 'Enter') return;
@@ -2306,38 +2218,34 @@ const MilkSelection = ({
             this screen's own imported copies of MatchaMaking's
             BOWL_INNER_RIM_* positioning math so the whisked-liquid image
             still lines up with the bowl's rim the same way it does there.
-            Now interactive -- draggable onto the cup (once it's on the
-            table with milk/water already in it) or Enter-to-pour, same
+            Now interactive -- select and press Enter to pour, same
             glide/tilt/pour/glide-home sequence as the milk bottles (see
             beginPour/bowlPos above), just reusing MatchaMaking.css's own
-            .station-item.movable classes (drag cursor, focus glow,
-            .settling) instead of .milk-bottle's, since this art was sized
-            for that screen's own movable-item treatment. .station-item and
-            .bowl-whisked-liquid are both defined in MatchaMaking.css, which
-            is already loaded globally since MatchaMaking.js is always
-            imported by App.js -- reused here rather than duplicated so the
-            look can't drift out of sync between the two screens. */}
+            .station-item.movable classes (focus glow, .settling) instead of
+            .milk-bottle's, since this art was sized for that screen's own
+            movable-item treatment. .station-item and .bowl-whisked-liquid
+            are both defined in MatchaMaking.css, which is already loaded
+            globally since MatchaMaking.js is always imported by App.js --
+            reused here rather than duplicated so the look can't drift out
+            of sync between the two screens. */}
         {incomingBowl && (
           <>
             <img
               src={incomingBowlItem.src}
-              alt="Bowl of whisked matcha. Drag onto the cup to pour it in once there's milk or water in it, or select it and press Enter."
+              alt="Bowl of whisked matcha. Select it and press Enter to pour it in once there's milk or water in the cup."
               draggable={false}
               data-focusable
               tabIndex={0}
-              className={`station-item movable incoming-bowl${bowlDrag ? ' dragging' : ''}${
+              className={`station-item movable incoming-bowl${
                 pouringKey === 'bowl' ? ' settling' : ''
               }${showBowlSpotlight ? ' milk-spotlight-exempt' : ''}`}
               style={{
-                left: `${(bowlDrag || bowlPos).left}%`,
-                top: `${(bowlDrag || bowlPos).top}%`,
+                left: `${bowlPos.left}%`,
+                top: `${bowlPos.top}%`,
                 width: `${incomingBowlWidth}%`,
                 height: `${incomingBowlHeight}%`,
                 ...(pouringKey === 'bowl' ? { transform: `rotate(${BOTTLE_POUR_ROTATE_DEG}deg)` } : {}),
               }}
-              onPointerDown={handleBowlPointerDown}
-              onPointerMove={handleBowlPointerMove}
-              onPointerUp={handleBowlPointerUp}
               onKeyDown={handleBowlKeyDown}
             />
             <img
@@ -2345,7 +2253,19 @@ const MilkSelection = ({
               alt=""
               aria-hidden="true"
               draggable={false}
-              className={`bowl-whisked-liquid${bowlPoured ? ' emptied' : ''}`}
+              className={`bowl-whisked-liquid${bowlPoured ? ' emptied' : ''}${
+                // Bug fix: this overlay wasn't getting exempted from
+                // .milk-spotlight-overlay (z-index 25) during
+                // showBowlSpotlight the way the bowl image right above it
+                // is (see that img's own className) -- .bowl-whisked-liquid
+                // itself only carries z-index: 1 (MatchaMaking.css), well
+                // below the pink tint, so the matcha fill was invisible
+                // (bowl reading as empty) for that entire beat even before
+                // any pour. Same fix shape as MatchaMaking.css's own
+                // .bowl-whisked-liquid.matcha-spotlight-exempt z-index
+                // override for the analogous bug there.
+                showBowlSpotlight ? ' milk-spotlight-exempt' : ''
+              }`}
               style={{
                 left: `${incomingRimLeft}%`,
                 top: `${incomingRimTop}%`,
@@ -2388,11 +2308,9 @@ const MilkSelection = ({
             actual shrink/fade once 'vanishing' starts).
 
             The INACTIVE cup just sits, always fully interactive, at its
-            own shelf spot -- grabbing/dragging or Enter-confirming it runs
-            handleCupSwitchPointerDown/handleCupSwitchKeyDown instead of the
-            normal handleCupPointerDown/handleCupKeyDown, which is what
-            actually performs the switch (see the big comment on activeCup
-            above). */}
+            own shelf spot -- Enter-confirming it runs handleCupSwitchKeyDown
+            instead of the normal handleCupKeyDown, which is what actually
+            performs the switch (see the big comment on activeCup above). */}
         {['glass', 'plastic', 'mug'].map((type) => {
           const cfg = CUP_TYPES[type];
           const isActive = activeCup === type;
@@ -2400,19 +2318,35 @@ const MilkSelection = ({
           const pos = isActive ? cupRenderPos : cfg.shelfSpot;
           const size = isActive ? cupRenderSize : cfg.shelfSize;
           const alt = !isActive
-            ? `${cfg.alt}. Select it and press Enter, or drag it to the table, to use this cup instead.`
+            ? `${cfg.alt}. Select it and press Enter to use this cup instead.`
             : cupSpot === 'shelf'
-            ? `${cfg.alt}. Drag from the shelf to the table, or select it and press Enter.`
+            ? `${cfg.alt}. Select it and press Enter to move it to the table.`
             : canSendDrink
-            ? `${cfg.alt} with the finished drink. Drag onto the Send Drink zone to send it to Toppings, or select it and press Enter.`
-            : `${cfg.alt}. Drag it back up to the shelf, or select it and press Enter.`;
+            ? `${cfg.alt} with the finished drink. Select it and press Enter to send it to Toppings.`
+            : `${cfg.alt}. Select it and press Enter.`;
           return (
             <img
               key={type}
               src={cfg.src}
               alt={alt}
-              className={`glass-cup${isActive && cupDragPos ? ' dragging' : ''}${
+              className={`glass-cup${
                 isActive && cupSendStage === 'vanishing' ? ' bowl-vanishing' : ''
+              }${
+                // Explicit, always-on version of the same white glow
+                // :focus-visible already gives every other selectable item
+                // (see .glass-cup:focus-visible in MilkSelection.css) --
+                // added per request/report that the auto-focused shelf cup
+                // wasn't showing it during this walkthrough beat.
+                // :focus-visible is a browser heuristic keyed on "was the
+                // last interaction keyboard-like," and the effect that
+                // auto-focuses the first cup the instant showCupSpotlight
+                // turns on can land right after a mouse-driven interaction
+                // on the previous screen, which some browsers don't count
+                // as keyboard-like -- so the ring silently never appeared
+                // until the player's first actual keypress. This class,
+                // tied to focusedCupType instead, isn't subject to that
+                // heuristic at all.
+                showCupSpotlight && focusedCupType === type ? ' milk-cup-focus-halo' : ''
               }${
                 // showCupSpotlight exempts all three (still deciding which
                 // cup to use); showIceSpotlight/showBaseSpotlight/
@@ -2436,9 +2370,6 @@ const MilkSelection = ({
                 height: `${size.height}%`,
                 ...(isActive && cupSendStage !== 'idle' ? { pointerEvents: 'none' } : {}),
               }}
-              onPointerDown={isActive ? handleCupPointerDown : handleCupSwitchPointerDown(type)}
-              onPointerMove={isActive ? handleCupPointerMove : undefined}
-              onPointerUp={isActive ? handleCupPointerUp : undefined}
               onKeyDown={isActive ? handleCupKeyDown : handleCupSwitchKeyDown(type)}
               onFocus={() => setFocusedCupType(type)}
               onBlur={() => setFocusedCupType((prev) => (prev === type ? null : prev))}
@@ -2478,10 +2409,7 @@ const MilkSelection = ({
           // any cube that was actually placed in the cup goes with it --
           // an unplaced cube still sitting in the box is unaffected.
           if (placed && cupSendStage === 'sent') return null;
-          const dragging = iceDrag?.index === index;
-          const pos = dragging
-            ? iceDrag
-            : placed
+          const pos = placed
             ? getIceCupSlotPos(
                 index,
                 cupRenderPos,
@@ -2498,10 +2426,19 @@ const MilkSelection = ({
             <img
               key={index}
               src="./IceCube.png"
-              alt={placed ? '' : 'Ice cube. Drag it into the cup, or select it and press Enter.'}
+              alt={placed ? '' : 'Ice cube. Select it and press Enter to place it in the cup.'}
               aria-hidden={placed || undefined}
-              className={`ice-cube${dragging ? ' dragging' : ''}${placed ? ' placed' : ''}${
+              className={`ice-cube${placed ? ' placed' : ''}${
                 leaving ? ' bowl-vanishing' : ''
+              }${
+                // Per request: every still-unplaced cube gets the white
+                // focus halo the instant showIceSpotlight turns on, until
+                // the player's first arrow/Enter press (iceSpotlightMoved --
+                // see its own comment above), at which point this drops
+                // away and the normal single-cube :focus-visible halo (see
+                // .ice-cube:focus-visible in MilkSelection.css) takes back
+                // over on its own.
+                showIceSpotlight && !iceSpotlightMoved && !placed ? ' milk-ice-focus-halo' : ''
               }${
                 // showIceSpotlight exempts every cube (still being placed);
                 // showBaseSpotlight/showBowlSpotlight/showSendSpotlight only
@@ -2544,9 +2481,6 @@ const MilkSelection = ({
               {...(placed
                 ? {}
                 : {
-                    onPointerDown: handleIcePointerDown(index),
-                    onPointerMove: handleIcePointerMove,
-                    onPointerUp: handleIcePointerUp,
                     onKeyDown: handleIceKeyDown(index),
                   })}
             />
@@ -2642,8 +2576,7 @@ const MilkSelection = ({
           />
         )}
         {bottleItems.map((item) => {
-          const dragging = bottleDrag?.key === item.key;
-          const pos = dragging ? bottleDrag : bottlePositions[item.key];
+          const pos = bottlePositions[item.key];
           // All four bottles share the same pour sequence now -- settling/
           // pouring are both just "is this the one bottle currently mid-
           // pour" (pouringKey), since pourStage only ever tracks one bottle
@@ -2655,8 +2588,19 @@ const MilkSelection = ({
             <img
               key={item.key}
               src={item.src}
-              alt={`${item.alt}. Drag onto the cup to pour some in once it has ice in it, or select it and press Enter.`}
-              className={`milk-bottle${dragging ? ' dragging' : ''}${settling ? ' settling' : ''}${
+              alt={`${item.alt}. Select it and press Enter to pour some in once the cup has ice in it.`}
+              className={`milk-bottle${settling ? ' settling' : ''}${
+                // Per request: every bottle gets the white focus halo the
+                // instant showBaseSpotlight turns on, until the player's
+                // first arrow/Enter press (baseSpotlightMoved -- see its own
+                // comment above), at which point this drops away and the
+                // normal single-bottle :focus-visible halo (see
+                // .milk-bottle:focus-visible in MilkSelection.css) takes
+                // back over on its own. Excluded while actually pouring
+                // (isPouring), same "don't halo the one mid-animation"
+                // reasoning as the ice cubes excluding placed ones.
+                showBaseSpotlight && !baseSpotlightMoved && !isPouring ? ' milk-bottle-focus-halo' : ''
+              }${
                 showBaseSpotlight ? ' milk-spotlight-exempt' : ''
               }`}
               data-focusable
@@ -2669,9 +2613,6 @@ const MilkSelection = ({
                 height: `${item.height}%`,
                 ...(pouring ? { transform: `rotate(${BOTTLE_POUR_ROTATE_DEG}deg)` } : {}),
               }}
-              onPointerDown={handleBottlePointerDown(item)}
-              onPointerMove={handleBottlePointerMove(item)}
-              onPointerUp={handleBottlePointerUp(item)}
               onKeyDown={handleBottleKeyDown(item)}
               onFocus={() => setFocusedBottle(item.key)}
               onBlur={() => setFocusedBottle((prev) => (prev === item.key ? null : prev))}
@@ -2681,15 +2622,13 @@ const MilkSelection = ({
         {/* Name label above whichever bottle currently has the white focus
             halo (see focusedBottle above) -- e.g. "Oat Milk", "Dairy Milk".
             Tracks the bottle's own live position (pos, same as the image
-            above) rather than its home spot, so it follows along correctly
-            while the bottle's mid-drag. top is anchored at the bottle's own
-            top edge minus the gap; .milk-bottle-label's own
+            above) rather than its home spot. top is anchored at the
+            bottle's own top edge minus the gap; .milk-bottle-label's own
             translate(-50%, -100%) is what actually lifts the label fully
             above that anchor line regardless of the label's own text
             height. */}
         {bottleItems.filter((item) => item.key === focusedBottle).map((item) => {
-          const dragging = bottleDrag?.key === item.key;
-          const pos = dragging ? bottleDrag : bottlePositions[item.key];
+          const pos = bottlePositions[item.key];
           return (
             <p
               key={item.key}
@@ -2813,10 +2752,12 @@ const MilkSelection = ({
             poured and disappears the instant the cup actually heads there
             (cupSendStage leaving 'idle'), same beat as the bowl's own zone
             retiring in MatchaMaking.js. Not itself focusable -- it's a drop
-            target the *cup* gets dragged onto or sent to via its own Enter
-            press (see handleCupPointerUp/handleCupKeyDown above), same
-            "the label just marks a zone" pattern as the ice box/cup zones
-            elsewhere on this screen. */}
+            target the *cup* gets sent to via its own Enter press (see
+            handleCupKeyDown above), same "the marker just marks a zone"
+            pattern as the ice box/cup zones elsewhere on this screen. Just
+            a plain gray square with a thick arrow pointing at it -- no
+            text, no animation (see .make-drink-zone's own comment in
+            MatchaMaking.css). */}
         {canSendDrink && (
           <div
             className={`make-drink-zone${showSendSpotlight ? ' milk-spotlight-exempt' : ''}`}
@@ -2828,7 +2769,9 @@ const MilkSelection = ({
               height: `${SEND_DRINK_ZONE.height}%`,
             }}
           >
-            send to toppings
+            <svg className="make-drink-zone-arrow" viewBox="0 0 60 40" preserveAspectRatio="none">
+              <polygon points="0,12 32,12 32,2 58,20 32,38 32,28 0,28" />
+            </svg>
           </div>
         )}
 
@@ -2914,27 +2857,26 @@ const MilkSelection = ({
           </div>
         )}
         {/* Third first-order-only walkthrough callout -- see
-            showBaseSpotlight above. Row layout, arrow at the end pointing
-            right at the bottle row, same shape as .milk-cup-callout above
-            (and .matcha-order-callout/.matcha-scoop-callout in
-            MatchaMaking.css). Positioned to the bottle cluster's own left
-            (BOTTLE_ITEMS_BASE's own computed left/top+height in
-            MilkSelection.js works out to roughly left 69.5-96.5, top
-            45-83, so right: 32% lands just clear of its left edge, top: 64%
-            roughly levels with its vertical center) -- eyeballed the same
-            way every other exact position in this project is, may need a
-            small nudge once actually seen against the live render. Gone
-            the instant showBaseSpotlight ends (a base is actually poured). */}
+            showBaseSpotlight above. Column layout, text above, arrow below
+            pointing down at the bottle row, same shape as .milk-ice-callout
+            above. Positioned above the bottle cluster (BOTTLE_ITEMS_BASE's
+            own computed left/top+height in MilkSelection.js works out to
+            roughly left 69.5-96.5, top 45-83, so left: 83% centers over
+            that span and top: 32% clears its own top edge) -- eyeballed the
+            same way every other exact position in this project is, may
+            need a small nudge once actually seen against the live render.
+            Gone the instant showBaseSpotlight ends (a base is actually
+            poured). */}
         {showBaseSpotlight && (
           <div className="milk-base-callout">
             <p className="milk-base-callout-text">use the arrows and select the right drink base</p>
             <svg
               className="milk-base-callout-arrow"
-              viewBox="0 0 40 24"
+              viewBox="0 0 24 40"
               preserveAspectRatio="none"
               aria-hidden="true"
             >
-              <polygon points="38,12 2,2 2,22" />
+              <polygon points="12,38 22,4 2,4" />
             </svg>
           </div>
         )}

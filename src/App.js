@@ -33,6 +33,7 @@ import { PROGRESS_STEPS, ORDERS_PER_SESSION } from './components/ProgressBar';
 import { getActionFromKeyEvent } from './gameloop/pal';
 import { setSfxVolume } from './gameloop/sfx';
 import { useFlatFocusNav } from './gameloop/useFlatFocusNav';
+import { buildSessionCharacterOrder } from './gameloop/customerCharacters';
 import {
   initGameLoopBridge,
   sendAppReady,
@@ -98,6 +99,17 @@ function App() {
   // Which customer (1-ORDERS_PER_SESSION) the player is currently serving
   // this session.
   const [customerNumber, setCustomerNumber] = useState(1);
+  // This session's customer-character rotation -- a shuffled, no-repeats
+  // order of all five characters (see buildSessionCharacterOrder in
+  // gameloop/customerCharacters.js), indexed by customerNumber - 1 and
+  // handed to CustomerOrdering below as its customerCharacter prop, so
+  // across a session's ORDERS_PER_SESSION orders every character shows up
+  // exactly once instead of CustomerOrdering independently rolling any of
+  // the five for each order (which could repeat one and skip another).
+  // Lazy-initialized here too (rather than only ever set in
+  // startNewSession) so there's already a valid rotation before the player
+  // ever presses Play.
+  const [sessionCharacterOrder, setSessionCharacterOrder] = useState(() => buildSessionCharacterOrder());
   // The order built in CustomerOrdering's "Place Order" step -- null until
   // placed, then shown by OrderReceiptButton on the Matcha/Milk/Toppings
   // screens (replacing the old hardcoded AnnieOrder1.png receipt). Reset to
@@ -463,6 +475,9 @@ function App() {
     // whatever the previous customer reached.
     maxStepIndexRef.current = -1;
     setCustomerNumber(1);
+    // Fresh shuffle for this new session -- see sessionCharacterOrder's own
+    // comment above.
+    setSessionCharacterOrder(buildSessionCharacterOrder());
     setCurrentOrder(null);
     setMatchaBowl(null);
     setFinishedDrink(null);
@@ -633,6 +648,7 @@ function App() {
             <div className="page-slide">
               <CustomerOrdering
                 activeStep="ordering"
+                customerCharacter={sessionCharacterOrder[customerNumber - 1]}
                 onPlaceOrder={setCurrentOrder}
                 onOrderScored={setOrderTakingScore}
                 {...progressProps}

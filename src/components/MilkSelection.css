@@ -104,11 +104,6 @@
     filter 0.15s ease, transform 0.15s ease;
 }
 
-.glass-cup.dragging {
-  cursor: grabbing;
-  transition: none;
-}
-
 /* Focus glow that hugs the cup's actual silhouette instead of a rectangle.
    The generic global button/[tabindex]:focus-visible rule (App.css) uses
    box-shadow, which always follows the element's bounding BOX regardless
@@ -119,7 +114,8 @@
    drop-shadows on top of the cup's existing one traces its real outline.
    (border-radius was ruled out too -- it clips <img> content in modern
    browsers, and wouldn't fit this shape anyway.) */
-.glass-cup:focus-visible {
+.glass-cup:focus-visible,
+.glass-cup.milk-cup-focus-halo {
   outline: none;
   box-shadow: none;
   transform: scale(1.08);
@@ -150,11 +146,6 @@
     filter 0.15s ease, transform 0.15s ease;
 }
 
-.ice-cube.dragging {
-  cursor: grabbing;
-  transition: none;
-}
-
 .ice-cube.placed {
   cursor: default;
   /* Fully inert once placed -- see the big comment above and the matching
@@ -168,8 +159,14 @@
 }
 
 /* Same shape-hugging focus glow as .glass-cup, tuned a little tighter/
-   smaller since the cube itself is much smaller on screen. */
-.ice-cube:focus-visible {
+   smaller since the cube itself is much smaller on screen. Explicit
+   .milk-ice-focus-halo variant (see iceSpotlightMoved in MilkSelection.js)
+   lets every still-unplaced cube show this glow at once during the
+   first-order ice-placing walkthrough beat, not just the one that actually
+   has DOM focus -- same "explicit class alongside :focus-visible" shape as
+   .glass-cup.milk-cup-focus-halo above. */
+.ice-cube:focus-visible,
+.ice-cube.milk-ice-focus-halo {
   outline: none;
   box-shadow: none;
   transform: scale(1.15);
@@ -197,13 +194,15 @@
   transition: left 0.2s ease, top 0.2s ease, filter 0.15s ease, transform 0.15s ease;
 }
 
-.milk-bottle.dragging {
-  cursor: grabbing;
-  transition: none;
-}
-
-/* Same shape-hugging focus glow as .glass-cup/.ice-cube. */
-.milk-bottle:focus-visible {
+/* Same shape-hugging focus glow as .glass-cup/.ice-cube. Explicit
+   .milk-bottle-focus-halo variant (see baseSpotlightMoved in
+   MilkSelection.js) lets every bottle show this glow at once during the
+   first-order base-picking walkthrough beat, not just the one that
+   actually has DOM focus -- same "explicit class alongside :focus-visible"
+   shape as .glass-cup.milk-cup-focus-halo/.ice-cube.milk-ice-focus-halo
+   above. */
+.milk-bottle:focus-visible,
+.milk-bottle.milk-bottle-focus-halo {
   outline: none;
   box-shadow: none;
   transform: scale(1.1);
@@ -342,7 +341,7 @@
 .milk-cup-callout {
   position: absolute;
   right: 30%;
-  top: 32%;
+  top: 29%;
   transform: translateY(-50%);
   width: 24%;
   z-index: 26;
@@ -418,8 +417,8 @@
    edge), translateX(-50%) centers the panel over that point. */
 .milk-ice-callout {
   position: absolute;
-  left: 12.6%;
-  top: 58%;
+  left: 7%;
+  top: 57%;
   transform: translateX(-50%);
   width: min(360px, 22vw);
   z-index: 26;
@@ -476,19 +475,20 @@
 }
 
 /* Third first-order-only walkthrough callout, bottle row -- see
-   showBaseSpotlight in MilkSelection.js. Row layout, arrow at the end
-   pointing right at the bottles, same shape as .milk-cup-callout above.
-   Positioned to the bottle cluster's own left (see the JSX comment on
-   <div className="milk-base-callout"> for the actual numbers). */
+   showBaseSpotlight in MilkSelection.js. Column layout, text above, arrow
+   below pointing down at the bottles, same shape as .milk-ice-callout
+   above. Positioned above the bottle cluster (see the JSX comment on
+   <div className="milk-base-callout"> for the actual numbers),
+   translateX(-50%) centers the panel over that point. */
 .milk-base-callout {
   position: absolute;
-  right: 32%;
-  top: 64%;
-  transform: translateY(-50%);
-  width: 24%;
+  left: 75%;
+  top: 32%;
+  transform: translateX(-50%);
+  width: min(360px, 22vw);
   z-index: 26;
   display: flex;
-  flex-direction: row;
+  flex-direction: column;
   align-items: center;
   gap: min(10px, 0.55vw);
   pointer-events: none;
@@ -511,14 +511,14 @@
   letter-spacing: 0.01em;
 }
 
-/* Points right, at the bottle row beside it. Same real-SVG-triangle
-   convention as every other walkthrough arrow in this project -- same
-   shape as .milk-cup-callout-arrow above. */
+/* Points down, at the bottle row below. Same real-SVG-triangle convention
+   as every other walkthrough arrow in this project -- same shape as
+   .milk-ice-callout-arrow above. */
 .milk-base-callout-arrow {
   flex: none;
-  width: min(46px, 2.4vw);
-  height: min(28px, 1.5vw);
-  animation: milkCupCalloutArrowNudge 1.4s ease-in-out infinite;
+  width: min(28px, 1.5vw);
+  height: min(46px, 2.4vw);
+  animation: milkIceCalloutArrowNudge 1.4s ease-in-out infinite;
 }
 
 .milk-base-callout-arrow polygon {
@@ -537,7 +537,7 @@
    centers the panel over that point. */
 .milk-bowl-callout {
   position: absolute;
-  left: 28.5%;
+  left: 20%;
   top: 44%;
   transform: translateX(-50%);
   width: min(320px, 20vw);
@@ -594,8 +594,8 @@
    screen. */
 .milk-send-callout {
   position: absolute;
-  left: 50%;
-  top: 26%;
+  left: 40%;
+  top: 25%;
   transform: translateX(-50%);
   width: min(420px, 26vw);
   z-index: 26;
@@ -655,8 +655,8 @@
    already follows. */
 .milk-progress-callout {
   position: absolute;
-  left: 32%;
-  bottom: 24%;
+  left: 44%;
+  bottom: 21%;
   transform: translateX(-50%);
   width: 26%;
   z-index: 26;
@@ -1058,22 +1058,15 @@
 
 /* Carried-over matcha bowl (see incomingBowl/bowlIsBig in MilkSelection.js)
    -- sits small on the counter (about one milk bottle's own width) but
-   grows to its full original MatchaMaking size the moment it's picked up
-   or sent gliding into a pour. Reuses .station-item.movable's own left/top/
+   grows to its full original MatchaMaking size the moment it's sent
+   gliding into a pour. Reuses .station-item.movable's own left/top/
    filter/transform transition (that class is defined in MatchaMaking.css,
    already loaded globally -- see the big comment above this element in
    MilkSelection.js), just adding width/height here so that size change
    reads as a smooth grow instead of an instant snap. Scoped to this one
    extra class (rather than editing .station-item.movable itself) so
-   MatchaMaking's own bowl, which never resizes, is unaffected. The
-   .dragging variant is repeated with the extra class so it wins over the
-   rule above regardless of the two files' own load order (both are
-   otherwise tied on specificity). */
+   MatchaMaking's own bowl, which never resizes, is unaffected. */
 .station-item.movable.incoming-bowl {
   transition: left 0.2s ease, top 0.2s ease, width 0.2s ease, height 0.2s ease,
     filter 0.15s ease, transform 0.15s ease;
-}
-
-.station-item.movable.incoming-bowl.dragging {
-  transition: none;
 }

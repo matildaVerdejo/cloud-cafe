@@ -154,15 +154,38 @@ function pickRandom(list) {
   return list[Math.floor(Math.random() * list.length)];
 }
 
-// Random-length (0 through maxCount, which defaults to the whole list),
-// random-order subset -- "any and however many toppings," not a fixed count
-// and not necessarily in list order. maxCount lets the first round cap this
-// lower (see generateSpokenOrder below) without a separate code path.
-function pickRandomSubset(list, maxCount = list.length) {
-  const shuffled = [...list].sort(() => Math.random() - 0.5);
-  const cap = Math.min(maxCount, list.length);
-  const count = Math.floor(Math.random() * (cap + 1));
-  return shuffled.slice(0, count);
+// Groups a topping options list by "flavor" -- every value sharing a
+// -syrup/-foam/-powder suffix is one category (e.g. guava-syrup and
+// mint-syrup are both 'syrup'); a standalone topping with no such suffix
+// (mint-leaves) is its own one-item category. Used by
+// pickRandomToppingSubset below to cap each category to at most one pick.
+function groupToppingsByCategory(list) {
+  const groups = new Map();
+  for (const t of list) {
+    const category = t.value.endsWith('-syrup')
+      ? 'syrup'
+      : t.value.endsWith('-foam')
+        ? 'foam'
+        : t.value.endsWith('-powder')
+          ? 'powder'
+          : t.value;
+    if (!groups.has(category)) groups.set(category, []);
+    groups.get(category).push(t);
+  }
+  return [...groups.values()];
+}
+
+// Random-length (0 through however many categories exist), random-order
+// subset of toppings -- "any and however many toppings," same as before,
+// but capped to at most one pick per flavor category (see
+// groupToppingsByCategory above) so a single order can never ask for e.g.
+// both honey syrup and mint syrup, or both matcha foam and banana foam.
+// Standalone toppings with no siblings (mint-leaves) are their own one-item
+// category and behave exactly as before -- either asked for or not.
+function pickRandomToppingSubset(list) {
+  const shuffledGroups = groupToppingsByCategory(list).sort(() => Math.random() - 0.5);
+  const count = Math.floor(Math.random() * (shuffledGroups.length + 1));
+  return shuffledGroups.slice(0, count).map((group) => pickRandom(group));
 }
 
 // Oxford-comma joiner, segment version -- same "a" / "a and b" / "a, b, and
@@ -207,7 +230,6 @@ function joinWithAndSegments(items) {
 // sparkling yuzu, honey syrup, mint leaves) the player hasn't seen on the
 // counter yet.
 function generateSpokenOrder(customerNumber, gradeOptions, baseOptions, toppingOptions) {
-  const toppingCap = customerNumber === 1 ? pickRandom([2, 3]) : toppingOptions.length;
   // First order only -- fixed at exactly 3 (rather than rolled) so the
   // walkthrough's own ice-placement beat on Milk Selection (see
   // showIceSpotlight/showBaseSpotlight there, which waits for exactly/at
@@ -215,6 +237,27 @@ function generateSpokenOrder(customerNumber, gradeOptions, baseOptions, toppingO
   // teach; orders 2/3 keep rolling the full ICE_OPTIONS range, 0 included,
   // same as before.
   const ice = customerNumber === 1 ? 3 : pickRandom(ICE_OPTIONS).value;
+  // First order only -- rather than a random-sized/random-mix subset, pick
+  // exactly one syrup, one foam, and one powder topping (toppingOptions is
+  // exactly TOPPING_OPTIONS_BASE for customerNumber === 1: two of each, see
+  // that list's own value suffixes), still randomized which specific one of
+  // each pair gets asked for, and in a random order in the sentence. This
+  // guarantees the walkthrough's toppings step always has one clear example
+  // of every topping category to teach. Orders 2/3+ keep rolling a
+  // random-length/random-mix subset of the full pool (see
+  // pickRandomToppingSubset above), just capped to at most one topping per
+  // flavor category so an order can never ask for e.g. both honey syrup and
+  // mint syrup at once.
+  const toppings =
+    customerNumber === 1
+      ? [
+          pickRandom(toppingOptions.filter((t) => t.value.endsWith('-syrup'))),
+          pickRandom(toppingOptions.filter((t) => t.value.endsWith('-foam'))),
+          pickRandom(toppingOptions.filter((t) => t.value.endsWith('-powder'))),
+        ]
+          .sort(() => Math.random() - 0.5)
+          .map((t) => t.value)
+      : pickRandomToppingSubset(toppingOptions).map((t) => t.value);
   return {
     greeting: pickRandom(GREETINGS),
     teaspoons: pickRandom(TEASPOON_OPTIONS).value,
@@ -222,7 +265,7 @@ function generateSpokenOrder(customerNumber, gradeOptions, baseOptions, toppingO
     cup: pickRandom(CUP_OPTIONS).value,
     ice,
     milk: pickRandom(baseOptions).value,
-    toppings: pickRandomSubset(toppingOptions, toppingCap).map((t) => t.value),
+    toppings,
   };
 }
 
@@ -373,7 +416,15 @@ function Dropdown({ placeholder, options, value, onSelect, isOpen, onToggle, tog
   );
 }
 
-const CustomerOrdering = ({ activeStep, customerNumber, onNavigate, onAdvance, onPlaceOrder, onOrderScored }) => {
+const CustomerOrdering = ({
+  activeStep,
+  customerNumber,
+  customerCharacter: assignedCharacter,
+  onNavigate,
+  onAdvance,
+  onPlaceOrder,
+  onOrderScored,
+}) => {
   const containerRef = useRef(null);
   // Strawberry milk becomes orderable from order 2 onward, sparkling yuzu
   // from order 4 onward -- same unlocks as their counter bottles on Milk
@@ -700,11 +751,18 @@ const CustomerOrdering = ({ activeStep, customerNumber, onNavigate, onAdvance, o
   const speechSegments = buildSpeechSegments(spokenOrder, gradeOptions, baseOptions);
   const speechText = flattenSegments(speechSegments);
 
-  // Which of the three customer characters (CUSTOMER_CHARACTERS above) is at
-  // the counter this round -- rolled once per mount via the lazy
-  // initializer, same "once per customer, not re-rolled on every re-render"
-  // reasoning as spokenOrder just above.
-  const [customerCharacter] = useState(() => pickRandom(Object.keys(CUSTOMER_CHARACTERS)));
+  // Which of the five customer characters (CUSTOMER_CHARACTERS above) is at
+  // the counter this round -- assigned by App.js (see
+  // buildSessionCharacterOrder in gameloop/customerCharacters.js), which
+  // shuffles all five once per session and hands out a different one to
+  // each of the session's orders, so every character shows up exactly once
+  // across a session instead of each order independently rolling any of the
+  // five (which could repeat one and skip another). Still read via the same
+  // lazy useState initializer as before (rather than just `const
+  // customerCharacter = assignedCharacter`) so the defensive random
+  // fallback below -- for the case this prop is ever omitted -- only ever
+  // rolls once per mount, not on every re-render.
+  const [customerCharacter] = useState(() => assignedCharacter ?? pickRandom(Object.keys(CUSTOMER_CHARACTERS)));
 
   // Typewriter effect -- same one the very first version of this screen's
   // speech bubble had (reveal one more character every TYPE_INTERVAL_MS, so

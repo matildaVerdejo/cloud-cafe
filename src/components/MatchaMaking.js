@@ -869,47 +869,23 @@ export const BOWL_INNER_RIM_CENTER = { leftFrac: 0.5, topFrac: 0.389 };
 export const BOWL_INNER_RIM_WIDTH_FRAC = 0.87;
 export const BOWL_INNER_RIM_HEIGHT_FRAC = 0.605;
 
-function clampPct(value, size) {
-  return Math.min(Math.max(value, 0), 100 - size);
-}
-
-// Same "generous margin, percentage-box hit test" idea as MilkSelection's
-// isOverCup, but against the bowl's *current* position/size rather than a
-// fixed spot -- the bowl is itself freely draggable (see MOVABLE_ITEMS), so
-// this takes its live position/box as arguments instead of a module-level
-// constant.
-function isOverBowl(leftPct, topPct, bowlPos, bowlItem) {
-  const margin = 3;
-  return (
-    leftPct >= bowlPos.left - margin &&
-    leftPct <= bowlPos.left + bowlItem.width + margin &&
-    topPct >= bowlPos.top - margin &&
-    topPct <= bowlPos.top + bowlItem.height + margin
-  );
-}
-
-// The "Make Drink" drop-zone label -- only rendered once whiskStage is
+// The "Make Drink" drop-zone marker -- only rendered once whiskStage is
 // 'done' (see the JSX below). Sits in the bottom-right corner, clear of
 // the ProgressBar (which is bottom-center, min-width min(1140px, 54.625vw)
 // -- at most ~54.6% of the container, so its right edge never passes
 // ~77.3% from center) and clear of the whisk's own resting spot (right
 // edge 62.37 + 13.26 = 75.63%, see MOVABLE_ITEMS above), so it can't ever
 // visually collide with either regardless of exact vertical overlap.
-const MAKE_DRINK_ZONE = { left: 78, top: 66, width: 19, height: 18 };
-
-// Generous hit-test box for "was the bowl dropped on the Make Drink
-// label", same margin-based approach as isOverBowl above -- takes the
-// drag's live left/top (percentage points) rather than reading state
-// directly, matching every other isOverX helper in this file.
-function isOverMakeDrinkZone(leftPct, topPct) {
-  const margin = 3;
-  return (
-    leftPct >= MAKE_DRINK_ZONE.left - margin &&
-    leftPct <= MAKE_DRINK_ZONE.left + MAKE_DRINK_ZONE.width + margin &&
-    topPct >= MAKE_DRINK_ZONE.top - margin &&
-    topPct <= MAKE_DRINK_ZONE.top + MAKE_DRINK_ZONE.height + margin
-  );
-}
+// width/height are chosen so the marker renders as a true square in real
+// on-screen pixels (not just equal percentages) -- the container itself is
+// 1920x1080, so width % and height % aren't the same pixel scale (same
+// "convert through actual pixels" reasoning as MilkSelection's own
+// BOTTLE_WIDTH/BOTTLE_CANVAS_ASPECT) -- 10% of 1920 (192px) is very close
+// to 18% of 1080 (194.4px). left is derived to keep the marker's own right
+// edge exactly where it always was (78 + 19 = 97) despite the narrower
+// width, so its position relative to the ProgressBar/whisk above is
+// unaffected -- only its own left edge/footprint shrank inward.
+const MAKE_DRINK_ZONE = { left: 87, top: 66, width: 10, height: 18 };
 
 // Once whisking's done and the player sends the bowl off (see bowlStage/
 // beginBowlCarry in the component below), it glides into the Make Drink
@@ -1444,11 +1420,14 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
     stopBar();
   };
 
-  // ---- Movable countertop items: free drag anywhere on the counter -------
+  // ---- Movable countertop items -------------------------------------------
+  // Mouse/pointer dragging has been removed project-wide (keyboard/remote
+  // only now -- see the README's "Input model" note) -- each item's
+  // position only ever changes programmatically now (beginKettleDump/
+  // beginWhiskMix/beginBowlCarry below, all triggered by Enter via
+  // handleKettleKeyDown/handleWhiskKeyDown/handleBowlKeyDown), never by the
+  // player picking it up and placing it anywhere arbitrary.
   const [itemPositions, setItemPositions] = useState(MOVABLE_START);
-  // Which item (if any) is being dragged right now, and its live position.
-  const [drag, setDrag] = useState(null); // { key, left, top } | null
-  const dragStartRef = useRef({ pointerX: 0, pointerY: 0, left: 0, top: 0 });
 
   // Sends focus to the kettle itself the instant the temp gauge disappears
   // (tempBarVisible flipping false, TEMP_BAR_LINGER_MS after stopBar). Same
@@ -1611,98 +1590,6 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
   // itself (which would need to be threaded through the rAF closure).
   const messUpCountRef = useRef(0);
 
-  const handlePointerDown = (item) => (e) => {
-    const base = itemPositions[item.key];
-    e.currentTarget.setPointerCapture(e.pointerId);
-    dragStartRef.current = {
-      pointerX: e.clientX,
-      pointerY: e.clientY,
-      left: base.left,
-      top: base.top,
-    };
-    setDrag({ key: item.key, left: base.left, top: base.top });
-  };
-
-  const handlePointerMove = (item) => (e) => {
-    if (!drag || drag.key !== item.key) return;
-    const rect = containerRef.current?.getBoundingClientRect();
-    if (!rect) return;
-    const dxPct = ((e.clientX - dragStartRef.current.pointerX) / rect.width) * 100;
-    const dyPct = ((e.clientY - dragStartRef.current.pointerY) / rect.height) * 100;
-    setDrag({
-      key: item.key,
-      left: clampPct(dragStartRef.current.left + dxPct, item.width),
-      top: clampPct(dragStartRef.current.top + dyPct, item.height),
-    });
-  };
-
-  // Snap back to the item's original counter spot if it's dropped close to
-  // it -- "close" is scaled to the item's own footprint (half its width/
-  // height) rather than a flat distance, so the tiny whisk needs a
-  // reasonably precise drop while the much bigger bowl has a more forgiving
-  // catch zone. Dropped anywhere else, it just stays exactly where it landed.
-  const SNAP_FRACTION = 0.5;
-
-  const handlePointerUp = (item) => (e) => {
-    if (!drag || drag.key !== item.key) return;
-    e.currentTarget.releasePointerCapture?.(e.pointerId);
-    // Special case: dropping the *kettle* on the bowl once a temperature's
-    // been confirmed starts the water-pour sequence (beginKettleDump,
-    // defined further down alongside the bowl/kettle position math it
-    // needs) instead of the ordinary snap-back-or-stay-put placement below.
-    // Before tempConfirmed (or for the bowl/whisk, or once already mid-
-    // pour), this falls through to that same ordinary placement, same as
-    // always.
-    if (
-      item.key === 'kettle' &&
-      tempConfirmed &&
-      kettleStage === 'idle' &&
-      isOverBowl(drag.left, drag.top, bowlPos, bowlItem)
-    ) {
-      setDrag(null);
-      beginKettleDump();
-      return;
-    }
-    // Same idea, for the *whisk* -- dropping it on the bowl once both the
-    // matcha and the water are already in (bowlPowder/bowlWater both
-    // truthy) starts the mixing sequence (beginWhiskMix, defined further
-    // down alongside the bowl/whisk position math it needs) instead of
-    // falling through to the ordinary placement below. Before either of
-    // those, or once already mid-mix, this falls through same as always --
-    // there's nothing to whisk yet, or it's already being whisked.
-    if (
-      item.key === 'whisk' &&
-      bowlPowder &&
-      bowlWater &&
-      whiskStage === 'idle' &&
-      isOverBowl(drag.left, drag.top, bowlPos, bowlItem)
-    ) {
-      setDrag(null);
-      beginWhiskMix();
-      return;
-    }
-    // Same idea, for the *bowl* -- once whisking is done, dropping it on
-    // the "Make Drink" label (see MAKE_DRINK_ZONE/isOverMakeDrinkZone
-    // above) carries it into that zone and fades it away (the whisk stays
-    // put on the counter), same beginBowlCarry sequence the bowl's own
-    // Enter press triggers (see handleBowlKeyDown further down) -- rather
-    // than the ordinary placement below. Before whiskStage is 'done', or
-    // dropped anywhere else, this falls through same as always.
-    if (item.key === 'bowl' && whiskStage === 'done' && bowlStage === 'idle' && isOverMakeDrinkZone(drag.left, drag.top)) {
-      setDrag(null);
-      beginBowlCarry();
-      return;
-    }
-    const start = MOVABLE_START[item.key];
-    const snapBack =
-      Math.abs(drag.left - start.left) < item.width * SNAP_FRACTION &&
-      Math.abs(drag.top - start.top) < item.height * SNAP_FRACTION;
-    setItemPositions((prev) => ({
-      ...prev,
-      [item.key]: snapBack ? { left: start.left, top: start.top } : { left: drag.left, top: drag.top },
-    }));
-    setDrag(null);
-  };
 
   // D-pad/keyboard equivalent of successfully dragging the kettle onto the
   // bowl -- same "no keyboard equivalent of 'drag it partway', so Enter
@@ -1904,18 +1791,16 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
   // abandoned attempt can't fire late against a fresh selection.
   const scoopConfirmTimerRef = useRef(null);
 
-  // ---- Big scoop spoon: pick up, drag onto the bowl, dump the powder ----
+  // ---- Big scoop spoon: select it, then Enter to dump the powder ---------
   // Appears once scoopConfirmed flips true (see above); position resets to
   // BIG_SPOON_START each time a fresh tin selection starts, same as
   // scoopFillPercent/scoopConfirmed.
   const [bigSpoonPos, setBigSpoonPos] = useState(BIG_SPOON_START);
-  const [bigSpoonDrag, setBigSpoonDrag] = useState(null); // { left, top } | null
   // Where the spoon is in the dump sequence -- see the BIG_SPOON_MOVE_MS/
   // BIG_SPOON_POUR_MS comment above:
-  //   'idle'    -- normal, freely draggable/placeable.
-  //   'moving'  -- confirmed (drag-dropped on the bowl, or Enter/Space);
-  //                gliding to the fixed hover-above-bowl spot. Still fully
-  //                visible and no longer draggable.
+  //   'idle'    -- normal, freely selectable.
+  //   'moving'  -- confirmed (Enter/Space); gliding to the fixed
+  //                hover-above-bowl spot. No longer selectable.
   //   'pouring' -- arrived; .spoon-pour's falling-powder effect is playing,
   //                and the bowl's mound (bowlPowder below) is growing in
   //                step with it.
@@ -2035,7 +1920,6 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
   // tints.
   const showMixSpotlight = customerNumber === 1 && (whiskStage === 'moving' || whiskStage === 'mixing');
 
-  const bigSpoonDragStartRef = useRef({ pointerX: 0, pointerY: 0, left: 0, top: 0 });
   const bigSpoonRef = useRef(null);
 
   useEffect(() => {
@@ -2237,52 +2121,10 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
     }
   }, [bigSpoonStage]);
 
-  const handleBigSpoonPointerDown = (e) => {
-    if (bigSpoonStage !== 'idle') return;
-    e.currentTarget.setPointerCapture(e.pointerId);
-    bigSpoonDragStartRef.current = {
-      pointerX: e.clientX,
-      pointerY: e.clientY,
-      left: bigSpoonPos.left,
-      top: bigSpoonPos.top,
-    };
-    setBigSpoonDrag({ left: bigSpoonPos.left, top: bigSpoonPos.top });
-  };
-
-  const handleBigSpoonPointerMove = (e) => {
-    if (!bigSpoonDrag) return;
-    const rect = containerRef.current?.getBoundingClientRect();
-    if (!rect) return;
-    const dxPct = ((e.clientX - bigSpoonDragStartRef.current.pointerX) / rect.width) * 100;
-    const dyPct = ((e.clientY - bigSpoonDragStartRef.current.pointerY) / rect.height) * 100;
-    setBigSpoonDrag({
-      left: clampPct(bigSpoonDragStartRef.current.left + dxPct, BIG_SPOON_SIZE.width),
-      top: clampPct(bigSpoonDragStartRef.current.top + dyPct, BIG_SPOON_SIZE.height),
-    });
-  };
-
-  // Dropped over the bowl (using its *current* position -- see bowlPos/
-  // bowlItem below, computed the same way kettlePos/kettleItem already are)
-  // starts the dump sequence -- see beginDump above, which takes over from
-  // here (glide to hover, pour, then stamp the bowl). Dropped anywhere
-  // else, it just stays exactly where it landed, same free-placement
-  // behavior as the kettle/bowl/whisk above.
-  const handleBigSpoonPointerUp = (e) => {
-    if (!bigSpoonDrag) return;
-    e.currentTarget.releasePointerCapture?.(e.pointerId);
-    if (isOverBowl(bigSpoonDrag.left, bigSpoonDrag.top, bowlPos, bowlItem)) {
-      setBigSpoonDrag(null);
-      beginDump();
-      return;
-    }
-    setBigSpoonPos(bigSpoonDrag);
-    setBigSpoonDrag(null);
-  };
-
-  // D-pad/keyboard equivalent of successfully dragging the spoon onto the
-  // bowl -- there's no keyboard equivalent of "drag it partway" (same as
-  // the milk bottles/ice cubes elsewhere), so Enter here goes straight to
-  // the same beginDump sequence the drop path above uses.
+  // Enter picks it straight up and dumps it -- no drag/partial-placement
+  // step (mouse/pointer input has been removed project-wide, see the
+  // README's "Input model" note), so this is the only way the spoon ever
+  // moves.
   const handleBigSpoonKeyDown = (e) => {
     const action = getActionFromKeyEvent(e);
     if (action !== 'Enter') return;
@@ -2292,28 +2134,24 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
     beginDump();
   };
 
-  const bigSpoonRenderPos = bigSpoonDrag || bigSpoonPos;
+  const bigSpoonRenderPos = bigSpoonPos;
 
   // ---- Kettle steam: appears once the water's hot enough (tempZone hits
   // 'target', i.e. the button just turned green) and keeps going for as
   // long as it stays hot, rather than cutting off the instant tempZone
-  // moves on to 'over' -- reads the kettle's live position (drag position
-  // while it's being dragged, its settled position otherwise) so the
-  // wisps stay anchored to the spout even after the kettle's been moved.
+  // moves on to 'over' -- reads the kettle's live position so the wisps
+  // stay anchored to the spout even while it's mid-glide (beginKettleDump).
   const kettleItem = MOVABLE_ITEMS.find((item) => item.key === 'kettle');
-  const kettleDragging = drag?.key === 'kettle';
-  const kettlePos = kettleDragging ? drag : itemPositions.kettle;
+  const kettlePos = itemPositions.kettle;
   const showSteam = heaterOn && tempZone !== 'below';
   const steamLeft = kettlePos.left + KETTLE_SPOUT_OFFSET.leftFrac * kettleItem.width;
   const steamTop = kettlePos.top + KETTLE_SPOUT_OFFSET.topFrac * kettleItem.height;
 
-  // ---- Bowl's live position -- same "dragging vs. settled" pattern as the
-  // kettle above, used both as the big spoon's drop-zone hit test
-  // (handleBigSpoonPointerUp) and to keep the dumped powder mound anchored
-  // to the bowl wherever it's been moved.
+  // ---- Bowl's live position -- used to keep the dumped powder mound (and
+  // everything else anchored to the bowl) tracking wherever it currently is
+  // as it glides around programmatically (beginBowlCarry, etc.).
   const bowlItem = MOVABLE_ITEMS.find((item) => item.key === 'bowl');
-  const bowlDragging = drag?.key === 'bowl';
-  const bowlPos = bowlDragging ? drag : itemPositions.bowl;
+  const bowlPos = itemPositions.bowl;
   // Keeps bowlPosRef/bowlItemRef (declared up above alongside the spills
   // state) current every render -- no dependency array, so this runs after
   // every single render, same "always-fresh mutable snapshot for a callback
@@ -3013,24 +2851,20 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
               <img
                 ref={bigSpoonRef}
                 src={SCOOP_SPOON_IMAGES[selectedTin] ?? SCOOP_SPOON_IMAGES['classic-grade']}
-                alt="Measured scoop of matcha. Drag it onto the bowl to tip the powder in, or select it and press Enter."
-                className={`big-spoon${bigSpoonDrag ? ' dragging' : ''}${
+                alt="Measured scoop of matcha. Select it and press Enter to tip the powder into the bowl."
+                className={`big-spoon${
                   bigSpoonStage !== 'idle' ? ' settling' : ''
                 }${showSpoonHint ? ' big-spoon-highlight' : ''}${
                   showSpoonSpotlight ? ' matcha-spotlight-exempt' : ''
                 }`}
                 data-focusable
                 tabIndex={0}
-                draggable={false}
                 style={{
                   left: `${bigSpoonRenderPos.left}%`,
                   top: `${bigSpoonRenderPos.top}%`,
                   width: `${BIG_SPOON_SIZE.width}%`,
                   height: `${BIG_SPOON_SIZE.height}%`,
                 }}
-                onPointerDown={handleBigSpoonPointerDown}
-                onPointerMove={handleBigSpoonPointerMove}
-                onPointerUp={handleBigSpoonPointerUp}
                 onKeyDown={handleBigSpoonKeyDown}
               />
             )}
@@ -3076,8 +2910,7 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
           </>
         )}
         {MOVABLE_ITEMS.map((item) => {
-          const dragging = drag?.key === item.key;
-          const pos = dragging ? drag : itemPositions[item.key];
+          const pos = itemPositions[item.key];
           // The kettle has a pour sequence and the whisk has a mixing
           // sequence -- the bowl stays exactly as free-floating as ever
           // (both stages are always 'idle' for it, so these are no-ops in
@@ -3132,12 +2965,14 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
               src={item.src}
               alt={
                 isWhisk
-                  ? `${item.alt}. Drag onto the bowl to mix once the matcha and water are both in, or select it and press Enter.`
+                  ? `${item.alt}. Select it and press Enter to mix once the matcha and water are both in.`
                   : isBowl && whiskStage === 'done'
-                  ? `${item.alt}. Drag to the Make Drink zone to send it off, or select it and press Enter.`
-                  : `${item.alt}. Drag to move.`
+                  ? `${item.alt}. Select it and press Enter to send it to the Make Drink zone.`
+                  : isKettle
+                  ? `${item.alt}. Select it and press Enter to pour once the water's hot.`
+                  : item.alt
               }
-              className={`station-item movable${dragging ? ' dragging' : ''}${settling ? ' settling' : ''}${
+              className={`station-item movable${settling ? ' settling' : ''}${
                 pouring ? ' pouring' : ''
                 // kettle-highlight/whisk-highlight (the flashing green
                 // halo, driven by showKettleHint/showWhiskHint) removed per
@@ -3163,7 +2998,6 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
               }`}
               data-focusable
               tabIndex={0}
-              draggable={false}
               style={{
                 left: `${pos.left}%`,
                 top: `${pos.top}%`,
@@ -3236,9 +3070,6 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
                 // via its own resting z-index: 2 below.
                 ...(isWhisk ? { zIndex: showWhiskSpotlight || showMixSpotlight ? 27 : 2 } : {}),
               }}
-              onPointerDown={handlePointerDown(item)}
-              onPointerMove={handlePointerMove(item)}
-              onPointerUp={handlePointerUp(item)}
               onKeyDown={
                 isKettle ? handleKettleKeyDown : isWhisk ? handleWhiskKeyDown : isBowl ? handleBowlKeyDown : undefined
               }
@@ -3546,7 +3377,16 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
             ends. */}
         {whiskStage === 'done' && bowlPowder && bowlStage !== 'sent' && (
           <img
-            className={`bowl-whisked-liquid${bowlStage === 'vanishing' ? ' bowl-vanishing' : ''}`}
+            className={`bowl-whisked-liquid${bowlStage === 'vanishing' ? ' bowl-vanishing' : ''}${
+              // Bug fix: this image paints on top of the bowl but, unlike
+              // the bowl itself (see isBowl's own matcha-spotlight-exempt
+              // condition above), never carried its own exemption -- so
+              // during showBowlCarrySpotlight (the only spotlight beat that
+              // can ever overlap whiskStage === 'done') the pink overlay
+              // (z-index 25) painted right over the finished frothed matcha
+              // even though the bowl underneath it correctly showed through.
+              showBowlCarrySpotlight ? ' matcha-spotlight-exempt' : ''
+            }`}
             aria-hidden="true"
             draggable={false}
             src={WHISKED_LIQUID_IMAGES[bowlPowder.grade] ?? WHISKED_LIQUID_IMAGES['classic-grade']}
@@ -3701,14 +3541,15 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
             leaving 'idle' -- see beginBowlCarry above), same beat as the
             bowl's own highlight/hint retiring, since the bowl's already
             gliding to this exact spot by then and the marker's served its
-            purpose. Not itself focusable/clickable -- it's a drop target
-            the *bowl* gets dragged onto (handlePointerUp's bowl branch) or
-            sent to via the bowl's own Enter press (handleBowlKeyDown), same
-            "the label just marks a zone, the movable item is what's
+            purpose. Not itself focusable -- it's a drop target the *bowl*
+            gets sent to via its own Enter press (handleBowlKeyDown), same
+            "the marker just marks a zone, the movable item is what's
             actually selected" pattern the ice box/cup drop zones use on the
             Milk Selection screen. aria-hidden since the bowl's own alt text
             (see the isBowl branch above) already describes this action to
-            screen readers. */}
+            screen readers. Just a plain gray square with a thick arrow
+            pointing at it -- no text, no animation (see .make-drink-zone's
+            own comment in MatchaMaking.css). */}
         {whiskStage === 'done' && bowlStage === 'idle' && (
           <div
             className="make-drink-zone"
@@ -3720,7 +3561,9 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
               height: `${MAKE_DRINK_ZONE.height}%`,
             }}
           >
-            make drink
+            <svg className="make-drink-zone-arrow" viewBox="0 0 60 40" preserveAspectRatio="none">
+              <polygon points="0,12 32,12 32,2 58,20 32,38 32,28 0,28" />
+            </svg>
           </div>
         )}
         {/* Order receipt button -- the flashing green halo + dashed-border

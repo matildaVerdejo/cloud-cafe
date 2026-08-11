@@ -216,6 +216,37 @@ real device before the next demo; if lag persists, the 8 unconverted
 animations above and the still-PNG sprite art are the next things to look
 at.
 
+### Input model: keyboard/remote only, no mouse drag (per request)
+
+**Standing project rule, effective going forward:** this game is no longer
+being built for mouse/touch/trackpad input. The only supported inputs are:
+
+- **Arrow keys** (D-pad on a real remote) -- move selection between
+  focusable items.
+- **Enter / center button** -- select/activate/pick up/place whatever's
+  currently focused.
+- **Backspace / Back / return button** -- leave the game (exit confirm),
+  per the existing Back key policy above. (Some in-station minigames also
+  read a held Backspace for analog-style gauges -- see `pal.js`'s
+  `trackKeyDown`/`isHeld` -- that usage predates and is unrelated to this
+  note; it's not a "leave the game" action in that context.)
+
+**Current state (not yet fully migrated):** most stations were originally
+built drag-first, with keyboard equivalents (`onKeyDown` handlers calling the
+same state transitions as the pointer handlers) added alongside rather than
+replacing them -- e.g. `MilkSelection.js`'s cup (`handleCupPointerDown/Move/
+Up` alongside `handleCupKeyDown`), the milk bottles, ice cubes; `MatchaMaking.
+js`'s kettle/bowl/whisk/big spoon; `ToppingsStation.js`'s syrup/foam/powder/
+mint-leaves items. All of that `onPointerDown`/`onPointerMove`/`onPointerUp`
+plumbing (plus the `dragging`/`cupDragPos`-style state it drives) is now
+considered legacy and, per this request, should be removed in favor of the
+keyboard-only path wherever it's touched -- don't add new drag interactions,
+and prefer fixing bugs by adjusting the keyboard path (not the drag path) even
+if the drag path has the same bug, since the drag path is slated for removal.
+A full project-wide removal pass hasn't been done yet (large, multi-file
+change) -- flagged here so it isn't re-introduced piecemeal and so a future
+pass can find every remaining `onPointer*` handler via a project-wide search.
+
 ### Root-caused crash: unpooled `new Audio()` per SFX call (`gameloop/sfx.js`)
 
 After the pass above, real on-device testing (Fire TV Stick) still showed

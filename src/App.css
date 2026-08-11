@@ -21,9 +21,12 @@ body {
 
 /* Per request: the game should only be playable with arrow keys, Enter,
    and Backspace -- no mouse/trackpad at all. Blocks every mouse-driven
-   click/drag across the entire app in one shot, without having to touch
-   each screen's own onPointerDown/Move/Up and onClick handlers
-   individually. This does NOT affect keyboard input at all: focus
+   click/drag across the entire app in one shot. (All onPointerDown/Move/Up
+   drag handlers have since been removed project-wide -- every station now
+   only has keyboard/remote onKeyDown handlers -- but this blanket
+   pointer-events: none stays as a belt-and-suspenders guard against any
+   mouse-driven interaction ever creeping back in.) This does NOT affect
+   keyboard input at all: focus
    navigation (the D-pad effects/useFlatFocusNav) and keyboard-triggered
    activation (native <button> Enter behavior, and every screen's own
    onKeyDown handlers) don't depend on pointer-events in any way -- only
