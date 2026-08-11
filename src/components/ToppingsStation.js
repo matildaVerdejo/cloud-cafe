@@ -2,7 +2,13 @@ import React, { useEffect, useRef, useState } from 'react';
 import './ToppingsStation.css';
 import { useFlatFocusNav } from '../gameloop/useFlatFocusNav';
 import { getActionFromKeyEvent, shouldDebounceEnter } from '../gameloop/pal';
-import { playButtonClick, playLiquidPouring } from '../gameloop/sfx';
+import {
+  playButtonClick,
+  playLiquidPouring,
+  playFoamPouring,
+  playToppingPowderPour,
+  playToppingPlace,
+} from '../gameloop/sfx';
 import ProgressBar from './ProgressBar';
 import OrderReceiptButton from './OrderReceiptButton';
 import { getMilkBoxFor, getMatchaBoxFor, TABLE_SIZE, CUP_TYPES, getIceCupSlotPos, getIceCubeSize } from './MilkSelection';
@@ -1465,6 +1471,11 @@ const ToppingsStation = ({
   const [foamPourStage, setFoamPourStage] = useState('idle'); // 'idle' | 'moving' | 'pouring'
   const [foamPouringKey, setFoamPouringKey] = useState(null); // 'matcha-cold-foam' | 'reg-cold-foam' | null
   const [foamPourOffset, setFoamPourOffset] = useState(0);
+  // The "foam pour" Audio instance currently playing for this foam pour (see
+  // playFoamPouring below) -- held in a ref, same reasoning as this file's
+  // own pourAudioRef (syrup's equivalent), purely so it can be cut short the
+  // moment FOAM_POUR_MS ends rather than playing out past the pour itself.
+  const foamPourAudioRef = useRef(null);
   const [cupFoam, setCupFoam] = useState(null); // { key } | null
 
   // ---- Second first-order-only walkthrough beat, foam pair -- picks up the
@@ -1526,6 +1537,12 @@ const ToppingsStation = ({
   const [powderPourStage, setPowderPourStage] = useState('idle'); // 'idle' | 'moving' | 'pouring'
   const [powderPouringKey, setPowderPouringKey] = useState(null); // 'matcha-powder' | 'guava-powder' | null
   const [powderPourOffset, setPowderPourOffset] = useState(0);
+  // The "topping powder pour" Audio instance currently playing for this
+  // powder pour (see playToppingPowderPour below) -- held in a ref, same
+  // reasoning as this file's own pourAudioRef/foamPourAudioRef, purely so
+  // it can be cut short the moment POWDER_POUR_MS ends rather than playing
+  // out past the pour itself.
+  const powderPourAudioRef = useRef(null);
   const [cupPowder, setCupPowder] = useState(null); // { key } | null
 
   // ---- Third first-order-only walkthrough beat, powder pair -- picks up
@@ -2075,8 +2092,16 @@ const ToppingsStation = ({
       return undefined;
     }
     if (foamPourStage === 'pouring') {
+      // "foam pour" SFX -- fires once right as the fill actually lands, same
+      // "on the 'pouring' transition, not 'moving'/'aiming'" timing every
+      // other pour SFX in this file uses, and gets cut short (not left to
+      // finish on its own) the moment FOAM_POUR_MS elapses below, and also
+      // on cleanup -- same pattern the syrup pour's own pourAudioRef uses.
+      foamPourAudioRef.current = playFoamPouring();
       setCupFoam({ key: foamPouringKey });
       const t = setTimeout(() => {
+        foamPourAudioRef.current?.pause();
+        foamPourAudioRef.current = null;
         const home = toppingItems.find((i) => i.key === foamPouringKey);
         setFoamPositions((prev) => ({ ...prev, [foamPouringKey]: { left: home.left, top: home.top } }));
         setFoamPourStage('idle');
@@ -2088,7 +2113,11 @@ const ToppingsStation = ({
         // screen long after this pour's own animation ends, so it has to
         // persist. Only beginFoamPour (a fresh pour) resets it.
       }, FOAM_POUR_MS);
-      return () => clearTimeout(t);
+      return () => {
+        clearTimeout(t);
+        foamPourAudioRef.current?.pause();
+        foamPourAudioRef.current = null;
+      };
     }
     return undefined;
   }, [foamPourStage, foamPouringKey, toppingItems]);
@@ -2178,8 +2207,17 @@ const ToppingsStation = ({
       return undefined;
     }
     if (powderPourStage === 'pouring') {
+      // "topping powder pour" SFX -- fires once right as the flecks actually
+      // land, same "on the 'pouring' transition, not 'moving'/'aiming'"
+      // timing every other pour SFX in this file uses, and gets cut short
+      // (not left to finish on its own) the moment POWDER_POUR_MS elapses
+      // below, and also on cleanup -- same pattern the syrup/foam pours' own
+      // pourAudioRef/foamPourAudioRef use.
+      powderPourAudioRef.current = playToppingPowderPour();
       setCupPowder({ key: powderPouringKey });
       const t = setTimeout(() => {
+        powderPourAudioRef.current?.pause();
+        powderPourAudioRef.current = null;
         const home = toppingItems.find((i) => i.key === powderPouringKey);
         setPowderPositions((prev) => ({ ...prev, [powderPouringKey]: { left: home.left, top: home.top } }));
         setPowderPourStage('idle');
@@ -2188,7 +2226,11 @@ const ToppingsStation = ({
         // positions the final landed flecks, has to persist past this
         // pour's own animation" reasoning as foamPourOffset above.
       }, POWDER_POUR_MS);
-      return () => clearTimeout(t);
+      return () => {
+        clearTimeout(t);
+        powderPourAudioRef.current?.pause();
+        powderPourAudioRef.current = null;
+      };
     }
     return undefined;
   }, [powderPourStage, powderPouringKey, toppingItems]);
@@ -2272,6 +2314,14 @@ const ToppingsStation = ({
       return undefined;
     }
     if (leafStage !== 'placing') return undefined;
+    // "topping place" SFX -- fires once right as the leaf actually starts
+    // settling onto the drink, same "on the real settle transition, not the
+    // lever-catch itself" timing every other pour/place SFX in this file
+    // uses. Fire-and-forget (see playToppingPlace's own comment in sfx.js)
+    // -- LEAF_PLACE_MS is short enough, and this is a one-shot placement
+    // rather than an ongoing pour, that there's nothing to cut it short
+    // against.
+    playToppingPlace();
     const t = setTimeout(() => {
       setCupMintLeaf(true);
       setLeafStage('idle');

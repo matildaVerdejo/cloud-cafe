@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import './FinalCombination.css';
 import { useFlatFocusNav } from '../gameloop/useFlatFocusNav';
-import { playButtonClick } from '../gameloop/sfx';
+import { playButtonClick, playScoreFailSound, playScoreMidSound, playScoreGoodSound } from '../gameloop/sfx';
 import { computeOverallScore } from '../gameloop/scoring';
 import ProgressBar from './ProgressBar';
 import ScoreCard, { SCORE_REVEAL_TOTAL_MS, STICKER_REVEAL_DELAY_MS } from './ScoreCard';
@@ -44,6 +44,19 @@ const REACTION_STICKERS = {
   otto: { fail: './OttoAngry.png', mid: './OttoAnnoyed.png', good: './OttoHappy.png' },
   teddy: { fail: './TeddyAngry.png', mid: './TeddyAnnoyed.png', good: './TeddyHappy.png' },
   coco: { fail: './CocoAngry.png', mid: './CocoAnnoyed.png', good: './CocoHappy.png' },
+};
+
+// Same three tiers as REACTION_STICKERS above, just pointing at the score
+// reveal's own one-shot audio stinger (sfx.js) instead of an image -- not
+// keyed by character (unlike the stickers), since there's only one clip per
+// tier regardless of who's at the counter. Played alongside the reaction
+// sticker's own reveal (see showSticker below) rather than any earlier
+// score-reveal moment, so the sound lands on the same beat as the visual
+// "reaction" it's reinforcing.
+const SCORE_TIER_SOUNDS = {
+  fail: playScoreFailSound,
+  mid: playScoreMidSound,
+  good: playScoreGoodSound,
 };
 
 // Where the finished drink (see incomingDrink below), carried over from
@@ -164,9 +177,22 @@ const FinalCombination = ({
   useEffect(() => {
     setShowSticker(false);
     if (!reactionSticker) return undefined;
-    const timeoutId = setTimeout(() => setShowSticker(true), STICKER_REVEAL_DELAY_MS);
+    const timeoutId = setTimeout(() => {
+      setShowSticker(true);
+      // Fires right alongside the sticker's own reveal (see
+      // SCORE_TIER_SOUNDS above) so the sound and the visual land on the
+      // exact same beat, off the exact same timeout, rather than two
+      // separate effects that could theoretically drift. scoreTier is
+      // listed alongside reactionSticker below even though the two always
+      // change together (both derive from the same round's score) --
+      // react-hooks/exhaustive-deps flags any value read inside an effect
+      // that isn't in its own dependency array regardless of that kind of
+      // logical relationship, and this project's CI build treats that as a
+      // hard error, not just a lint warning.
+      SCORE_TIER_SOUNDS[scoreTier]?.();
+    }, STICKER_REVEAL_DELAY_MS);
     return () => clearTimeout(timeoutId);
-  }, [reactionSticker]);
+  }, [reactionSticker, scoreTier]);
 
   // ---- Between-order adOpportunity dwell gate -------------------------
   // GameLoop's ad policy requires an outcome-triggered adOpportunity (this

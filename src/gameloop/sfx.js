@@ -13,6 +13,12 @@ const LIQUID_POUR_SRC = './LiquidPour.wav';
 const ICE_CUBE_DROP_SRC = './IceCubeDrop.wav';
 const MATCHA_WHISKING_SRC = './MatchaWhisking.wav';
 const MATCHA_POWDER_POUR_SRC = './MatchaPowderPour.wav';
+const FOAM_POUR_SRC = './FoamPour.wav';
+const SCORE_FAIL_SRC = './ScoreFail.wav';
+const SCORE_MID_SRC = './ScoreMid.wav';
+const SCORE_GOOD_SRC = './ScoreGood.wav';
+const TOPPING_POWDER_POUR_SRC = './ToppingPowderPour.wav';
+const TOPPING_PLACE_SRC = './ToppingPlace.wav';
 
 // Current "Sound" volume (0-1) -- covers every clip played through this
 // module (button clicks, character ordering voice lines, and whatever else
@@ -106,9 +112,9 @@ export function playVoiceLine(src) {
 // on top of it there, and any syrup poured onto the drink in the Toppings
 // station. Fired once per pour, right as each screen's own pour effect
 // flips into its 'pouring' stage (the same moment the fill state itself
-// gets set), not on 'moving' or 'idle'. Cold foam and powder toppings
-// intentionally don't use this -- they're not liquids being poured, so
-// they keep using their own visual-only settle/pour animation with no SFX.
+// gets set), not on 'moving' or 'idle'. Cold foam and powder toppings each
+// have their own dedicated clips instead now (see playFoamPouring/
+// playToppingPowderPour below) rather than reusing this one.
 //
 // Returns the Audio instance (same reasoning as playVoiceLine above) so
 // callers can pause it early -- the clip itself runs longer than a single
@@ -166,4 +172,72 @@ export function playMatchaWhisking() {
 // clip isn't guaranteed to match that duration exactly.
 export function playMatchaPowderPour() {
   return playClip(MATCHA_POWDER_POUR_SRC);
+}
+
+// Plays when cold foam actually lands on the drink in Toppings -- fires once
+// right as foamPourStage flips into its 'pouring' stage (the same moment
+// cupFoam gets set), same "on the 'pouring' transition, not 'moving'/
+// 'aiming'" timing every other pour SFX in this module uses. Unlike
+// playLiquidPouring, foam was previously one of the toppings that
+// intentionally played no pour SFX at all (see that function's own
+// comment) -- this is a dedicated clip for it now that one's actually been
+// recorded, not a reuse of the liquid-pour one, since foam isn't a liquid
+// being poured the same way milk/matcha/syrup are.
+//
+// Returns the Audio instance (same reasoning as playLiquidPouring) so the
+// caller can cut it short the moment FOAM_POUR_MS elapses, since the clip
+// isn't guaranteed to match that duration exactly.
+export function playFoamPouring() {
+  return playClip(FOAM_POUR_SRC);
+}
+
+// One-shot "drink reaction" stingers for the Serving station's own score
+// reveal -- fail/mid/good match computeOverallScore's own tier buckets
+// exactly (gameloop/scoring.js), same keys FinalCombination.js's own
+// REACTION_STICKERS map already uses for which sticker shows, so callers
+// there can look either up off the same scoreTier value. Fire-and-forget
+// like playButtonClick/playIceCubeDrop (not returning the instance) --
+// unlike the pour clips above, there's no ongoing on-screen animation these
+// need to stay in sync with or get cut short against; each one is just a
+// single reaction to a single moment (the reaction sticker's own reveal),
+// so it's fine to let it play out on its own.
+export function playScoreFailSound() {
+  playClip(SCORE_FAIL_SRC);
+}
+
+export function playScoreMidSound() {
+  playClip(SCORE_MID_SRC);
+}
+
+export function playScoreGoodSound() {
+  playClip(SCORE_GOOD_SRC);
+}
+
+// Plays when a powder topping (matcha powder or guava powder) actually
+// lands on the drink in Toppings -- fires once right as powderPourStage
+// flips into its 'pouring' stage (the same moment cupPowder gets set), same
+// "on the 'pouring' transition" timing playFoamPouring/playLiquidPouring
+// use. A distinct clip/export from playMatchaPowderPour above despite the
+// similar name -- that one's for the big spoon dumping matcha powder into
+// the bowl on Matcha Making, a completely different station/moment; this
+// one's for either powder TOPPING landing on the finished drink here.
+//
+// Returns the Audio instance (same reasoning as the other pour clips) so
+// the caller can cut it short the moment POWDER_POUR_MS elapses, since the
+// clip isn't guaranteed to match that duration exactly.
+export function playToppingPowderPour() {
+  return playClip(TOPPING_POWDER_POUR_SRC);
+}
+
+// Plays when a single, non-poured topping is actually placed on the drink
+// in Toppings -- today that's just the mint leaf garnish (Enter on the
+// mint-leaves pot, a short gate-then-pause with no drag/aim/travel sprite,
+// see beginLeafPlace/LEAF_PLACE_MS in ToppingsStation.js), but named
+// generically (not playMintLeafPlace) in case a future single-item topping
+// reuses this same "one clean placement, not a pour" shape. Fire-and-forget
+// like playIceCubeDrop -- LEAF_PLACE_MS's own on-screen pause is short and
+// this is a one-shot placement sound, not an ongoing pour that needs
+// cutting short against a longer visual.
+export function playToppingPlace() {
+  playClip(TOPPING_PLACE_SRC);
 }
