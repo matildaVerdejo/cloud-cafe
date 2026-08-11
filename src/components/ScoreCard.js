@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import './ScoreCard.css';
 import { computeOverallScore } from '../gameloop/scoring';
 import { ORDERS_PER_SESSION } from './ProgressBar';
+import { playButtonClick, playButtonClickOff } from '../gameloop/sfx';
 
 // Replaces the old hardcoded AnnieOrder1.png receipt + per-section badge
 // overlay on FinalCombination -- see that file's own removed SCORE_SECTIONS
@@ -185,7 +186,22 @@ const ScoreCard = ({ customerNumber, characterName, orderTakingScore, matchaScor
   // Only one category's detail list open at a time -- same pattern as
   // CustomerOrdering's own openControl for its five order-form dropdowns.
   const [openKey, setOpenKey] = useState(null);
-  const toggle = (key) => setOpenKey((prev) => (prev === key ? null : key));
+  // Plays the "on" click when a section is opening (including switching
+  // straight from one open row to another), the "off" click when the
+  // already-open row is being closed -- same "read the *current* state
+  // before flipping it, not from inside the setState updater" pattern
+  // OrderReceiptButton.js's own handleClick uses, for the same reason:
+  // React 18 StrictMode's dev-only double-invoke of updater functions would
+  // double-play whichever clip fired if the sound lived inside the
+  // setOpenKey callback instead.
+  const toggle = (key) => {
+    if (openKey === key) {
+      playButtonClickOff();
+    } else {
+      playButtonClick();
+    }
+    setOpenKey((prev) => (prev === key ? null : key));
+  };
 
   // Total/tier both come from the shared computeOverallScore helper (see
   // gameloop/scoring.js) rather than being recomputed inline here -- that's

@@ -839,6 +839,25 @@
   );
 }
 
+/* Missing entirely until now -- order 4's hojicha tin (STATIC_ITEMS_WITH_
+   HOJICHA in MatchaMaking.js) carries its own bowlPowder.grade of
+   'hojicha-grade' all the way through to cupMatcha.grade here (and on to
+   ToppingsStation.js/FinalCombination.js, which both reuse this same class
+   globally), but this rule itself was never added alongside the other
+   three grades, so the poured mix had no background at all -- effectively
+   invisible in the cup. Same gradient shape as the other three grades,
+   just keyed off SCOOP_FILL_COLORS' own 'hojicha-grade' hex (#B58A63,
+   MatchaMaking.js) converted to rgba, same "reuse the tin's own established
+   tone" convention the other three grades' colors already follow. */
+.cup-matcha-fill.hojicha-grade {
+  background: linear-gradient(
+    to bottom,
+    rgba(181, 138, 99, 0.85) 0%,
+    rgba(181, 138, 99, 0.85) 26.5%,
+    rgba(181, 138, 99, 0) 100%
+  );
+}
+
 /* End scale reads --milk-fill-scale (see the inline style set on
    .cup-milk-fill in MilkSelection.js, keyed off MILK_FILL_SCALE_BY_ZONE
    there) so an underfilled/overfilled pour visibly renders shorter/taller
