@@ -2702,10 +2702,12 @@ const MilkSelection = ({
           highlightCurrentStep={cupSendStage === 'sent'}
           // Suppressed while showAdvanceSpotlight is up -- the new callout
           // below (milk-progress-callout) takes over this job for the first
-          // order specifically. Orders 2/3 never set showAdvanceSpotlight
-          // (customerNumber !== 1), so they keep this exactly as before.
+          // order specifically. Also now suppressed for orders 2+ entirely,
+          // per request -- walkthrough-only label.
           currentStepHint={
-            showAdvanceSpotlight ? null : 'use your right arrow key to move on to the toppings station.'
+            customerNumber === 1 && !showAdvanceSpotlight
+              ? 'use your right arrow key to move on to the toppings station.'
+              : null
           }
           // Suppressed while showOrderButtonLock or showCupSpotlight is up
           // so the current-step dot's own autoFocus doesn't grab the

@@ -1489,10 +1489,11 @@ const CustomerOrdering = ({
           // Suppressed for the first order specifically -- showProgressPhase
           // below puts its own pink-backed, arrow-pointing callout above the
           // bar instead, and showing both at once would just be the same
-          // "go to the next station" message said twice. Orders 2/3 never
-          // set showProgressPhase (customerNumber !== 1), so they keep
-          // getting this plain text hint exactly as before.
-          currentStepHint={showProgressPhase ? null : 'use your right arrow key to head to the matcha station.'}
+          // "go to the next station" message said twice. Also now suppressed
+          // for orders 2+ entirely, per request -- these plain mint-pastel
+          // hint labels are meant to be a first-order-only walkthrough aid,
+          // not a permanent fixture of every order.
+          currentStepHint={customerNumber === 1 && !showProgressPhase ? 'use your right arrow key to head to the matcha station.' : null}
           spotlightExempt={showProgressPhase}
           // See ProgressBar's own comment on this prop -- suppresses the
           // station dot's autoFocus while the first two walkthrough beats

@@ -11,6 +11,7 @@ import { playButtonClick, playLiquidPouring, playMatchaWhisking, playMatchaPowde
 import ProgressBar from './ProgressBar';
 import OrderReceiptButton from './OrderReceiptButton';
 import { scoreMatchaMaking } from '../gameloop/scoring';
+import { getDifficultyStep, scaleDown, scaleUp } from '../gameloop/difficulty';
 
 // Static (not yet interactive) countertop items, layered on top of the now-
 // empty background art. Positions were worked out by compositing each item
@@ -127,6 +128,15 @@ const SCOOP_BAR_BOX = { left: 93, top: 42, width: 4, height: 40 };
 // SCOOP_SPOON_LINES' tickTop entries below exactly, so each mark still
 // lines up with its spoon.
 const SCOOP_BAR_MARKERS = [8, 50, 92];
+
+// How long the scoop-bar-slider (see MatchaMaking.css) takes to sweep from
+// one end of the bar to the other and back -- the order-1 value, matching
+// the CSS's own hardcoded `scoopSliderMove 2.2s`, which stays the fallback/
+// default. Orders 2+ now speed this up per order (see scoopSliderDurationMs
+// in the component below, applied as an inline animationDuration override),
+// per request -- a faster sweep gives less time to react to the marker
+// crossing the right line.
+const BASE_SCOOP_SLIDER_DURATION_MS = 2200;
 
 // How long the "measured amount" fill takes to grow from empty up to the
 // stopped line once the player locks in a reading (see stopScoop and
@@ -424,17 +434,22 @@ const TEMP_BAR_EXACT_LINE = (TEMP_BAR_TICKS[0].left + TEMP_BAR_TICKS[TEMP_BAR_TI
 // so that "elapsed time / duration" is an accurate stand-in for "how far
 // across the bar the fill edge currently is" -- with an eased curve these
 // setTimeout delays would drift out of sync with where the color visually
-// is.
-const FILL_DURATION_MS = 5000;
+// is. This is the order-1 value -- BASE_ prefix since orders 2+ now speed
+// this up further per request (see fillDurationMs/getDifficultyStep in the
+// component below); order 1 itself still plays at exactly this number.
+const BASE_FILL_DURATION_MS = 5000;
 
 // The button turns green the moment the fill edge reaches the left edge of
 // the first tick, and turns red the moment it passes the right edge of the
 // second (last) tick -- i.e. green for exactly as long as the fill is
 // touching either tick or the gap between them. Both expressed as a
-// fraction of FILL_DURATION_MS since the fill grows linearly.
-const GREEN_AT_MS = FILL_DURATION_MS * (TEMP_BAR_TICKS[0].left / 100);
-const RED_AT_MS =
-  FILL_DURATION_MS *
+// fraction of whichever fillDurationMs is actually in play (see the
+// component below) since the fill grows linearly -- pulled out as plain
+// functions of that duration, rather than fixed constants, now that
+// duration itself varies by order.
+const computeGreenAtMs = (fillDurationMs) => fillDurationMs * (TEMP_BAR_TICKS[0].left / 100);
+const computeRedAtMs = (fillDurationMs) =>
+  fillDurationMs *
   ((TEMP_BAR_TICKS[TEMP_BAR_TICKS.length - 1].left + TEMP_BAR_TICKS[TEMP_BAR_TICKS.length - 1].width) / 100);
 
 // How long the gauge lingers on screen, fully frozen at its caught reading,
@@ -688,8 +703,11 @@ function getMixBarPos(bowlPos, bowlItem) {
 // fraction of the bar's own width -- unlike the heater's ticks (which
 // just mark a window a one-shot fill passes through), this is a fixed
 // target the ball has to actively be kept inside of for the whole minigame.
-const MIX_ZONE_WIDTH_FRAC = 0.26;
-const MIX_ZONE_LEFT_FRAC = (1 - MIX_ZONE_WIDTH_FRAC) / 2;
+// This is the order-1 value -- BASE_ prefix since orders 2+ now shrink it
+// further per request (see mixZoneWidthFrac/getDifficultyStep in the
+// component below); order 1 itself is completely unaffected, still exactly
+// this number.
+const BASE_MIX_ZONE_WIDTH_FRAC = 0.26;
 
 // The ball's own width, as a fraction of the bar's width -- used both for
 // sizing it in the JSX and for clamping its travel range in the physics
@@ -728,8 +746,12 @@ const MIX_HOLD_ACCEL = 150; // %/s^2 continuous acceleration while a direction i
 // repeats. Deliberately keyup-free, same reasoning as the rest of this
 // minigame's input handling.
 const MIX_HOLD_GRACE_MS = 150;
-const MIX_DRIFT_AMPLITUDE = 34; // %/s^2 peak strength of the sine drift
-const MIX_DRIFT_ANGULAR_FREQ = 1.3; // radians/second -- how fast the drift's direction cycles
+// Order-1 values -- BASE_ prefix for the same reason as BASE_MIX_ZONE_WIDTH_
+// FRAC above: orders 2+ now scale both of these up a bit further per order
+// (see mixDriftAmplitude/mixDriftAngularFreq below), order 1 stays exactly
+// these numbers.
+const BASE_MIX_DRIFT_AMPLITUDE = 34; // %/s^2 peak strength of the sine drift
+const BASE_MIX_DRIFT_ANGULAR_FREQ = 1.3; // radians/second -- how fast the drift's direction cycles
 const MIX_FRICTION_HALF_LIFE_S = 0.35; // seconds for velocity to decay to half, with no further input/drift
 
 // How often (at minimum) a fresh spill event can trigger while the ball is
@@ -924,6 +946,32 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
   // math.
   const hojichaUnlocked = customerNumber >= 3;
   const tinItems = hojichaUnlocked ? STATIC_ITEMS_WITH_HOJICHA : STATIC_ITEMS_BASE;
+  // Per-order difficulty scaling for this station's three timed mini-
+  // challenges (scoop gauge, heater gauge, whisk balance minigame) -- see
+  // gameloop/difficulty.js for the shared step/scale helpers. difficultyStep
+  // is 0 on order 1 (every BASE_* constant below is used completely
+  // unscaled then, so order 1 plays exactly as it always has) and climbs by
+  // 1 each order after, per request. Computed once here (not per-minigame)
+  // since customerNumber is fixed for this whole mount's lifetime anyway.
+  const difficultyStep = getDifficultyStep(customerNumber);
+  // Whisk balance minigame: target zone shrinks (floored at 68% of its
+  // order-1 width, so it never gets razor-thin) and the sine drift pushing
+  // the ball around gets both stronger and faster-cycling, each per step.
+  const mixZoneWidthFrac = scaleDown(BASE_MIX_ZONE_WIDTH_FRAC, difficultyStep, 0.08, 0.68);
+  const mixZoneLeftFrac = (1 - mixZoneWidthFrac) / 2;
+  const mixDriftAmplitude = scaleUp(BASE_MIX_DRIFT_AMPLITUDE, difficultyStep, 0.15, 1.7);
+  const mixDriftAngularFreq = scaleUp(BASE_MIX_DRIFT_ANGULAR_FREQ, difficultyStep, 0.1, 1.5);
+  // Scoop gauge minigame: the slider's own left-right-left sweep speeds up
+  // per step, floored at 60% of its order-1 duration.
+  const scoopSliderDurationMs = scaleDown(BASE_SCOOP_SLIDER_DURATION_MS, difficultyStep, 0.1, 0.6);
+  // Heater gauge minigame: the fill takes less time to sweep the whole bar
+  // per step (floored at 65% of its order-1 duration), which -- since
+  // greenAtMs/redAtMs below are both a fixed fraction of it -- also
+  // proportionally shrinks the *absolute* reaction window without needing
+  // to touch the ticks' own on-screen positions at all.
+  const fillDurationMs = scaleDown(BASE_FILL_DURATION_MS, difficultyStep, 0.08, 0.65);
+  const greenAtMs = computeGreenAtMs(fillDurationMs);
+  const redAtMs = computeRedAtMs(fillDurationMs);
   // Declared up here (rather than scattered near where each one used to
   // live -- heaterButtonRef/kettleRef/whiskRef were each declared right
   // before the effect that hands them focus mid-gameplay; bowlRef is new)
@@ -1181,47 +1229,123 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
         return;
       }
 
-      // Whisk (chasen) -- full directional lockdown per request: once it's
-      // selected the player shouldn't be able to arrow away to the bowl/
-      // tins/progress dot like before. Only its own native Enter/Space
-      // handling (handleWhiskKeyDown) should do anything while it has
-      // focus.
+      // Whisk (chasen) -- full directional lockdown, but ONLY while the
+      // actual mixing minigame is in motion (whiskStage 'moving'/'mixing'):
+      // that's the window handleWhiskKeyDown's own Enter/Space handling
+      // (plus the balance minigame's hold-to-drift physics) are the only
+      // things that should react. While idle -- not yet mixing, or already
+      // 'done' (which hands focus off to the bowl automatically just below,
+      // so this rarely even runs by then) -- it falls through to its own
+      // documented graph instead: Up -> first tin, Left -> bowl, Down ->
+      // station dot. Restored here because, without it, a player who lands
+      // on the whisk fresh (its only entry point from the station dot, see
+      // "Station dot -> whisk" above) before ever visiting the tins/kettle
+      // has no way to reach either and no way back -- Enter silently no-ops
+      // until bowlPowder/bowlWater are both set, which can only happen by
+      // getting to those other two first.
       if (active === whiskRef.current) {
-        e.preventDefault();
-        e.stopImmediatePropagation();
+        if (whiskStage === 'moving' || whiskStage === 'mixing') {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          return;
+        }
+        if (action === 'Up') {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          firstTin?.focus();
+        } else if (action === 'Left') {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          bowlRef.current?.focus();
+        } else if (action === 'Down') {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          document.querySelector('.progress-step.current')?.focus();
+        } else {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+        }
         return;
       }
 
-      // Bowl -- full directional lockdown per request: once it's selected
-      // the player shouldn't be able to arrow away to the heater/whisk/
-      // progress dot like before. Only its own native Enter/Space handling
-      // (handleBowlKeyDown) should do anything while it has focus.
+      // Bowl -- full directional lockdown, but ONLY once it's actually
+      // committed to leaving (bowlStage 'carrying'/'vanishing'/'sent' -- see
+      // beginBowlCarry -- this whole station is about to hand off to Milk
+      // Selection by then anyway). While idle it falls through to its own
+      // documented graph instead: Left -> heater button, Right -> whisk
+      // (back). Restored here for the same reason as the whisk's own idle
+      // escape just above -- reaching the heater/kettle at all depends on
+      // getting past the bowl first.
       if (active === bowlRef.current) {
-        e.preventDefault();
-        e.stopImmediatePropagation();
+        if (bowlStage !== 'idle') {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          return;
+        }
+        if (action === 'Left') {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          heaterButtonRef.current?.focus();
+        } else if (action === 'Right') {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          whiskRef.current?.focus();
+        } else {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+        }
         return;
       }
 
-      // Heater/kettle button -- full directional lockdown per request: once
-      // it's selected (focused), the player shouldn't be able to arrow away
-      // to the bowl/kettle/progress dot like before. Same shape as the
-      // scoop-bar/big-spoon traps above -- only the button's own native
-      // Enter/Space toggle (see its onClick in the JSX) should do anything
-      // while it has focus.
+      // Heater/kettle power button -- toggling it on immediately hands focus
+      // off to the temperature gauge (barRef, which has its own genuine
+      // full-lockdown minigame trap above) via its own effect, so this
+      // button itself never actually sits "mid-interaction" the way the
+      // whisk/bowl above do -- there's no state to gate on, so its
+      // documented graph (Up -> kettle, Right -> bowl) is just always live.
       if (active === heaterButtonRef.current) {
-        e.preventDefault();
-        e.stopImmediatePropagation();
+        if (action === 'Up') {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          kettleRef.current?.focus();
+        } else if (action === 'Right') {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          bowlRef.current?.focus();
+        } else {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+        }
         return;
       }
 
-      // Kettle (the movable item itself, not the heater button) -- same
-      // full directional lockdown as the heater button above, per request:
-      // once it's selected the player shouldn't be able to arrow away from
-      // it. Only its own native Enter/Space handling (handleKettleKeyDown)
-      // should do anything while it has focus.
+      // Kettle (the movable item itself, not the heater button) -- full
+      // directional lockdown, but ONLY while actually mid-pour (kettleStage
+      // 'moving'/'pouring' -- see beginKettleDump); once poured it settles
+      // back to 'idle' and this station's own effect returns focus to the
+      // heater button automatically. While idle it falls through to its own
+      // documented graph instead: Up -> Settings gear (mirrors the gear's
+      // own Down leg above, which already defaults back to this exact ref),
+      // Down -> heater button.
       if (active === kettleRef.current) {
-        e.preventDefault();
-        e.stopImmediatePropagation();
+        if (kettleStage === 'moving' || kettleStage === 'pouring') {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          return;
+        }
+        if (action === 'Up') {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          preSettingsFocusRef.current = active;
+          gearButton?.focus();
+        } else if (action === 'Down') {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          heaterButtonRef.current?.focus();
+        } else {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+        }
       }
     };
     window.addEventListener('keydown', handleKeyDown);
@@ -1411,8 +1535,8 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
             requestAnimationFrame(() => {
               setFillActive(true);
               zoneTimersRef.current = [
-                setTimeout(() => setTempZone('target'), GREEN_AT_MS),
-                setTimeout(() => setTempZone('over'), RED_AT_MS),
+                setTimeout(() => setTempZone('target'), greenAtMs),
+                setTimeout(() => setTempZone('over'), redAtMs),
               ];
             }),
           ];
@@ -1999,6 +2123,15 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
       if (scoopSliderRef.current) {
         scoopSliderRef.current.style.animation = '';
         scoopSliderRef.current.style.top = '';
+        // Re-applied imperatively (not via a React style prop) every time
+        // the slider resets to running -- setting the `animation` shorthand
+        // to '' just above clears any previously-set animationDuration too,
+        // and since scoopSliderDurationMs is the same value across this
+        // whole mount's re-renders, React's own style-prop diffing would
+        // never notice it needs re-writing, leaving the slider stuck back
+        // at the CSS class's default 2.2s after the very first reset. Doing
+        // it by hand here, right after the clear, sidesteps that entirely.
+        scoopSliderRef.current.style.animationDuration = `${scoopSliderDurationMs}ms`;
       }
       setScoopRunning(true);
       // Focuses the gauge itself the moment it's revealed -- same
@@ -2381,8 +2514,8 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
     setSpills([]);
     setSpillGrowth(0);
 
-    const zoneLeftPercent = MIX_ZONE_LEFT_FRAC * 100;
-    const zoneRightPercent = zoneLeftPercent + MIX_ZONE_WIDTH_FRAC * 100;
+    const zoneLeftPercent = mixZoneLeftFrac * 100;
+    const zoneRightPercent = zoneLeftPercent + mixZoneWidthFrac * 100;
 
     // Timestamps (performance.now()-space) of the most recent qualifying
     // keydown for each direction -- a direction counts as "held" for
@@ -2438,7 +2571,7 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
       if (now < rightHeldUntil) mixVelocityRef.current += MIX_HOLD_ACCEL * dt;
       if (now < leftHeldUntil) mixVelocityRef.current -= MIX_HOLD_ACCEL * dt;
 
-      const drift = MIX_DRIFT_AMPLITUDE * Math.sin((elapsedMs / 1000) * MIX_DRIFT_ANGULAR_FREQ);
+      const drift = mixDriftAmplitude * Math.sin((elapsedMs / 1000) * mixDriftAngularFreq);
       mixVelocityRef.current += drift * dt;
       // Exponential decay toward 0, scaled by dt so it's frame-rate
       // independent -- velocity halves every MIX_FRICTION_HALF_LIFE_S
@@ -2601,9 +2734,10 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
           }}
         />
         {/* Suppressed for the first order specifically -- the new callout
-            below takes over this job while showHeaterSpotlight is up.
-            Orders 2/3 never set it, so they keep this exactly as before. */}
-        {showHeaterHint && !showHeaterSpotlight && (
+            below takes over this job while showHeaterSpotlight is up. Also
+            now suppressed for orders 2+ entirely, per request --
+            walkthrough-only label. */}
+        {customerNumber === 1 && showHeaterHint && !showHeaterSpotlight && (
           <p
             className="heater-button-hint"
             style={{ left: `${HEATER_HINT_LEFT}%`, top: `${HEATER_HINT_TOP}%` }}
@@ -2660,7 +2794,7 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
               <div
                 ref={fillRef}
                 className="heater-temp-bar-fill"
-                style={{ transitionDuration: `${FILL_DURATION_MS}ms` }}
+                style={{ transitionDuration: `${fillDurationMs}ms` }}
               />
               {TEMP_BAR_TICKS.map((tick) => (
                 <span
@@ -2675,9 +2809,9 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
             </div>
             {/* Suppressed for the first order specifically -- the new
                 callout below takes over this job while barRunning AND
-                showTempBarSpotlight are both up. Orders 2/3 never set the
-                latter, so they keep this exactly as before. */}
-            {barRunning && !showTempBarSpotlight && (
+                showTempBarSpotlight are both up. Also now suppressed for
+                orders 2+ entirely, per request -- walkthrough-only label. */}
+            {customerNumber === 1 && barRunning && !showTempBarSpotlight && (
               <p
                 className="heater-temp-bar-hint"
                 style={{ left: `${TEMP_BAR_BOX.left}%`, top: `${TEMP_BAR_BOX.top + TEMP_BAR_BOX.height + 2}%` }}
@@ -2753,10 +2887,9 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
         {/* Suppressed for the first order specifically -- showTinSpotlight
             below puts its own pink-backed, arrow-pointing callout above the
             tins instead, and showing both at once would just be the same
-            "pick a grade" message said twice. Orders 2/3 never set
-            showTinSpotlight (customerNumber !== 1), so they keep getting
-            this plain text hint exactly as before. */}
-        {showTinHint && !showTinSpotlight && (
+            "pick a grade" message said twice. Also now suppressed for orders
+            2+ entirely, per request -- walkthrough-only label. */}
+        {customerNumber === 1 && showTinHint && !showTinSpotlight && (
           <p
             className="matcha-tin-hint"
             style={{ left: `${TIN_HINT_LEFT}%`, top: `${TIN_HINT_TOP}%` }}
@@ -2855,9 +2988,9 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
                 </div>
                 {/* Suppressed for the first order specifically -- the new
                     green callout below takes over this job while
-                    showScoopSpotlight is up. Orders 2/3 never set it, so
-                    they keep this exactly as before. */}
-                {scoopRunning && !showScoopSpotlight && (
+                    showScoopSpotlight is up. Also now suppressed for orders
+                    2+ entirely, per request -- walkthrough-only label. */}
+                {customerNumber === 1 && scoopRunning && !showScoopSpotlight && (
                   <p className="scoop-bar-hint">
                     use your backspace key to choose the right measurement, be as accurate as possible!
                   </p>
@@ -2937,9 +3070,9 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
             )}
             {/* Suppressed for the first order specifically -- the new pink
                 callout below takes over this job while showSpoonSpotlight
-                is up. Orders 2/3 never set it, so they keep this exactly as
-                before. */}
-            {showSpoonHint && !showSpoonSpotlight && (
+                is up. Also now suppressed for orders 2+ entirely, per
+                request -- walkthrough-only label. */}
+            {customerNumber === 1 && showSpoonHint && !showSpoonSpotlight && (
               <p
                 className="big-spoon-hint"
                 style={{ left: `${SPOON_HINT_LEFT}%`, top: `${SPOON_HINT_TOP}%` }}
@@ -3148,9 +3281,10 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
           );
         })}
         {/* Suppressed for the first order specifically -- the new callout
-            below takes over this job while showKettleSpotlight is up.
-            Orders 2/3 never set it, so they keep this exactly as before. */}
-        {showKettleHint && !showKettleSpotlight && (
+            below takes over this job while showKettleSpotlight is up. Also
+            now suppressed for orders 2+ entirely, per request --
+            walkthrough-only label. */}
+        {customerNumber === 1 && showKettleHint && !showKettleSpotlight && (
           <p
             className="kettle-hint"
             style={{ left: `${KETTLE_HINT_LEFT}%`, top: `${KETTLE_HINT_TOP}%` }}
@@ -3182,9 +3316,10 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
           </div>
         )}
         {/* Suppressed for the first order specifically -- the new callout
-            below takes over this job while showWhiskSpotlight is up.
-            Orders 2/3 never set it, so they keep this exactly as before. */}
-        {showWhiskHint && !showWhiskSpotlight && (
+            below takes over this job while showWhiskSpotlight is up. Also
+            now suppressed for orders 2+ entirely, per request --
+            walkthrough-only label. */}
+        {customerNumber === 1 && showWhiskHint && !showWhiskSpotlight && (
           <p
             className="whisk-hint"
             style={{ left: `${WHISK_HINT_LEFT}%`, top: `${WHISK_HINT_TOP}%` }}
@@ -3218,8 +3353,9 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
         )}
         {/* Suppressed for the first order specifically -- the new callout
             below takes over this job while showBowlCarrySpotlight is up.
-            Orders 2/3 never set it, so they keep this exactly as before. */}
-        {showBowlHint && !showBowlCarrySpotlight && (
+            Also now suppressed for orders 2+ entirely, per request --
+            walkthrough-only label. */}
+        {customerNumber === 1 && showBowlHint && !showBowlCarrySpotlight && (
           <p
             className="bowl-hint"
             style={{ left: `${bowlPos.left + bowlItem.width / 2}%`, top: `${bowlPos.top - 6}%` }}
@@ -3506,8 +3642,8 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
               <span
                 className="mix-bar-zone"
                 style={{
-                  left: `${MIX_ZONE_LEFT_FRAC * 100}%`,
-                  width: `${MIX_ZONE_WIDTH_FRAC * 100}%`,
+                  left: `${mixZoneLeftFrac * 100}%`,
+                  width: `${mixZoneWidthFrac * 100}%`,
                 }}
               />
               <span
@@ -3526,9 +3662,9 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
             </div>
             {/* Suppressed for the first order specifically -- the new
                 callout below takes over this job while showMixSpotlight is
-                up. Orders 2/3 never set it, so they keep this exactly as
-                before. */}
-            {!showMixSpotlight && (
+                up. Also now suppressed for orders 2+ entirely, per request --
+                walkthrough-only label. */}
+            {customerNumber === 1 && !showMixSpotlight && (
               <p
                 className="mix-bar-hint"
                 style={{ left: `${mixBarPos.left + MIX_BAR_WIDTH / 2}%`, top: `${mixBarPos.top - 11}%` }}
@@ -3709,10 +3845,13 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
           highlightCurrentStep={bowlStage === 'sent'}
           // Suppressed for the first order specifically -- the new callout
           // below takes over this job while showStationAdvanceSpotlight is
-          // up. Orders 2/3 never set it, so they keep this exactly as
-          // before.
+          // up. Also now suppressed for orders 2+ entirely, per request --
+          // these plain mint-pastel hint labels are meant to be a
+          // first-order-only walkthrough aid, not a permanent fixture.
           currentStepHint={
-            showStationAdvanceSpotlight ? null : 'use your right arrow key to move on to the base adding station.'
+            customerNumber === 1 && !showStationAdvanceSpotlight
+              ? 'use your right arrow key to move on to the base adding station.'
+              : null
           }
           // Exempts the whole bar from the walkthrough spotlight across
           // BOTH of this screen's last two beats (showBowlCarrySpotlight,

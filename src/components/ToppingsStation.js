@@ -14,6 +14,7 @@ import OrderReceiptButton from './OrderReceiptButton';
 import { getMilkBoxFor, getMatchaBoxFor, TABLE_SIZE, CUP_TYPES, getIceCupSlotPos, getIceCubeSize } from './MilkSelection';
 import { WHISK_FLIP_DEG } from './MatchaMaking';
 import { scoreToppings } from '../gameloop/scoring';
+import { getDifficultyStep, scaleDown, scaleUp } from '../gameloop/difficulty';
 
 // Where the finished cup (see incomingDrink below) sent over from Milk
 // Selection's own "Send to Toppings" drop-zone comes to rest on this
@@ -494,15 +495,20 @@ function getSyrupMixBarPos() {
     top: INCOMING_DRINK_SPOT.top - SYRUP_MIX_BAR_HEIGHT - SYRUP_MIX_BAR_CLEARANCE,
   };
 }
-// Matches MatchaMaking's own MIX_ZONE_WIDTH_FRAC exactly -- see this
+// Matches MatchaMaking's own (BASE_)MIX_ZONE_WIDTH_FRAC exactly -- see this
 // section's own big comment above for why these are straight copies now.
-const SYRUP_MIX_ZONE_WIDTH_FRAC = 0.26;
-const SYRUP_MIX_ZONE_LEFT_FRAC = (1 - SYRUP_MIX_ZONE_WIDTH_FRAC) / 2;
+// BASE_ prefix on the three difficulty-relevant ones (zone width, drift
+// amplitude, drift angular freq) since orders 2+ now scale them per order,
+// same "shrink the zone, strengthen/speed up the drift" treatment
+// MatchaMaking's own whisk balance minigame gets -- see
+// syrupMixZoneWidthFrac/syrupMixDriftAmplitude/syrupMixDriftAngularFreq in
+// the component below. Order 1 itself still plays at exactly these numbers.
+const BASE_SYRUP_MIX_ZONE_WIDTH_FRAC = 0.26;
 const SYRUP_MIX_BALL_WIDTH_FRAC = 0.06; // matches MatchaMaking's own MIX_BALL_WIDTH_FRAC
 const SYRUP_MIX_HOLD_ACCEL = 150; // matches MatchaMaking's own MIX_HOLD_ACCEL
 const SYRUP_MIX_HOLD_GRACE_MS = 150; // matches MatchaMaking's own MIX_HOLD_GRACE_MS
-const SYRUP_MIX_DRIFT_AMPLITUDE = 34; // matches MatchaMaking's own MIX_DRIFT_AMPLITUDE
-const SYRUP_MIX_DRIFT_ANGULAR_FREQ = 1.3; // matches MatchaMaking's own MIX_DRIFT_ANGULAR_FREQ
+const BASE_SYRUP_MIX_DRIFT_AMPLITUDE = 34; // matches MatchaMaking's own MIX_DRIFT_AMPLITUDE
+const BASE_SYRUP_MIX_DRIFT_ANGULAR_FREQ = 1.3; // matches MatchaMaking's own MIX_DRIFT_ANGULAR_FREQ
 const SYRUP_MIX_FRICTION_HALF_LIFE_S = 0.35; // matches MatchaMaking's own MIX_FRICTION_HALF_LIFE_S
 const SYRUP_MIX_SPILL_INTERVAL_MS = 550; // matches MatchaMaking's own MIX_SPILL_INTERVAL_MS
 
@@ -753,7 +759,13 @@ const POWDER_STREAM_COLORS = {
 // ones, since canPourFoam/canPourPowder/canPlaceLeaf are already mutually
 // exclusive with each other (and with syrup) -- only one of these can ever
 // be waiting on a catch at a time.
-const LEVER_PERIOD_MS = 3800; // one full left-right-left sweep of the marker -- slowed down a bit from 3200 per request, applies to foam/powder/leaf alike since they share this one constant
+// One full left-right-left sweep of the marker -- slowed down a bit from
+// 3200 per request, applies to foam/powder/leaf/chip/blossom alike since
+// they share this one constant. Order-1 value -- BASE_ prefix since orders
+// 2+ now speed this up further per order (see leverPeriodMs/
+// getDifficultyStep in the component below); order 1 stays exactly this
+// number.
+const BASE_LEVER_PERIOD_MS = 3800;
 const LEVER_LINGER_MS = 1500; // how long the bar stays on screen, marker frozen, after a catch before it actually disappears -- per request
 const LEVER_AMPLITUDE_PCT = 42; // how far the marker's center swings from dead-center (50%) of the bar, in % of the bar's own width
 const LEVER_CENTER_TOLERANCE = 0.12; // |offsetFrac| (see below) within this counts as "hit the middle" -- full credit, no spill
@@ -1071,6 +1083,28 @@ const ToppingsStation = ({
   onScored,
 }) => {
   const containerRef = useRef(null);
+
+  // Per-order difficulty scaling for this station's two timed mini-
+  // challenges (syrup pour balance minigame, foam/powder/leaf/chip/blossom
+  // lever-catch minigame) -- see gameloop/difficulty.js for the shared step/
+  // scale helpers, and MatchaMaking.js's own matching comment for the full
+  // reasoning. difficultyStep is 0 on order 1 (every BASE_* constant below
+  // plays completely unscaled then) and climbs by 1 each order after, per
+  // request. Computed once here since customerNumber is fixed for this
+  // whole mount's lifetime (this component fully remounts each new order).
+  const difficultyStep = getDifficultyStep(customerNumber);
+  // Syrup pour balance minigame: same shrinking-zone/strengthening-drift
+  // treatment as MatchaMaking's own whisk balance minigame -- see that
+  // file's matching comment for the exact per-step numbers/floors/caps.
+  const syrupMixZoneWidthFrac = scaleDown(BASE_SYRUP_MIX_ZONE_WIDTH_FRAC, difficultyStep, 0.08, 0.68);
+  const syrupMixZoneLeftFrac = (1 - syrupMixZoneWidthFrac) / 2;
+  const syrupMixDriftAmplitude = scaleUp(BASE_SYRUP_MIX_DRIFT_AMPLITUDE, difficultyStep, 0.15, 1.7);
+  const syrupMixDriftAngularFreq = scaleUp(BASE_SYRUP_MIX_DRIFT_ANGULAR_FREQ, difficultyStep, 0.1, 1.5);
+  // Lever-catch minigame (foam/powder/leaf/chip/blossom): the marker's own
+  // left-right sweep speeds up per step, floored at 65% of its order-1
+  // period. Amplitude/tolerance deliberately left untouched -- widening the
+  // swing risks pushing the marker's own travel outside the bar's bounds.
+  const leverPeriodMs = scaleDown(BASE_LEVER_PERIOD_MS, difficultyStep, 0.09, 0.65);
 
   // Traps every direction on the Order receipt button during this screen's
   // very first walkthrough beat (showOrderButtonLock, declared much further
@@ -2470,7 +2504,7 @@ const ToppingsStation = ({
     let frameId;
     const tick = () => {
       const elapsedMs = performance.now() - startedAt;
-      const centerPct = 50 + LEVER_AMPLITUDE_PCT * Math.sin((elapsedMs / LEVER_PERIOD_MS) * 2 * Math.PI);
+      const centerPct = 50 + LEVER_AMPLITUDE_PCT * Math.sin((elapsedMs / leverPeriodMs) * 2 * Math.PI);
       leverPositionRef.current = centerPct;
       if (leverMarkerRef.current) {
         leverMarkerRef.current.style.left = `${centerPct - (LEVER_MARKER_WIDTH_FRAC * 100) / 2}%`;
@@ -2744,8 +2778,8 @@ const ToppingsStation = ({
     setSyrupSpillGrowth(0);
     setPourOffset(0);
 
-    const zoneLeftPercent = SYRUP_MIX_ZONE_LEFT_FRAC * 100;
-    const zoneRightPercent = zoneLeftPercent + SYRUP_MIX_ZONE_WIDTH_FRAC * 100;
+    const zoneLeftPercent = syrupMixZoneLeftFrac * 100;
+    const zoneRightPercent = zoneLeftPercent + syrupMixZoneWidthFrac * 100;
 
     // Timestamps (performance.now()-space) of the most recent qualifying
     // keydown for each direction -- same MIX_HOLD_GRACE_MS-style "held"
@@ -2780,7 +2814,7 @@ const ToppingsStation = ({
       if (now < rightHeldUntil) syrupBallVelocityRef.current += SYRUP_MIX_HOLD_ACCEL * dt;
       if (now < leftHeldUntil) syrupBallVelocityRef.current -= SYRUP_MIX_HOLD_ACCEL * dt;
 
-      const drift = SYRUP_MIX_DRIFT_AMPLITUDE * Math.sin((elapsedMs / 1000) * SYRUP_MIX_DRIFT_ANGULAR_FREQ);
+      const drift = syrupMixDriftAmplitude * Math.sin((elapsedMs / 1000) * syrupMixDriftAngularFreq);
       syrupBallVelocityRef.current += drift * dt;
       syrupBallVelocityRef.current *= 0.5 ** (dt / SYRUP_MIX_FRICTION_HALF_LIFE_S);
       syrupBallPositionRef.current += syrupBallVelocityRef.current * dt;
@@ -3985,8 +4019,8 @@ const ToppingsStation = ({
               <span
                 className="mix-bar-zone"
                 style={{
-                  left: `${SYRUP_MIX_ZONE_LEFT_FRAC * 100}%`,
-                  width: `${SYRUP_MIX_ZONE_WIDTH_FRAC * 100}%`,
+                  left: `${syrupMixZoneLeftFrac * 100}%`,
+                  width: `${syrupMixZoneWidthFrac * 100}%`,
                 }}
               />
               <span
@@ -4548,10 +4582,12 @@ const ToppingsStation = ({
           highlightCurrentStep={drinkSendStage === 'sent'}
           // Suppressed while showAdvanceSpotlight is up -- the new pink
           // topping-progress-callout below takes over for the first order
-          // specifically. Orders 2/3 never set showAdvanceSpotlight, so
-          // they keep seeing this plain-text hint exactly as before.
+          // specifically. Also now suppressed for orders 2+ entirely, per
+          // request -- walkthrough-only label.
           currentStepHint={
-            showAdvanceSpotlight ? null : 'use your right arrow key to move on to the serving station.'
+            customerNumber === 1 && !showAdvanceSpotlight
+              ? 'use your right arrow key to move on to the serving station.'
+              : null
           }
           // Suppressed while showOrderButtonLock or showSyrupSpotlight is up
           // so the current-step dot's own autoFocus doesn't grab the
