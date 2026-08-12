@@ -853,6 +853,18 @@ const MilkSelection = ({
   // after showSendSpotlight itself.
   const restrictSendNavRef = useRef(false);
 
+  // Remembers whichever element focus jumped to Settings FROM, whenever
+  // that happens (see every restricted leg of the nav-graph effect below
+  // that calls gearButton.focus()) -- read back by that same effect's own
+  // "gear -> Down" leg so coming back down from Settings always lands
+  // wherever the player actually left from (a shelf cup, an ice cube, a
+  // bottle, the order button, or the active cup on the table), not always
+  // the bowl (this leg's own original, single hardcoded target from before
+  // any of those beats had their own way in). Falls back to the bowl
+  // whenever this is empty or no longer points at something real -- see
+  // that leg's own comment for when that still happens.
+  const preSettingsFocusRef = useRef(null);
+
   // Strawberry milk (order 2 onward), sparkling yuzu (order 3 onward, moved
   // up from order 4), and jasmine tea (new, order 4 onward) -- every tier
   // stacks on top of the last rather than replacing it, per request. This
@@ -972,7 +984,16 @@ const MilkSelection = ({
           const nextIndex = action === 'Right' ? bottleIndex + 1 : bottleIndex - 1;
           bottles[nextIndex]?.focus();
         } else if (action === 'Up') {
-          if (!restrictBaseNavRef.current) firstCup?.focus();
+          // Per request: still reachable while restricted, straight to
+          // Settings instead of the shelf cups (this beat's own point isn't
+          // the cups) -- tracked in preSettingsFocusRef so gear's own Down
+          // leg sends focus back to this exact bottle.
+          if (restrictBaseNavRef.current) {
+            preSettingsFocusRef.current = active;
+            gearButton?.focus();
+          } else {
+            firstCup?.focus();
+          }
         } else if (action === 'Down') {
           if (!restrictBaseNavRef.current) document.querySelector('.progress-step.current')?.focus();
         }
@@ -981,11 +1002,22 @@ const MilkSelection = ({
 
       // Bowl: Left -> first ice cube, Up -> settings, Down -> station dot.
       // Right is deliberately left unhandled (nothing sits further right of
-      // the bowl in this graph). Fully locked down (every direction
+      // the bowl in this graph). Fully locked down (every OTHER direction
       // swallowed, none of the branches below run) during the first-order
       // walkthrough's own bowl-pouring beat -- see restrictBowlNavRef's own
-      // comment above.
+      // comment above -- but per request Up specifically still works even
+      // then, so the player can always reach Settings from wherever this
+      // beat has focus; checked (and, since it always actually moves focus,
+      // returned from) BEFORE the restrictBowlNavRef trap below rather than
+      // being just another branch inside it.
       if (active === bowl) {
+        if (action === 'Up') {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          preSettingsFocusRef.current = active;
+          gearButton?.focus();
+          return;
+        }
         if (restrictBowlNavRef.current) {
           e.preventDefault();
           e.stopImmediatePropagation();
@@ -995,10 +1027,6 @@ const MilkSelection = ({
           e.preventDefault();
           e.stopImmediatePropagation();
           firstIceCube?.focus();
-        } else if (action === 'Up') {
-          e.preventDefault();
-          e.stopImmediatePropagation();
-          gearButton?.focus();
         } else if (action === 'Down') {
           e.preventDefault();
           e.stopImmediatePropagation();
@@ -1011,15 +1039,19 @@ const MilkSelection = ({
       // all fully handled (and trapped/swallowed) right here rather than
       // partially falling through to useFlatFocusNav's own generic spatial
       // fallback, so the pile's navigation is airtight regardless of
-      // restrictIceVerticalNavRef. 'gear'/'station' targets (top row Up,
-      // bottom row Down) only actually move focus when
-      // !restrictIceVerticalNavRef.current -- during the first-order
-      // walkthrough's ice-placing beat that ref is true, so those two
-      // presses still get swallowed (preventDefault/stopImmediatePropagation
-      // already fired below) but leave focus right where it is, trapping
-      // the player inside the pile per that beat's own request. A `null`
-      // target (no cube that direction, and not a gear/station edge either)
-      // is always just a trap regardless of the ref.
+      // restrictIceVerticalNavRef. The 'station' target only actually moves
+      // focus when !restrictIceVerticalNavRef.current -- during the
+      // first-order walkthrough's ice-placing beat that ref is true, so that
+      // press still gets swallowed (preventDefault/stopImmediatePropagation
+      // already fired below) but leaves focus right where it is, trapping
+      // the player inside the pile per that beat's own request. The 'gear'
+      // target is the one exception, per request: it always moves focus
+      // regardless of restrictIceVerticalNavRef, so Up from a top-row cube
+      // can always reach Settings even mid-beat -- tracked in
+      // preSettingsFocusRef so gear's own Down leg sends focus back to this
+      // exact cube. A `null` target (no cube that direction, and not a
+      // gear/station edge either) is always just a trap regardless of the
+      // ref.
       const iceIndex = iceCubes.indexOf(active);
       if (iceIndex !== -1) {
         e.preventDefault();
@@ -1031,7 +1063,8 @@ const MilkSelection = ({
         const dirKey = action.toLowerCase();
         const target = ICE_ADJACENCY[iceIndex]?.[dirKey];
         if (target === 'gear') {
-          if (!restrictIceVerticalNavRef.current) gearButton?.focus();
+          preSettingsFocusRef.current = active;
+          gearButton?.focus();
         } else if (target === 'station') {
           if (!restrictIceVerticalNavRef.current) document.querySelector('.progress-step.current')?.focus();
         } else if (typeof target === 'number' && !icePlacedRef.current[target]) {
@@ -1074,9 +1107,21 @@ const MilkSelection = ({
       const cupIndex = shelfCups.indexOf(active);
       if (cupIndex !== -1) {
         if (cupSpotRef.current === 'table') {
-          // Fully locked down (every direction swallowed, Left included)
-          // during the first-order walkthrough's own final send-to-Toppings
-          // beat -- see restrictSendNavRef's own comment above.
+          // Up always reaches Settings, per request, even during the
+          // first-order walkthrough's own final send-to-Toppings beat --
+          // checked (and returned from) before the restrictSendNavRef trap
+          // below, same "the one exception" shape as the bowl's own Up leg
+          // above.
+          if (action === 'Up') {
+            e.preventDefault();
+            e.stopImmediatePropagation();
+            preSettingsFocusRef.current = active;
+            gearButton?.focus();
+            return;
+          }
+          // Fully locked down otherwise (every direction swallowed, Left
+          // included) during that same beat -- see restrictSendNavRef's own
+          // comment above.
           if (restrictSendNavRef.current) {
             e.preventDefault();
             e.stopImmediatePropagation();
@@ -1101,28 +1146,42 @@ const MilkSelection = ({
         } else if (action === 'Up') {
           e.preventDefault();
           e.stopImmediatePropagation();
-          if (!restrictCupVerticalNavRef.current) orderButton?.focus();
+          // Per request: still reachable while restricted, straight to
+          // Settings instead of the order button (this beat's own point
+          // isn't the receipt) -- tracked in preSettingsFocusRef so gear's
+          // own Down leg sends focus back to this exact cup.
+          if (restrictCupVerticalNavRef.current) {
+            preSettingsFocusRef.current = active;
+            gearButton?.focus();
+          } else {
+            orderButton?.focus();
+          }
         }
         return;
       }
 
       // Order button -> Left goes to settings, Down goes to the first
       // (glass) cup, same reciprocal pair every other frame's own order
-      // button/gear share. Fully locked down (every direction swallowed)
-      // during this screen's own first walkthrough beat -- see
-      // restrictOrderNavRef's own comment above -- so the player can't
-      // arrow away before actually opening the receipt once.
+      // button/gear share. Left always works, per request, even during
+      // this screen's own first walkthrough beat (checked/returned from
+      // before the restrictOrderNavRef trap below, same "the one exception"
+      // shape used throughout this graph now) -- every other direction
+      // stays fully locked down until the player's actually opened the
+      // receipt once, same as before.
       if (active === orderButton) {
+        if (action === 'Left') {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          preSettingsFocusRef.current = active;
+          gearButton?.focus();
+          return;
+        }
         if (restrictOrderNavRef.current) {
           e.preventDefault();
           e.stopImmediatePropagation();
           return;
         }
-        if (action === 'Left') {
-          e.preventDefault();
-          e.stopImmediatePropagation();
-          gearButton?.focus();
-        } else if (action === 'Down') {
+        if (action === 'Down') {
           e.preventDefault();
           e.stopImmediatePropagation();
           firstCup?.focus();
@@ -1130,16 +1189,28 @@ const MilkSelection = ({
         return;
       }
 
-      // Settings gear -> Down goes back to the bowl, Right goes back to
-      // the order button -- same "reciprocal pair" shape as the other
-      // frames' own gear legs. Down only while its popover is closed;
-      // while open, SettingsPanel's own handler owns Down (moving into the
+      // Settings gear -> Down goes back to wherever focus actually came
+      // from (see preSettingsFocusRef's own comment above -- every
+      // restricted walkthrough beat's own Up leg sets it right before
+      // landing here), falling back to the bowl (this leg's original,
+      // only-ever target before any of those beats had their own way in)
+      // whenever that ref is empty or no longer points at something real.
+      // Right always goes back to the order button, same "reciprocal pair"
+      // shape as the other frames' own gear legs -- unambiguous regardless
+      // of which beat's up, so it doesn't need preSettingsFocusRef at all.
+      // Down only actually moves focus while the popover's closed; while
+      // open, SettingsPanel's own handler owns Down (moving into the
       // volume controls instead).
       if (active === gearButton) {
         if (action === 'Down' && !document.querySelector('.settings-popover')) {
           e.preventDefault();
           e.stopImmediatePropagation();
-          bowl?.focus();
+          const target = preSettingsFocusRef.current;
+          if (target && document.contains(target) && !target.disabled) {
+            target.focus();
+          } else {
+            bowl?.focus();
+          }
         } else if (action === 'Right') {
           e.preventDefault();
           e.stopImmediatePropagation();

@@ -956,6 +956,20 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
   // player wander off to the Order button/whisk before actually picking a
   // grade.
   const restrictTinVerticalNavRef = useRef(false);
+  // Remembers whichever element focus jumped to Settings FROM, whenever
+  // that happens (see the orderButton/tin legs of the nav-graph effect
+  // below, both of which set this right before calling gearButton.focus())
+  // -- read back by that same effect's own "gear -> Down" leg so coming
+  // back down from Settings always lands wherever the player actually left
+  // from, rather than a single hardcoded default (which wouldn't make sense
+  // here: this file already has two different "reciprocal pair" gear legs
+  // -- Right back to the Order button, Down back to the kettle -- and per
+  // request there's now a THIRD way in, straight up from whichever matcha
+  // tin the tin-picking walkthrough beat has focused, that doesn't fit
+  // either existing pair). Left null (and left alone) outside that one
+  // walkthrough beat, so the kettle's own pre-existing "gear Down -> kettle"
+  // leg is completely unaffected the rest of the time.
+  const preSettingsFocusRef = useRef(null);
 
   // First-order-only walkthrough lockdown -- same idea as Customer
   // Ordering's own restrictNavigationRef (see that file's matching comment):
@@ -974,11 +988,25 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
   // reasoning that graph's own comment explains -- stopImmediatePropagation
   // makes this a hard stop rather than merely a first opinion those other
   // handlers could still override.
+  //
+  // Exception, per request: the player should always be able to go Up from
+  // the Order button (this beat's own locked item) to Settings, and back
+  // down again. Left through instead of swallowed: Left while the Order
+  // button itself has focus -- the nav-graph effect right below already has
+  // an "Order button Left -> gear" leg, this just stops it from being
+  // blocked before it can run; and anything at all while focus is already
+  // somewhere inside the Settings widget (the gear, its popover, or the
+  // attributions dialog) -- needed so both the graph's own "gear Right ->
+  // Order button" return leg and SettingsPanel.js's own internal nav keep
+  // working, same reasoning as Customer Ordering's matching exception.
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (!restrictNavigationRef.current) return;
       const action = getActionFromKeyEvent(e);
       if (action !== 'Up' && action !== 'Down' && action !== 'Left' && action !== 'Right') return;
+      const active = document.activeElement;
+      if (action === 'Left' && active === document.querySelector('.order-receipt-button')) return;
+      if (active?.closest?.('.settings-panel-anchor') || active?.closest?.('.settings-attributions-backdrop')) return;
       e.preventDefault();
       e.stopImmediatePropagation();
     };
@@ -1035,7 +1063,14 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
       }
 
       // Any matcha tin: Left/Right cycles siblings, Up -> Order button,
-      // Down -> whisk.
+      // Down -> whisk. Up specifically still works while
+      // restrictTinVerticalNavRef is up (the tin-picking walkthrough beat)
+      // -- per request the player can always reach Settings from whichever
+      // tin that beat has focused -- just straight to the gear instead of
+      // the Order button (skipping that normally-intermediate hop, since
+      // during this beat the Order button itself isn't the point), tracked
+      // in preSettingsFocusRef so gear's own Down leg below knows to send
+      // focus back to this exact tin rather than its usual kettle default.
       const tinIndex = tins.indexOf(active);
       if (tinIndex !== -1) {
         if (action === 'Left' || action === 'Right') {
@@ -1046,7 +1081,12 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
         } else if (action === 'Up') {
           e.preventDefault();
           e.stopImmediatePropagation();
-          if (!restrictTinVerticalNavRef.current) orderButton?.focus();
+          if (restrictTinVerticalNavRef.current) {
+            preSettingsFocusRef.current = active;
+            gearButton?.focus();
+          } else {
+            orderButton?.focus();
+          }
         } else if (action === 'Down') {
           e.preventDefault();
           e.stopImmediatePropagation();
@@ -1102,6 +1142,7 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
         if (action === 'Left') {
           e.preventDefault();
           e.stopImmediatePropagation();
+          preSettingsFocusRef.current = active;
           gearButton?.focus();
         } else if (action === 'Down') {
           e.preventDefault();
@@ -1121,7 +1162,21 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
           if (popoverOpen) return;
           e.preventDefault();
           e.stopImmediatePropagation();
-          kettleRef.current?.focus();
+          // Returns to wherever focus actually came from (see
+          // preSettingsFocusRef's own comment above) -- the Order button's
+          // own Left leg and the tin-picking walkthrough beat's own Up leg
+          // both set this right before landing here. Falls back to the
+          // kettle (this leg's original, only-ever target before the tin
+          // beat got its own way in) whenever that ref is empty or no
+          // longer points at something real -- e.g. plain old Right ->
+          // gear -> Down never went through either of those two legs at
+          // all, so there's nothing of this beat's own to return to.
+          const target = preSettingsFocusRef.current;
+          if (target && document.contains(target) && !target.disabled) {
+            target.focus();
+          } else {
+            kettleRef.current?.focus();
+          }
         }
         return;
       }

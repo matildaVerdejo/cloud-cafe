@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import './FinalCombination.css';
 import { useFlatFocusNav } from '../gameloop/useFlatFocusNav';
+import { getActionFromKeyEvent } from '../gameloop/pal';
 import { playButtonClick, playScoreFailSound, playScoreMidSound, playScoreGoodSound } from '../gameloop/sfx';
 import { computeOverallScore } from '../gameloop/scoring';
 import ProgressBar from './ProgressBar';
@@ -138,7 +139,15 @@ const FinalCombination = ({
   onStartNextOrder,
 }) => {
   const containerRef = useRef(null);
-  useFlatFocusNav(containerRef);
+  // Remembers whichever element focus jumped to Settings FROM, whenever
+  // that happens (see the bridge effect further down, right after
+  // showNextOrderSpotlight's own focus effect) -- read back by that same
+  // bridge's own "gear -> Down" leg so coming back down from Settings
+  // always lands wherever the player actually left from (the first score-
+  // card row, or the start-next-order button), same "ref declared early,
+  // synced late" pattern every other station's own preSettingsFocusRef
+  // uses (see e.g. MilkSelection.js's own copy).
+  const preSettingsFocusRef = useRef(null);
 
   // ---- Celebration overlay (see CelebrationOverlay.js) ---------------------
   // Shown once the round's overall score lands in the "good" tier (80+, see
@@ -265,6 +274,62 @@ const FinalCombination = ({
       containerRef.current?.querySelector('.start-next-order-button')?.focus();
     }
   }, [showNextOrderSpotlight]);
+
+  // Bridges this screen's own container to the Settings gear (rendered
+  // once in App.js, outside this screen's own containerRef) -- per
+  // request, the player should always be able to go Up from the
+  // walkthrough's own currently-focused item to Settings, and back down
+  // again. Two legs: Up from the first score-card row (the only row that
+  // could ever have nowhere else to go Up to within the card itself, so
+  // this can never collide with ordinary Up/Down movement BETWEEN rows,
+  // which the generic useFlatFocusNav(containerRef) hook below already
+  // handles on its own) while showScoreSpotlight is up; and Up from the
+  // start-next-order button (a single item, no siblings to collide with
+  // either) while showNextOrderSpotlight is up. Neither beat has a mini-
+  // challenge of its own on this screen (unlike e.g. ToppingsStation's
+  // pour/lever-catch minigames), so unlike those stations' own versions of
+  // this bridge there's no extra guard needed here beyond the beat flag
+  // itself. Registered here, before useFlatFocusNav(containerRef) right
+  // below, for the same "sees focus as it was before any handler for this
+  // keypress has run" reasoning every other station's own bridge effect
+  // documents.
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      const action = getActionFromKeyEvent(e);
+      if (action !== 'Up' && action !== 'Down') return;
+      const active = document.activeElement;
+      const gearButton = document.querySelector('.settings-toggle-button');
+
+      if (action === 'Up' && showScoreSpotlight && active === containerRef.current?.querySelector('.score-card-row')) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        preSettingsFocusRef.current = active;
+        gearButton?.focus();
+        return;
+      }
+
+      if (action === 'Up' && showNextOrderSpotlight && active === document.querySelector('.start-next-order-button')) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        preSettingsFocusRef.current = active;
+        gearButton?.focus();
+        return;
+      }
+
+      if (active === gearButton && action === 'Down' && !document.querySelector('.settings-popover')) {
+        const target = preSettingsFocusRef.current;
+        if (target && document.contains(target) && !target.disabled) {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          target.focus();
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [showScoreSpotlight, showNextOrderSpotlight]);
+
+  useFlatFocusNav(containerRef);
 
   // ---- Carried-over drink from Toppings Station (see incomingDrink above)
   // Which cup type this actually is -- ToppingsStation's own

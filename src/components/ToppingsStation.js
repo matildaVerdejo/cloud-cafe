@@ -1120,6 +1120,34 @@ const ToppingsStation = ({
   // right after showPowderSpotlight itself.
   const restrictPowderNavRef = useRef(false);
 
+  // Remembers whichever element focus jumped to Settings FROM, whenever
+  // that happens (see every leg of the nav-graph effect below that calls
+  // gearButton.focus()) -- read back by that same effect's own "gear ->
+  // Down" leg so coming back down from Settings always lands wherever the
+  // player actually left from (the order button, a syrup/foam/powder
+  // bottle, or the finished cup), not always guava-syrup (this leg's
+  // original, single hardcoded target from before any of those other beats
+  // had their own direct way in). Falls back to guava-syrup whenever this
+  // is empty or no longer points at something real.
+  const preSettingsFocusRef = useRef(null);
+  // Mirror refs for pouringKey/foamPouringKey/powderPouringKey (all three
+  // declared much further down, alongside the rest of their own
+  // syrup/foam/powder state) -- the nav-graph effect below reads these to
+  // decide whether a syrup/foam/powder pair's Up-to-Settings escape (see
+  // preSettingsFocusRef's own comment above) should actually fire, since
+  // per request that escape needs to stay blocked during the pour+lever-
+  // catch mini-challenge itself, not just outside the walkthrough
+  // entirely. That effect is registered with an empty dependency array
+  // (same early-registration reasoning as every restrictXNavRef in this
+  // file), so it can only ever see whatever these three plain state values
+  // were at the moment it was first created unless read through a ref
+  // instead -- same "ref declared early, synced late" pattern as every
+  // other ref in this group, kept in sync by three small effects declared
+  // right after each real state value's own declaration further down.
+  const pouringKeyRef = useRef(null);
+  const foamPouringKeyRef = useRef(null);
+  const powderPouringKeyRef = useRef(null);
+
   // Every order's own new toppings now stack on top of the last (per a
   // later request -- nothing ever drops off the counter again). Banana
   // foam/honey syrup/mint leaves unlock together at order 2 (previously
@@ -1280,7 +1308,12 @@ const ToppingsStation = ({
       }
 
       // Cup: Left -> reg-cold-foam (white), Right -> matcha-powder, Down ->
-      // station dot.
+      // station dot, Up -> settings (this is also the exact element the
+      // final first-order walkthrough beat, showSendSpotlight, focuses --
+      // see that beat's own focus effect further down -- so this same leg
+      // is what lets the player reach Settings from there too, no separate
+      // restrict ref needed since nothing traps the cup's own nav during
+      // that beat in the first place).
       if (active === cup) {
         if (action === 'Left') {
           e.preventDefault();
@@ -1294,6 +1327,11 @@ const ToppingsStation = ({
           e.preventDefault();
           e.stopImmediatePropagation();
           document.querySelector('.progress-step.current')?.focus();
+        } else if (action === 'Up') {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          preSettingsFocusRef.current = active;
+          gearButton?.focus();
         }
         return;
       }
@@ -1317,6 +1355,21 @@ const ToppingsStation = ({
         setFoamSpotlightMoved(true);
         if (action === 'Left') {
           matchaFoam?.focus();
+        } else if (action === 'Up' && restrictFoamNavRef.current) {
+          // Still reachable while restricted, per request -- but ONLY at
+          // rest (foamPouringKey null); showFoamSpotlight itself (and
+          // therefore restrictFoamNavRef) stays true through the whole
+          // pour+lever-catch minigame too (see that flag's own comment),
+          // so this guard is what actually excludes Settings access during
+          // that mini challenge specifically, leaving it trapped exactly
+          // as before. Straight to the gear (skipping the normal Up ->
+          // guava-syrup hop, since during this beat the syrup pair itself
+          // isn't the point) -- tracked in preSettingsFocusRef so gear's
+          // own Down leg sends focus back to this exact bottle.
+          if (foamPouringKeyRef.current === null) {
+            preSettingsFocusRef.current = active;
+            gearButton?.focus();
+          }
         } else if (!restrictFoamNavRef.current) {
           if (action === 'Right') {
             bananaFoam?.focus();
@@ -1341,6 +1394,13 @@ const ToppingsStation = ({
         setFoamSpotlightMoved(true);
         if (action === 'Right') {
           regFoam?.focus();
+        } else if (action === 'Up' && restrictFoamNavRef.current) {
+          // Same exception (and same mini-challenge guard) as reg-cold-foam's
+          // own Up leg above.
+          if (foamPouringKeyRef.current === null) {
+            preSettingsFocusRef.current = active;
+            gearButton?.focus();
+          }
         } else if (!restrictFoamNavRef.current) {
           if (action === 'Up') {
             guavaSyrup?.focus();
@@ -1427,10 +1487,22 @@ const ToppingsStation = ({
         setSyrupSpotlightMoved(true);
         if (action === 'Right') {
           guavaSyrup?.focus();
+        } else if (action === 'Up' && restrictSyrupNavRef.current) {
+          // Still reachable while restricted, per request -- but ONLY at
+          // rest (pouringKey null); showSyrupSpotlight itself (and
+          // therefore restrictSyrupNavRef) stays true through the whole
+          // pour minigame too (see that flag's own comment), so this guard
+          // is what actually excludes Settings access during that mini
+          // challenge specifically, leaving it trapped exactly as before.
+          if (pouringKeyRef.current === null) {
+            preSettingsFocusRef.current = active;
+            gearButton?.focus();
+          }
         } else if (!restrictSyrupNavRef.current) {
           if (action === 'Down') {
             matchaFoam?.focus();
           } else if (action === 'Up') {
+            preSettingsFocusRef.current = active;
             gearButton?.focus();
           }
         }
@@ -1454,12 +1526,20 @@ const ToppingsStation = ({
         setSyrupSpotlightMoved(true);
         if (action === 'Left') {
           mintSyrup?.focus();
+        } else if (action === 'Up' && restrictSyrupNavRef.current) {
+          // Same exception (and same mini-challenge guard) as mint-syrup's
+          // own Up leg above.
+          if (pouringKeyRef.current === null) {
+            preSettingsFocusRef.current = active;
+            gearButton?.focus();
+          }
         } else if (!restrictSyrupNavRef.current) {
           if (action === 'Right') {
             (honeySyrup ?? matchaPowder)?.focus();
           } else if (action === 'Down') {
             matchaFoam?.focus();
           } else if (action === 'Up') {
+            preSettingsFocusRef.current = active;
             gearButton?.focus();
           }
         }
@@ -1564,6 +1644,21 @@ const ToppingsStation = ({
         setPowderSpotlightMoved(true);
         if (action === 'Right') {
           guavaPowder?.focus();
+        } else if (action === 'Up' && restrictPowderNavRef.current) {
+          // Still reachable while restricted, per request -- but ONLY at
+          // rest (powderPouringKey null); showPowderSpotlight itself (and
+          // therefore restrictPowderNavRef) stays true through the whole
+          // pour+lever-catch minigame too (see that flag's own comment), so
+          // this guard is what actually excludes Settings access during
+          // that mini challenge specifically, leaving it trapped exactly as
+          // before. Straight to the gear (skipping the normal Up -> order
+          // button hop, since during this beat the receipt itself isn't
+          // the point) -- tracked in preSettingsFocusRef so gear's own Down
+          // leg sends focus back to this exact powder.
+          if (powderPouringKeyRef.current === null) {
+            preSettingsFocusRef.current = active;
+            gearButton?.focus();
+          }
         } else if (!restrictPowderNavRef.current) {
           if (action === 'Up') {
             orderButton?.focus();
@@ -1587,6 +1682,13 @@ const ToppingsStation = ({
           matchaPowder?.focus();
         } else if (action === 'Right') {
           chocoPowder?.focus();
+        } else if (action === 'Up' && restrictPowderNavRef.current) {
+          // Same exception (and same mini-challenge guard) as matcha-powder's
+          // own Up leg above.
+          if (powderPouringKeyRef.current === null) {
+            preSettingsFocusRef.current = active;
+            gearButton?.focus();
+          }
         } else if (!restrictPowderNavRef.current) {
           if (action === 'Up') {
             orderButton?.focus();
@@ -1671,17 +1773,28 @@ const ToppingsStation = ({
       // screen's own first walkthrough beat -- see restrictOrderNavRef's
       // own comment above -- so the player can't arrow away before
       // actually opening the receipt once.
+      // Order button -> Left goes to settings, Down goes to matcha-powder,
+      // same reciprocal pair every other frame's own order button/gear
+      // share. Left always works, per request, even during this screen's
+      // own first walkthrough beat (checked/returned from before the
+      // restrictOrderNavRef trap below, same "the one exception" shape
+      // used throughout this graph now) -- every other direction stays
+      // fully locked down until the player's actually opened the receipt
+      // once, same as before.
       if (active === orderButton) {
+        if (action === 'Left') {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          preSettingsFocusRef.current = active;
+          gearButton?.focus();
+          return;
+        }
         if (restrictOrderNavRef.current) {
           e.preventDefault();
           e.stopImmediatePropagation();
           return;
         }
-        if (action === 'Left') {
-          e.preventDefault();
-          e.stopImmediatePropagation();
-          gearButton?.focus();
-        } else if (action === 'Down') {
+        if (action === 'Down') {
           e.preventDefault();
           e.stopImmediatePropagation();
           matchaPowder?.focus();
@@ -1689,11 +1802,17 @@ const ToppingsStation = ({
         return;
       }
 
-      // Settings gear -> Right goes back to the order button, Down goes to
-      // guava-syrup -- same reciprocal-pair shape as every other frame's
-      // own gear legs. Down only while its popover is closed; while open,
-      // SettingsPanel's own handler owns Down (moving into the volume
-      // controls instead).
+      // Settings gear -> Right goes back to the order button (unambiguous
+      // regardless of which beat's up, so it doesn't need
+      // preSettingsFocusRef at all), Down goes back to wherever focus
+      // actually came from (see preSettingsFocusRef's own comment above --
+      // every restricted walkthrough beat's own Up leg sets it right
+      // before landing here), falling back to guava-syrup (this leg's
+      // original, only-ever target before any of those beats had their own
+      // direct way in) whenever that ref is empty or no longer points at
+      // something real. Down only actually moves focus while the
+      // popover's closed; while open, SettingsPanel's own handler owns
+      // Down (moving into the volume controls instead).
       if (active === gearButton) {
         if (action === 'Right') {
           e.preventDefault();
@@ -1702,7 +1821,12 @@ const ToppingsStation = ({
         } else if (action === 'Down' && !document.querySelector('.settings-popover')) {
           e.preventDefault();
           e.stopImmediatePropagation();
-          guavaSyrup?.focus();
+          const target = preSettingsFocusRef.current;
+          if (target && document.contains(target) && !target.disabled) {
+            target.focus();
+          } else {
+            guavaSyrup?.focus();
+          }
         }
         return;
       }
@@ -1838,6 +1962,14 @@ const ToppingsStation = ({
   //                 one-time-use item as the milk bottles.
   const [pourStage, setPourStage] = useState('idle');
   const [pouringKey, setPouringKey] = useState(null); // 'guava-syrup' | 'mint-syrup' | 'honey-syrup' | null
+  // Keeps pouringKeyRef (declared/read far above, alongside preSettingsFocusRef,
+  // for the same early-registration ordering reasons) in sync with the real
+  // state. No dependency array -- re-reads every render, same "cheap and
+  // never a render behind" shape as this file's other restrict-style refs'
+  // own sync effects.
+  useEffect(() => {
+    pouringKeyRef.current = pouringKey;
+  });
   // The "liquid pour" Audio instance currently playing for this syrup pour
   // (see playLiquidPouring below) -- held in a ref, same reasoning as Milk
   // Selection's own pourAudioRef, purely so it can be cut short the moment
@@ -2029,6 +2161,12 @@ const ToppingsStation = ({
   });
   const [foamPourStage, setFoamPourStage] = useState('idle'); // 'idle' | 'moving' | 'pouring'
   const [foamPouringKey, setFoamPouringKey] = useState(null); // 'matcha-cold-foam' | 'reg-cold-foam' | null
+  // Keeps foamPouringKeyRef (declared/read far above, alongside
+  // pouringKeyRef) in sync with the real state -- same "cheap, no deps,
+  // never a render behind" shape as that ref's own sync effect.
+  useEffect(() => {
+    foamPouringKeyRef.current = foamPouringKey;
+  });
   const [foamPourOffset, setFoamPourOffset] = useState(0);
   // The "foam pour" Audio instance currently playing for this foam pour (see
   // playFoamPouring below) -- held in a ref, same reasoning as this file's
@@ -2122,6 +2260,13 @@ const ToppingsStation = ({
   });
   const [powderPourStage, setPowderPourStage] = useState('idle'); // 'idle' | 'moving' | 'pouring'
   const [powderPouringKey, setPowderPouringKey] = useState(null); // 'matcha-powder' | 'guava-powder' | null
+  // Keeps powderPouringKeyRef (declared/read far above, alongside
+  // pouringKeyRef/foamPouringKeyRef) in sync with the real state -- same
+  // "cheap, no deps, never a render behind" shape as those refs' own sync
+  // effects.
+  useEffect(() => {
+    powderPouringKeyRef.current = powderPouringKey;
+  });
   const [powderPourOffset, setPowderPourOffset] = useState(0);
   // The "topping powder pour" Audio instance currently playing for this
   // powder pour (see playToppingPowderPour below) -- held in a ref, same

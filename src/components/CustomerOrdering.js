@@ -550,11 +550,29 @@ const CustomerOrdering = ({
   // effect's own comment right below explains -- stopImmediatePropagation
   // makes this a hard stop rather than merely a first opinion those other
   // handlers could still override.
+  //
+  // Exception, per request: the player should always be able to go Up from
+  // the walkthrough's own currently-focused item to Settings, and back down
+  // again, even while this trap would otherwise swallow every direction.
+  // Two cases let through instead of being swallowed here: Up while the
+  // play button itself has focus (the only thing this screen ever focuses
+  // during the trapped phases) -- handled by the "each leg" bridge effect
+  // right below, which does the actual gearButton.focus(); and anything at
+  // all while focus is already somewhere INSIDE the Settings widget itself
+  // (the gear, its popover's volume controls, or the attributions dialog) --
+  // needed so both the bridge's own "gear Down -> play button" return leg
+  // and SettingsPanel.js's own internal nav (Down into the popover, Left/
+  // Right between +/-, Back to close, etc.) keep working normally instead
+  // of being swallowed by this same trap, which has no idea any of that is
+  // happening outside its own screen.
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (!restrictNavigationRef.current) return;
       const action = getActionFromKeyEvent(e);
       if (action !== 'Up' && action !== 'Down' && action !== 'Left' && action !== 'Right') return;
+      const active = document.activeElement;
+      if (action === 'Up' && active === playButtonRef.current) return;
+      if (active?.closest?.('.settings-panel-anchor') || active?.closest?.('.settings-attributions-backdrop')) return;
       e.preventDefault();
       e.stopImmediatePropagation();
     };
