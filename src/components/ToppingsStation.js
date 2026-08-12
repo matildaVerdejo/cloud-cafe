@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import './ToppingsStation.css';
 import { useFlatFocusNav } from '../gameloop/useFlatFocusNav';
 import { getActionFromKeyEvent, shouldDebounceEnter } from '../gameloop/pal';
@@ -41,10 +41,31 @@ import { scoreToppings } from '../gameloop/scoring';
 // below, which read incomingDrink.cupType (set by Milk Selection's own
 // beginSendDrink) via the CUP_TYPES map imported from MilkSelection.js.
 const INCOMING_DRINK_SIZE = TABLE_SIZE;
+// Nudges the incoming drink down from dead-center, per request -- applies
+// to both centering formulas that place it (this module-level
+// INCOMING_DRINK_SPOT, which approximates against TABLE_SIZE for the
+// syrup/foam/powder items' own hover-while-pouring positions and hit-
+// testing below, and the component's own real per-cup-type
+// incomingDrinkHomeSpot further down) so everything -- the cup itself, its
+// fills/flecks, the hover spots, the mix bars -- stays aligned together,
+// for every order, not just the first-order walkthrough.
+const DRINK_VERTICAL_OFFSET = 8;
 const INCOMING_DRINK_SPOT = {
   left: 50 - INCOMING_DRINK_SIZE.width / 2,
-  top: 50 - INCOMING_DRINK_SIZE.height / 2,
+  top: 50 - INCOMING_DRINK_SIZE.height / 2 + DRINK_VERTICAL_OFFSET,
 };
+
+// Per-cup-type horizontal nudge for the incoming drink's own centering on
+// THIS screen only -- per request, the mug specifically reads a little
+// left of where it should once it's on this station's table (this
+// screen's centering formula just halves MugCup.png's own bounding-box
+// width, which doesn't necessarily match where the mug's actual visible
+// body sits inside that box). Expressed as a fraction of the cup's own
+// width (rather than a flat percentage) so it scales correctly with
+// incomingDrinkSize below; glass/plastic default to 0 (untouched) via the
+// `?? 0` fallback where this is read. Not applied to Milk Selection's own
+// on-table mug position, which wasn't reported as off.
+const INCOMING_DRINK_LEFT_OFFSET_FRAC = { mug: 0.05 };
 
 // "Send to Serving" drop-zone -- same idea/position as Milk Selection's own
 // SEND_DRINK_ZONE (reused verbatim: this screen's own topping items don't
@@ -113,6 +134,28 @@ const SYRUP_PAIR_BASE = [
 // the original canvas.
 const HONEY_SYRUP_ITEM = { key: 'honey-syrup', src: './HoneySyrup.png', alt: 'Honey syrup', canvasAspect: 208 / 657 };
 const SYRUP_PAIR_WITH_HONEY = [...SYRUP_PAIR_BASE, HONEY_SYRUP_ITEM];
+// Mango/lavender/peach syrup -- orders 3/4/5 respectively, per a later
+// request that every order's unlocks now stack rather than replace one
+// another (nothing ever drops off the counter again -- see
+// mangoSyrupUnlocked/lavenderSyrupUnlocked/peachSyrupUnlocked in the
+// component below). Each sits at the end of the row in turn, same
+// "new item lands as the new rightmost" convention honey-syrup itself set.
+// canvasAspect for all three is their own raw 360x693 canvas (untrimmed,
+// same "just use the file's own dimensions" convention banana-foam already
+// set below for a bottle whose canvas still carries some padding) -- works
+// out to 0.5195, close enough to guava-syrup's 0.5265/mint-syrup's 0.5205
+// that no extra tuning is needed.
+const MANGO_SYRUP_ITEM = { key: 'mango-syrup', src: './MangoSyrup.png', alt: 'Mango syrup', canvasAspect: 360 / 693 };
+const LAVENDER_SYRUP_ITEM = {
+  key: 'lavender-syrup',
+  src: './LavenderSyrup.png',
+  alt: 'Lavender syrup',
+  canvasAspect: 360 / 693,
+};
+const PEACH_SYRUP_ITEM = { key: 'peach-syrup', src: './PeachSyrup.png', alt: 'Peach syrup', canvasAspect: 360 / 693 };
+const SYRUP_PAIR_WITH_MANGO = [...SYRUP_PAIR_WITH_HONEY, MANGO_SYRUP_ITEM];
+const SYRUP_PAIR_WITH_LAVENDER = [...SYRUP_PAIR_WITH_MANGO, LAVENDER_SYRUP_ITEM];
+const SYRUP_PAIR_WITH_PEACH = [...SYRUP_PAIR_WITH_LAVENDER, PEACH_SYRUP_ITEM];
 const FOAM_PAIR_BASE = [
   { key: 'matcha-cold-foam', src: './MatchaColdFoam.png', alt: 'Matcha cold foam', canvasAspect: 155 / 297 },
   { key: 'reg-cold-foam', src: './RegColdFoam.png', alt: 'Regular cold foam', canvasAspect: 151 / 290 },
@@ -129,13 +172,39 @@ const FOAM_PAIR_BASE = [
 // rightPad fields) as its two pair-mates.
 const BANANA_FOAM_ITEM = { key: 'banana-foam', src: './BananaFoam.png', alt: 'Banana foam', canvasAspect: 361 / 692 };
 const FOAM_PAIR_WITH_BANANA = [...FOAM_PAIR_BASE, BANANA_FOAM_ITEM];
+// Strawberry/blueberry foam -- orders 4/5 respectively, same stacking
+// unlock schedule as the syrup trio above (strawberryFoamUnlocked/
+// blueberryFoamUnlocked in the component below). Same 361x692 raw-canvas
+// convention as banana-foam.
+const STRAWBERRY_FOAM_ITEM = {
+  key: 'strawberry-foam',
+  src: './StrawberryFoam.png',
+  alt: 'Strawberry foam',
+  canvasAspect: 361 / 692,
+};
+const BLUEBERRY_FOAM_ITEM = {
+  key: 'blueberry-foam',
+  src: './BlueberryFoam.png',
+  alt: 'Blueberry foam',
+  canvasAspect: 361 / 692,
+};
+const FOAM_PAIR_WITH_STRAWBERRY = [...FOAM_PAIR_WITH_BANANA, STRAWBERRY_FOAM_ITEM];
+const FOAM_PAIR_WITH_BLUEBERRY = [...FOAM_PAIR_WITH_STRAWBERRY, BLUEBERRY_FOAM_ITEM];
 // The same two item objects laid out at the top of the file (matcha-powder/
 // guava-powder), just grouped the same "pair" way as SYRUP_PAIR_BASE/
 // FOAM_PAIR_BASE above so the pour-mechanic code below can filter/iterate
 // them the same way (layoutPair itself is still called with
-// [MATCHA_POWDER_ITEM, GUAVA_POWDER_ITEM] directly below, in POWDER_ITEMS --
-// this is just an alias for the interactive-rendering code further down).
+// [MATCHA_POWDER_ITEM, GUAVA_POWDER_ITEM] directly below, in POWDER_ITEMS_
+// BASE -- this is just an alias for the interactive-rendering code further
+// down).
 const POWDER_PAIR = [MATCHA_POWDER_ITEM, GUAVA_POWDER_ITEM];
+// Choco powder -- new order-3-and-later topping, same stacking-unlock idea
+// as the syrup/foam trios above (chocoPowderUnlocked in the component
+// below). Sits to the right of guava-powder. canvasAspect (279/420) is its
+// own raw canvas -- happens to exactly match matcha-powder's own canvas
+// size.
+const CHOCO_POWDER_ITEM = { key: 'choco-powder', src: './ChocoPowder.png', alt: 'Choco powder', canvasAspect: 279 / 420 };
+const POWDER_PAIR_WITH_CHOCO = [...POWDER_PAIR, CHOCO_POWDER_ITEM];
 
 // Eyeballed starting guess (no reference for where these six should sit on
 // the reused matcha-counter background) -- the powder pair (matcha-powder,
@@ -228,22 +297,33 @@ function layoutPair(pair, height, top, gap, anchor) {
   }));
 }
 
-// matcha-powder first, guava-powder to its right -- smaller (POWDER_
-// HEIGHT), tight (TIGHT_PAIR_GAP), now down on the table baseline at the
-// right edge instead of up in the corner. Shared by both TOPPING_ITEMS
-// variants below -- unaffected by whether banana-foam is unlocked.
-const POWDER_ITEMS = layoutPair([MATCHA_POWDER_ITEM, GUAVA_POWDER_ITEM], POWDER_HEIGHT, TOPPING_ROW_BOTTOM - POWDER_HEIGHT, TIGHT_PAIR_GAP, {
+// matcha-powder first, guava-powder to its right (then choco-powder further
+// right still, order-3-and-later only) -- smaller (POWDER_HEIGHT), tight
+// (TIGHT_PAIR_GAP), down on the table baseline at the right edge instead of
+// up in the corner. Two precomputed tiers (base / with-choco), same
+// "precompute every tier, pick one per customerNumber" pattern as the
+// syrup/foam rows below.
+const POWDER_ITEMS_BASE = layoutPair(POWDER_PAIR, POWDER_HEIGHT, TOPPING_ROW_BOTTOM - POWDER_HEIGHT, TIGHT_PAIR_GAP, {
   type: 'right',
   x: 100 - EDGE_MARGIN,
 });
-// mint-syrup first, guava-syrup to its right (then honey-syrup further
-// right still, order-3-and-later only) -- upper-left corner, shifted down
-// slightly (SYRUP_TOP) and even tighter (SYRUP_PAIR_GAP). Anchored at
-// STACK_LEFT_MARGIN (not EDGE_MARGIN) so it lines back up with the foam
-// row directly below it -- see STACK_LEFT_MARGIN's own comment. Two
-// precomputed variants (base/with-honey), same "precompute both, pick one
-// per customerNumber" pattern as the foam row's own base/with-banana pair
-// below.
+const POWDER_ITEMS_WITH_CHOCO = layoutPair(
+  POWDER_PAIR_WITH_CHOCO,
+  POWDER_HEIGHT,
+  TOPPING_ROW_BOTTOM - POWDER_HEIGHT,
+  TIGHT_PAIR_GAP,
+  { type: 'right', x: 100 - EDGE_MARGIN }
+);
+// mint-syrup first, guava-syrup to its right, then honey-syrup (order 2+),
+// mango-syrup (order 3+), lavender-syrup (order 4+), peach-syrup (order 5+)
+// -- each stacking on the end in turn, per request that every order's own
+// unlocks now stack rather than replace one another. Upper-left corner,
+// shifted down slightly (SYRUP_TOP) and even tighter (SYRUP_PAIR_GAP).
+// Anchored at STACK_LEFT_MARGIN (not EDGE_MARGIN) so it lines back up with
+// the foam row directly below it -- see STACK_LEFT_MARGIN's own comment.
+// Five precomputed tiers, same "precompute every tier, pick one per
+// customerNumber" pattern as MilkSelection's own BOTTLE_ITEMS_BASE/
+// _WITH_STRAWBERRY -- picked via syrupItems in the component below.
 const SYRUP_ITEMS_BASE = layoutPair(SYRUP_PAIR_BASE, TOPPING_HEIGHT, SYRUP_TOP, SYRUP_PAIR_GAP, {
   type: 'left',
   x: STACK_LEFT_MARGIN,
@@ -252,41 +332,42 @@ const SYRUP_ITEMS_WITH_HONEY = layoutPair(SYRUP_PAIR_WITH_HONEY, TOPPING_HEIGHT,
   type: 'left',
   x: STACK_LEFT_MARGIN,
 });
-// matcha-cold-foam first, reg-cold-foam to its right (then banana-foam
-// further right still, order-2-and-later only) -- directly below the syrup
-// row, stacked at FOAM_TOP. Anchored at STACK_LEFT_MARGIN (not EDGE_MARGIN)
-// so its visible left margin matches the powder pair's visible right
-// margin -- see STACK_LEFT_MARGIN's own comment. Three precomputed tiers
-// (order 1 / order 2+ / order 3+), same "precompute every tier, pick one
-// per customerNumber" pattern as MilkSelection's own BOTTLE_ITEMS_BASE/
-// _WITH_STRAWBERRY -- picked via toppingItems in the component below.
-// Banana foam (order 2+) and honey syrup (order 3+) are independent rows
-// (foam vs syrup) but customerNumber only ever climbs, so by order 3 both
-// are already unlocked -- there's no "honey but not banana" tier to build.
-const TOPPING_ITEMS_ORDER1 = [
-  ...POWDER_ITEMS,
-  ...SYRUP_ITEMS_BASE,
-  ...layoutPair(FOAM_PAIR_BASE, TOPPING_HEIGHT, FOAM_TOP, PAIR_GAP, {
-    type: 'left',
-    x: STACK_LEFT_MARGIN,
-  }),
-];
-const TOPPING_ITEMS_ORDER2 = [
-  ...POWDER_ITEMS,
-  ...SYRUP_ITEMS_BASE,
-  ...layoutPair(FOAM_PAIR_WITH_BANANA, TOPPING_HEIGHT, FOAM_TOP, PAIR_GAP, {
-    type: 'left',
-    x: STACK_LEFT_MARGIN,
-  }),
-];
-const TOPPING_ITEMS_ORDER3 = [
-  ...POWDER_ITEMS,
-  ...SYRUP_ITEMS_WITH_HONEY,
-  ...layoutPair(FOAM_PAIR_WITH_BANANA, TOPPING_HEIGHT, FOAM_TOP, PAIR_GAP, {
-    type: 'left',
-    x: STACK_LEFT_MARGIN,
-  }),
-];
+const SYRUP_ITEMS_WITH_MANGO = layoutPair(SYRUP_PAIR_WITH_MANGO, TOPPING_HEIGHT, SYRUP_TOP, SYRUP_PAIR_GAP, {
+  type: 'left',
+  x: STACK_LEFT_MARGIN,
+});
+const SYRUP_ITEMS_WITH_LAVENDER = layoutPair(SYRUP_PAIR_WITH_LAVENDER, TOPPING_HEIGHT, SYRUP_TOP, SYRUP_PAIR_GAP, {
+  type: 'left',
+  x: STACK_LEFT_MARGIN,
+});
+const SYRUP_ITEMS_WITH_PEACH = layoutPair(SYRUP_PAIR_WITH_PEACH, TOPPING_HEIGHT, SYRUP_TOP, SYRUP_PAIR_GAP, {
+  type: 'left',
+  x: STACK_LEFT_MARGIN,
+});
+// matcha-cold-foam first, reg-cold-foam to its right, then banana-foam
+// (order 2+), strawberry-foam (order 4+ -- nothing new joins this row at
+// order 3, that's mango-syrup/choco-powder's turn instead), blueberry-foam
+// (order 5+) -- directly below the syrup row, stacked at FOAM_TOP. Anchored
+// at STACK_LEFT_MARGIN (not EDGE_MARGIN) so its visible left margin matches
+// the powder pair's visible right margin -- see STACK_LEFT_MARGIN's own
+// comment. Four precomputed tiers, same "precompute every tier" pattern as
+// the syrup row above -- picked via foamItems in the component below.
+const FOAM_ITEMS_BASE = layoutPair(FOAM_PAIR_BASE, TOPPING_HEIGHT, FOAM_TOP, PAIR_GAP, {
+  type: 'left',
+  x: STACK_LEFT_MARGIN,
+});
+const FOAM_ITEMS_WITH_BANANA = layoutPair(FOAM_PAIR_WITH_BANANA, TOPPING_HEIGHT, FOAM_TOP, PAIR_GAP, {
+  type: 'left',
+  x: STACK_LEFT_MARGIN,
+});
+const FOAM_ITEMS_WITH_STRAWBERRY = layoutPair(FOAM_PAIR_WITH_STRAWBERRY, TOPPING_HEIGHT, FOAM_TOP, PAIR_GAP, {
+  type: 'left',
+  x: STACK_LEFT_MARGIN,
+});
+const FOAM_ITEMS_WITH_BLUEBERRY = layoutPair(FOAM_PAIR_WITH_BLUEBERRY, TOPPING_HEIGHT, FOAM_TOP, PAIR_GAP, {
+  type: 'left',
+  x: STACK_LEFT_MARGIN,
+});
 
 // Display name per topping, shown as a label above whichever one currently
 // has focus (see focusedTopping/.topping-label below) -- same "selected" ==
@@ -305,6 +386,14 @@ const TOPPING_LABELS = {
   'matcha-powder': 'matcha powder',
   'guava-powder': 'guava powder',
   'mint-leaves': 'mint leaves',
+  'mango-syrup': 'mango syrup',
+  'choco-powder': 'choco powder',
+  'lavender-syrup': 'lavender syrup',
+  'strawberry-foam': 'strawberry foam',
+  'banana-chips': 'banana chips',
+  'peach-syrup': 'peach syrup',
+  'blueberry-foam': 'blueberry foam',
+  'cherry-blossoms': 'cherry blossoms',
 };
 
 // Gap between a topping's own top edge and its label -- negative, same as
@@ -347,10 +436,11 @@ function getSyrupHoverPos(item) {
 
 const SYRUP_MOVE_MS = 350; // time to glide to the hover spot
 // How long 'pouring' holds -- the whole balance-minigame window (see
-// SYRUP_MIX_BAR_WIDTH below) -- before gliding back home. Matches
-// MatchaMaking's own WHISK_MIX_DURATION_MS exactly, per request: same game
-// feel/length as the whisking challenge, not a shorter syrup-specific pour.
-const SYRUP_POUR_MS = 10000;
+// SYRUP_MIX_BAR_WIDTH below) -- before gliding back home. Originally matched
+// MatchaMaking's own WHISK_MIX_DURATION_MS (10s) exactly, but per request
+// shortened to ~5s for syrup specifically -- felt like it "didn't stop" at
+// the full whisking-length window. No longer a straight copy of that value.
+const SYRUP_POUR_MS = 5000;
 // Max % the bottle (and stream) can be nudged off-center in either
 // direction -- no longer a manual per-keypress step (see SYRUP_MIX_BAR_WIDTH
 // below), just the clamp range the balance minigame's ball position gets
@@ -367,6 +457,11 @@ const SYRUP_STREAM_COLORS = {
   // Honey-amber, sampled from HoneySyrup.png's own bottle-label color, same
   // "one palette, one source of truth" idea as the other two.
   'honey-syrup': 'rgba(214, 158, 46, 0.92)',
+  // Sampled from each bottle's own art the same way -- mango's golden-orange,
+  // lavender's soft purple, peach's coral-orange.
+  'mango-syrup': 'rgba(237, 168, 47, 0.92)',
+  'lavender-syrup': 'rgba(181, 156, 214, 0.92)',
+  'peach-syrup': 'rgba(237, 149, 116, 0.92)',
 };
 
 // ---- Syrup pour balance minigame ------------------------------------------
@@ -378,9 +473,10 @@ const SYRUP_STREAM_COLORS = {
 // one topping pair here that's an actual poured liquid. Per request, this is
 // meant to feel IDENTICAL to the whisking challenge, not just similar --
 // every physics constant below is a straight copy of MatchaMaking's own
-// MIX_* value (not independently tuned), and SYRUP_POUR_MS above now equals
-// WHISK_MIX_DURATION_MS exactly, so the pour holds open for the same 10s
-// window whisking does. REPLACES the old purely-cosmetic Left/Right aim
+// MIX_* value (not independently tuned) -- only SYRUP_POUR_MS itself (the
+// overall window length, not the physics feel) has since been shortened to
+// ~5s per request, rather than matching WHISK_MIX_DURATION_MS's 10s.
+// REPLACES the old purely-cosmetic Left/Right aim
 // effect (pourOffset stepped by a fixed SYRUP_MOVE_STEP per keypress, with
 // no gameplay effect) -- pourOffset is now DERIVED from the ball's own
 // position every tick instead (see the physics effect in the component
@@ -570,6 +666,9 @@ const FOAM_STREAM_COLORS = {
   'reg-cold-foam': 'rgba(234, 232, 227, 0.95)',
   // Banana-yellow, same family as the banana-foam bottle's own art.
   'banana-foam': 'rgba(240, 219, 137, 0.95)',
+  // Strawberry-pink/blueberry-blue, same "matches the bottle art" reasoning.
+  'strawberry-foam': 'rgba(247, 175, 199, 0.95)',
+  'blueberry-foam': 'rgba(138, 152, 214, 0.95)',
 };
 
 // ---- Pouring matcha-powder/guava-powder onto the carried-over drink -----
@@ -619,6 +718,8 @@ const POWDER_MOVE_RANGE = 8;
 const POWDER_STREAM_COLORS = {
   'matcha-powder': 'rgba(139, 165, 94, 0.95)',
   'guava-powder': 'rgba(232, 137, 122, 0.95)',
+  // Chocolate-brown, sampled from ChocoPowder.png's own label color.
+  'choco-powder': 'rgba(94, 58, 42, 0.95)',
 };
 
 // ---- Shared aim-lever minigame (foam/powder/mint-leaves placement) -------
@@ -671,6 +772,9 @@ function getLeverBarPos() {
 // history to inherit this number from, since the leaf never had one before
 // this minigame).
 const LEAF_MOVE_RANGE = 8;
+// Same idea, own copies, for the two newer standalone garnishes.
+const CHIP_MOVE_RANGE = 8;
+const BLOSSOM_MOVE_RANGE = 8;
 // A fresh leaf-green for the leaf's own spill puddle (see FOAM_STREAM_COLORS/
 // POWDER_STREAM_COLORS above for the same per-topping-type color role) --
 // deliberately not reusing SYRUP_STREAM_COLORS['mint-syrup'] even though
@@ -678,6 +782,11 @@ const LEAF_MOVE_RANGE = 8;
 // thing next to an actual mint-syrup spill if both ever show up in the same
 // round.
 const LEAF_SPILL_COLOR = 'rgba(90, 140, 70, 0.92)';
+// Same idea for the two newer standalone garnishes -- their own colors
+// (banana-chip tan, cherry-blossom pink) rather than reusing an existing
+// syrup/foam one, same "reads as its own thing" reasoning as LEAF_SPILL_COLOR.
+const CHIP_SPILL_COLOR = 'rgba(196, 148, 74, 0.92)';
+const BLOSSOM_SPILL_COLOR = 'rgba(232, 173, 191, 0.92)';
 
 // Given a topping's own resolved lever-catch offset (in the same physical
 // %-of-container units as foamPourOffset/powderPourOffset/leafPourOffset)
@@ -829,12 +938,57 @@ const MINT_LEAVES_POT_ITEM = {
   alt: 'Pot of mint leaves',
   canvasAspect: 299 / 278,
 };
+// Banana chips (order 4+) and cherry blossoms (order 5+) -- two more
+// standalone garnishes, same "own bowl, own one-shot pickup" shape as mint
+// leaves (see the big comment above MINT_LEAVES_POT_ITEM), per a later
+// request that every order's own unlocks stack rather than replace one
+// another. Each sits to the LEFT of the previous pot once it joins (see
+// POT_PAIR_WITH_CHIPS/_WITH_BLOSSOMS and POT_ITEMS_BASE/_WITH_CHIPS/
+// _WITH_BLOSSOMS below, right-anchored the same way SYRUP/FOAM/POWDER rows
+// grow) rather than stacking vertically -- there isn't the vertical room
+// below the powder pair for three more stacked pots the height of
+// MINT_LEAVES_POT_ITEM. canvasAspect for both (491/455, 492/456) is their
+// own raw canvas' opaque bounding box, same "trim the padding, measure
+// what's left" convention as MINT_LEAVES_POT_ITEM's own 299/278.
+const BANANA_CHIPS_POT_ITEM = {
+  key: 'banana-chips-pot',
+  src: './BananaChipsBowl.png',
+  alt: 'Bowl of banana chips',
+  canvasAspect: 491 / 455,
+};
+const CHERRY_BLOSSOMS_POT_ITEM = {
+  key: 'cherry-blossoms-pot',
+  src: './CherryBlossomsBowl.png',
+  alt: 'Bowl of cherry blossoms',
+  canvasAspect: 492 / 456,
+};
 const POT_HEIGHT = POWDER_HEIGHT * 1.15;
 const POT_GAP = 3; // vertical gap below the powder pair's own bottom edge (TOPPING_ROW_BOTTOM)
-const MINT_LEAVES_POT_POS = layoutPair([MINT_LEAVES_POT_ITEM], POT_HEIGHT, TOPPING_ROW_BOTTOM + POT_GAP, 0, {
+// Same "precompute every tier, pick one per customerNumber" pattern as the
+// syrup/foam/powder rows above -- picked via potItems in the component
+// below. mint-leaves-pot alone (order 2+, per mintLeavesUnlocked there) is
+// still the ONLY pot on orders 2-3; banana-chips-pot joins at order 4,
+// cherry-blossoms-pot at order 5 -- growing this row right-to-left the same
+// way layoutPair's own right-anchor already grows the powder row when a new
+// item is appended.
+const POT_PAIR_BASE = [MINT_LEAVES_POT_ITEM];
+const POT_PAIR_WITH_CHIPS = [...POT_PAIR_BASE, BANANA_CHIPS_POT_ITEM];
+const POT_PAIR_WITH_BLOSSOMS = [...POT_PAIR_WITH_CHIPS, CHERRY_BLOSSOMS_POT_ITEM];
+const POT_ITEMS_BASE = layoutPair(POT_PAIR_BASE, POT_HEIGHT, TOPPING_ROW_BOTTOM + POT_GAP, TIGHT_PAIR_GAP, {
   type: 'right',
   x: 100 - EDGE_MARGIN,
-})[0];
+});
+const POT_ITEMS_WITH_CHIPS = layoutPair(POT_PAIR_WITH_CHIPS, POT_HEIGHT, TOPPING_ROW_BOTTOM + POT_GAP, TIGHT_PAIR_GAP, {
+  type: 'right',
+  x: 100 - EDGE_MARGIN,
+});
+const POT_ITEMS_WITH_BLOSSOMS = layoutPair(
+  POT_PAIR_WITH_BLOSSOMS,
+  POT_HEIGHT,
+  TOPPING_ROW_BOTTOM + POT_GAP,
+  TIGHT_PAIR_GAP,
+  { type: 'right', x: 100 - EDGE_MARGIN }
+);
 
 // How long Enter-on-the-pot takes before the leaf actually appears on the
 // drink -- purely a pacing beat (there's no visible travel to time this
@@ -872,6 +1026,39 @@ export function getLeafBoxFor(topBox, offset = 0) {
   };
 }
 
+// ---- Banana chips/cherry blossoms: same one-shot-garnish shape as the
+// mint leaf above (own pot, own lever-catch, no draggable "in transit"
+// sprite), just their own resting size/aspect and their own single-piece
+// PNG (BananaChip.png/CherryBlossom.png -- the whole-bowl BananaChipsBowl.png/
+// CherryBlossomsBowl.png above are the POT art, not what lands on the
+// drink). canvasAspect for each is its own raw canvas' opaque bounding box,
+// same convention as LEAF_CANVAS_ASPECT.
+const CHIP_HEIGHT = 6; // % of container height, same as LEAF_HEIGHT
+const CHIP_CANVAS_ASPECT = 606 / 443; // BananaChip.png's own opaque bbox (201,253-807,696 out of a 1062x938 canvas)
+const CHIP_WIDTH = CHIP_HEIGHT * CHIP_CANVAS_ASPECT * (9 / 16);
+const CHIP_DIP_FRAC = 0.15;
+export function getChipBoxFor(topBox, offset = 0) {
+  return {
+    left: topBox.left + topBox.width / 2 - CHIP_WIDTH / 2 + offset,
+    top: topBox.top - CHIP_HEIGHT * (1 - CHIP_DIP_FRAC),
+    width: CHIP_WIDTH,
+    height: CHIP_HEIGHT,
+  };
+}
+
+const BLOSSOM_HEIGHT = 6;
+const BLOSSOM_CANVAS_ASPECT = 446 / 424; // CherryBlossom.png's own opaque bbox (35,30-481,454 out of a 515x485 canvas)
+const BLOSSOM_WIDTH = BLOSSOM_HEIGHT * BLOSSOM_CANVAS_ASPECT * (9 / 16);
+const BLOSSOM_DIP_FRAC = 0.15;
+export function getBlossomBoxFor(topBox, offset = 0) {
+  return {
+    left: topBox.left + topBox.width / 2 - BLOSSOM_WIDTH / 2 + offset,
+    top: topBox.top - BLOSSOM_HEIGHT * (1 - BLOSSOM_DIP_FRAC),
+    width: BLOSSOM_WIDTH,
+    height: BLOSSOM_HEIGHT,
+  };
+}
+
 const ToppingsStation = ({
   activeStep,
   customerNumber,
@@ -884,21 +1071,118 @@ const ToppingsStation = ({
 }) => {
   const containerRef = useRef(null);
 
-  // Banana foam becomes orderable/visible from order 2 onward, honey syrup
-  // and mint leaves from order 3 onward -- same "precompute every tier, pick
-  // one per customerNumber" gating as MilkSelection's own strawberryUnlocked/
-  // bottleItems. Since App.js only ever mounts one station component at a
-  // time (see the identical caveat on strawberryUnlocked in MilkSelection.js),
-  // customerNumber is fixed for this component's whole mounted lifetime, so a
-  // plain read here (no memoization) is safe.
+  // Traps the syrup pair's own nav (see the mint-syrup/guava-syrup legs of
+  // the nav-graph effect below) down to just Left/Right cycling between the
+  // two of them during the first-order walkthrough's own syrup-picking beat
+  // (showSyrupSpotlight, declared much further down) -- per request, the
+  // player shouldn't be able to arrow away from the syrup pair at all
+  // during that beat. Declared here (rather than only where
+  // showSyrupSpotlight itself lives) so the nav-graph effect -- which has
+  // to be registered before useFlatFocusNav for the same ordering reasons
+  // as every leg of that graph -- can read the CURRENT value without
+  // needing showSyrupSpotlight in its own dependency array. Kept in sync
+  // every render by a small effect declared right after showSyrupSpotlight
+  // itself, same "ref declared early, synced late" pattern MilkSelection.js
+  // uses for its own restrict*NavRef refs.
+  const restrictSyrupNavRef = useRef(false);
+
+  // Same idea again, for the foam pair during the first-order walkthrough's
+  // own foam-picking beat (showFoamSpotlight, declared much further down)
+  // -- per request, the player shouldn't be able to arrow away from the
+  // foam pair at all during that beat, only cycle Left/Right between
+  // matcha-cold-foam and reg-cold-foam. Kept in sync the same "ref declared
+  // early, synced late" way, by a small effect declared right after
+  // showFoamSpotlight itself.
+  const restrictFoamNavRef = useRef(false);
+
+  // Same idea again, for the powder pair during the first-order
+  // walkthrough's own powder-picking beat (showPowderSpotlight, declared
+  // much further down) -- per request, the player shouldn't be able to
+  // arrow away from the powder pair at all during that beat, only cycle
+  // Left/Right between matcha-powder and guava-powder. Kept in sync the
+  // same "ref declared early, synced late" way, by a small effect declared
+  // right after showPowderSpotlight itself.
+  const restrictPowderNavRef = useRef(false);
+
+  // Every order's own new toppings now stack on top of the last (per a
+  // later request -- nothing ever drops off the counter again). Banana
+  // foam/honey syrup/mint leaves unlock together at order 2 (previously
+  // staggered across orders 2/3); mango syrup/choco powder at order 3;
+  // lavender syrup/strawberry foam/banana chips at order 4; peach syrup/
+  // blueberry foam/cherry blossoms at order 5 (the session's last order,
+  // see ORDERS_PER_SESSION in ProgressBar.js). Same "precompute every tier,
+  // pick one per customerNumber" gating as MilkSelection's own
+  // strawberryUnlocked/bottleItems. Since App.js only ever mounts one
+  // station component at a time (see the identical caveat on
+  // strawberryUnlocked in MilkSelection.js), customerNumber is fixed for
+  // this component's whole mounted lifetime, so a plain read here (no
+  // memoization) is safe.
   const bananaFoamUnlocked = customerNumber >= 2;
-  const honeySyrupUnlocked = customerNumber >= 3;
-  const mintLeavesUnlocked = customerNumber >= 3;
-  const toppingItems = honeySyrupUnlocked
-    ? TOPPING_ITEMS_ORDER3
+  const honeySyrupUnlocked = customerNumber >= 2;
+  const mintLeavesUnlocked = customerNumber >= 2;
+  const mangoSyrupUnlocked = customerNumber >= 3;
+  const chocoPowderUnlocked = customerNumber >= 3;
+  const lavenderSyrupUnlocked = customerNumber >= 4;
+  const strawberryFoamUnlocked = customerNumber >= 4;
+  const bananaChipsUnlocked = customerNumber >= 4;
+  const peachSyrupUnlocked = customerNumber >= 5;
+  const blueberryFoamUnlocked = customerNumber >= 5;
+  const cherryBlossomsUnlocked = customerNumber >= 5;
+  // Each row (syrup/foam/powder) unlocks independently now that they no
+  // longer all advance together -- see SYRUP_ITEMS_*/FOAM_ITEMS_*/
+  // POWDER_ITEMS_* above. toppingItems (the combined pour-mechanic list the
+  // rest of this file already reads) is just their concatenation, same
+  // shape TOPPING_ITEMS_ORDER1/2/3 used to be precomputed as, just built
+  // per-render from the three independent picks instead.
+  const syrupItems = peachSyrupUnlocked
+    ? SYRUP_ITEMS_WITH_PEACH
+    : lavenderSyrupUnlocked
+    ? SYRUP_ITEMS_WITH_LAVENDER
+    : mangoSyrupUnlocked
+    ? SYRUP_ITEMS_WITH_MANGO
+    : honeySyrupUnlocked
+    ? SYRUP_ITEMS_WITH_HONEY
+    : SYRUP_ITEMS_BASE;
+  const foamItems = blueberryFoamUnlocked
+    ? FOAM_ITEMS_WITH_BLUEBERRY
+    : strawberryFoamUnlocked
+    ? FOAM_ITEMS_WITH_STRAWBERRY
     : bananaFoamUnlocked
-    ? TOPPING_ITEMS_ORDER2
-    : TOPPING_ITEMS_ORDER1;
+    ? FOAM_ITEMS_WITH_BANANA
+    : FOAM_ITEMS_BASE;
+  const powderItems = chocoPowderUnlocked ? POWDER_ITEMS_WITH_CHOCO : POWDER_ITEMS_BASE;
+  // Bug fix: this used to be a plain `[...powderItems, ...syrupItems,
+  // ...foamItems]` array literal, rebuilt fresh (new reference, even though
+  // never different contents within one customer) on every single render.
+  // toppingItems sits in the dependency array of the syrup/foam/powder
+  // pourStage transition effects below (each has its own setTimeout that
+  // hands the pour back to 'idle' after SYRUP_POUR_MS/FOAM_POUR_MS/
+  // POWDER_POUR_MS) -- and the syrup balance minigame's own physics tick
+  // calls setPourOffset/setSyrupSpills/setSyrupSpillGrowth every animation
+  // frame while pouring, so the component was re-rendering ~60x/second
+  // during a syrup pour. Every one of those re-renders created a new
+  // toppingItems reference, which re-ran the transition effect (cleanup +
+  // restart, replaying the pour SFX too), clearing the pending setTimeout
+  // and rescheduling a brand-new one before it could ever fire -- so the
+  // pour never actually stopped. useMemo keyed on the three (already
+  // reference-stable, since each is just a ternary pick of module-level
+  // constant arrays) inputs keeps this array's identity stable across
+  // renders unless the unlocked set genuinely changes.
+  const toppingItems = useMemo(
+    () => [...powderItems, ...syrupItems, ...foamItems],
+    [powderItems, syrupItems, foamItems]
+  );
+  // The pot row (mint-leaves-pot, then banana-chips-pot, then
+  // cherry-blossoms-pot) -- kept separate from toppingItems, same as before
+  // (it was never part of TOPPING_ITEMS_ORDER1/2/3 either), since it's a
+  // different mechanic (one-shot pickup, not a reusable pour) that the rest
+  // of this file's syrup/foam/powder-focused helpers don't need to know
+  // about.
+  const potItems = cherryBlossomsUnlocked
+    ? POT_ITEMS_WITH_BLOSSOMS
+    : bananaChipsUnlocked
+    ? POT_ITEMS_WITH_CHIPS
+    : POT_ITEMS_BASE;
 
   // This station's own explicit keyboard nav graph, per request -- same
   // "exact fixed graph, not generic spatial nearest-neighbor matching"
@@ -938,18 +1222,34 @@ const ToppingsStation = ({
       const regFoam = containerRef.current?.querySelector('[data-topping-key="reg-cold-foam"]') ?? null;
       const matchaFoam = containerRef.current?.querySelector('[data-topping-key="matcha-cold-foam"]') ?? null;
       // Only actually rendered from order 2 onward (see bananaFoamUnlocked
-      // above) -- null on order 1, so the optional-chained focus() calls
-      // below just no-op until then.
+      // above) -- null before then, so the optional-chained focus() calls
+      // below just no-op until then. strawberryFoam/blueberryFoam (order
+      // 4+/5+) are the row's newer members, same "null until unlocked"
+      // shape.
       const bananaFoam = containerRef.current?.querySelector('[data-topping-key="banana-foam"]') ?? null;
+      const strawberryFoam = containerRef.current?.querySelector('[data-topping-key="strawberry-foam"]') ?? null;
+      const blueberryFoam = containerRef.current?.querySelector('[data-topping-key="blueberry-foam"]') ?? null;
       const matchaPowder = containerRef.current?.querySelector('[data-topping-key="matcha-powder"]') ?? null;
       const guavaPowder = containerRef.current?.querySelector('[data-topping-key="guava-powder"]') ?? null;
+      // Choco powder (order 3+) -- null before then.
+      const chocoPowder = containerRef.current?.querySelector('[data-topping-key="choco-powder"]') ?? null;
       const guavaSyrup = containerRef.current?.querySelector('[data-topping-key="guava-syrup"]') ?? null;
       const mintSyrup = containerRef.current?.querySelector('[data-topping-key="mint-syrup"]') ?? null;
-      // Only actually rendered from order 3 onward (see honeySyrupUnlocked/
+      // Only actually rendered from order 2 onward (see honeySyrupUnlocked/
       // mintLeavesUnlocked above) -- null before then, so the optional-
       // chained focus() calls below just no-op until either unlocks.
+      // mangoSyrup/lavenderSyrup/peachSyrup (order 3+/4+/5+) are the syrup
+      // row's newer members, same "null until unlocked" shape.
       const honeySyrup = containerRef.current?.querySelector('[data-topping-key="honey-syrup"]') ?? null;
+      const mangoSyrup = containerRef.current?.querySelector('[data-topping-key="mango-syrup"]') ?? null;
+      const lavenderSyrup = containerRef.current?.querySelector('[data-topping-key="lavender-syrup"]') ?? null;
+      const peachSyrup = containerRef.current?.querySelector('[data-topping-key="peach-syrup"]') ?? null;
       const mintLeavesPot = containerRef.current?.querySelector('[data-topping-key="mint-leaves-pot"]') ?? null;
+      // Banana-chips-pot (order 4+) and cherry-blossoms-pot (order 5+) --
+      // the pot row's newer members, sitting to mint-leaves-pot's right once
+      // unlocked (see POT_PAIR_WITH_CHIPS/_WITH_BLOSSOMS above).
+      const bananaChipsPot = containerRef.current?.querySelector('[data-topping-key="banana-chips-pot"]') ?? null;
+      const cherryBlossomsPot = containerRef.current?.querySelector('[data-topping-key="cherry-blossoms-pot"]') ?? null;
       const orderButton = document.querySelector('.order-receipt-button');
       const gearButton = document.querySelector('.settings-toggle-button');
 
@@ -982,201 +1282,369 @@ const ToppingsStation = ({
         return;
       }
 
-      // Reg-cold-foam (white): Left -> matcha-cold-foam (green), Right ->
-      // banana-foam (order 2+ only -- a no-op on order 1, since bananaFoam
-      // is null then), Up -> guava-syrup, Down -> station dot.
+      // Reg-cold-foam (white): Left -> matcha-cold-foam (green, the only leg
+      // still allowed once restrictFoamNavRef.current is true -- see its
+      // own comment above), Right -> banana-foam (order 2+ only -- null on
+      // order 1, when this restriction is the only time it ever applies
+      // anyway), Up -> guava-syrup, Down -> station dot. Every action is
+      // fully handled here (preventDefault/stopImmediatePropagation
+      // unconditional) rather than partially falling through to
+      // useFlatFocusNav's own generic spatial fallback, so the foam pair's
+      // navigation is airtight regardless of restrictFoamNavRef, same shape
+      // as the syrup pair's own mint-syrup/guava-syrup legs above.
       if (active === regFoam) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        // Per request: both foam bottles show the halo until the player's
+        // first arrow press, then it collapses to just the focused one --
+        // see foamSpotlightMoved's own comment above.
+        setFoamSpotlightMoved(true);
         if (action === 'Left') {
-          e.preventDefault();
-          e.stopImmediatePropagation();
           matchaFoam?.focus();
-        } else if (action === 'Right') {
-          e.preventDefault();
-          e.stopImmediatePropagation();
-          bananaFoam?.focus();
-        } else if (action === 'Up') {
-          e.preventDefault();
-          e.stopImmediatePropagation();
-          guavaSyrup?.focus();
-        } else if (action === 'Down') {
-          e.preventDefault();
-          e.stopImmediatePropagation();
-          document.querySelector('.progress-step.current')?.focus();
+        } else if (!restrictFoamNavRef.current) {
+          if (action === 'Right') {
+            bananaFoam?.focus();
+          } else if (action === 'Up') {
+            guavaSyrup?.focus();
+          } else if (action === 'Down') {
+            document.querySelector('.progress-step.current')?.focus();
+          }
         }
         return;
       }
 
-      // Matcha-cold-foam (green): Up -> guava-syrup (same target as
+      // Matcha-cold-foam (green): Right -> reg-cold-foam (the only leg
+      // still allowed once restricted), Up -> guava-syrup (same target as
       // reg-cold-foam's own Up above -- the syrup pair sits directly above
-      // the whole foam pair, not one-per-foam), Down -> station dot.
+      // the whole foam pair, not one-per-foam), Down -> station dot. Left is
+      // trapped either way -- it's the leftmost item, nothing further left
+      // to land on.
       if (active === matchaFoam) {
-        if (action === 'Up') {
-          e.preventDefault();
-          e.stopImmediatePropagation();
-          guavaSyrup?.focus();
-        } else if (action === 'Down') {
-          e.preventDefault();
-          e.stopImmediatePropagation();
-          document.querySelector('.progress-step.current')?.focus();
-        }
-        return;
-      }
-
-      // Banana-foam (order 2+ only, sits to the right of reg-cold-foam):
-      // Left -> reg-cold-foam, Up -> guava-syrup (same shared target as the
-      // other two foams' own Up), Down -> station dot. Right is trapped (a
-      // no-op) -- it's the last item in the row, same "don't fall through
-      // to useFlatFocusNav's generic fallback" reasoning as guava-powder's
-      // own Right trap.
-      if (active === bananaFoam) {
-        if (action === 'Left') {
-          e.preventDefault();
-          e.stopImmediatePropagation();
-          regFoam?.focus();
-        } else if (action === 'Up') {
-          e.preventDefault();
-          e.stopImmediatePropagation();
-          guavaSyrup?.focus();
-        } else if (action === 'Down') {
-          e.preventDefault();
-          e.stopImmediatePropagation();
-          document.querySelector('.progress-step.current')?.focus();
-        } else if (action === 'Right') {
-          e.preventDefault();
-          e.stopImmediatePropagation();
-        }
-        return;
-      }
-
-      // Mint-syrup (now leftmost, per swap): Right -> guava-syrup, Down ->
-      // matcha-cold-foam (same target as guava-syrup's own Down below --
-      // the whole foam pair sits directly below the syrup pair, not
-      // one-per-syrup), Up -> settings (not the order button -- unlike the
-      // powder pair, this pair's Up goes to the gear directly).
-      if (active === mintSyrup) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        setFoamSpotlightMoved(true);
         if (action === 'Right') {
-          e.preventDefault();
-          e.stopImmediatePropagation();
-          guavaSyrup?.focus();
-        } else if (action === 'Down') {
-          e.preventDefault();
-          e.stopImmediatePropagation();
-          matchaFoam?.focus();
-        } else if (action === 'Up') {
-          e.preventDefault();
-          e.stopImmediatePropagation();
-          gearButton?.focus();
+          regFoam?.focus();
+        } else if (!restrictFoamNavRef.current) {
+          if (action === 'Up') {
+            guavaSyrup?.focus();
+          } else if (action === 'Down') {
+            document.querySelector('.progress-step.current')?.focus();
+          }
         }
         return;
       }
 
-      // Guava-syrup: Right -> honey-syrup (order 3+ only -- falls through to
+      // Banana-foam (order 2+, sits to the right of reg-cold-foam): Left ->
+      // reg-cold-foam, Right -> strawberry-foam (order 4+ -- null before
+      // then, so this traps same as it used to unconditionally), Up ->
+      // guava-syrup (same shared target as every foam's own Up), Down ->
+      // station dot.
+      if (active === bananaFoam) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        if (action === 'Left') {
+          regFoam?.focus();
+        } else if (action === 'Right') {
+          strawberryFoam?.focus();
+        } else if (action === 'Up') {
+          guavaSyrup?.focus();
+        } else if (action === 'Down') {
+          document.querySelector('.progress-step.current')?.focus();
+        }
+        return;
+      }
+
+      // Strawberry-foam (order 4+, sits to the right of banana-foam): Left
+      // -> banana-foam, Right -> blueberry-foam (order 5+ -- null before
+      // then, traps), Up -> guava-syrup, Down -> station dot.
+      if (active === strawberryFoam) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        if (action === 'Left') {
+          bananaFoam?.focus();
+        } else if (action === 'Right') {
+          blueberryFoam?.focus();
+        } else if (action === 'Up') {
+          guavaSyrup?.focus();
+        } else if (action === 'Down') {
+          document.querySelector('.progress-step.current')?.focus();
+        }
+        return;
+      }
+
+      // Blueberry-foam (order 5+, the row's last member): Left ->
+      // strawberry-foam, Up -> guava-syrup, Down -> station dot. Right is
+      // trapped -- it's the last item in the row.
+      if (active === blueberryFoam) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        if (action === 'Left') {
+          strawberryFoam?.focus();
+        } else if (action === 'Up') {
+          guavaSyrup?.focus();
+        } else if (action === 'Down') {
+          document.querySelector('.progress-step.current')?.focus();
+        }
+        return;
+      }
+
+      // Mint-syrup (now leftmost, per swap): Right -> guava-syrup (the only
+      // leg still allowed once restrictSyrupNavRef.current is true -- see
+      // its own comment above), Down -> matcha-cold-foam (same target as
+      // guava-syrup's own Down below -- the whole foam pair sits directly
+      // below the syrup pair, not one-per-syrup), Up -> settings (not the
+      // order button -- unlike the powder pair, this pair's Up goes to the
+      // gear directly). Left is trapped either way -- it's the leftmost
+      // item, nothing further left to land on. Every action is fully
+      // handled here (preventDefault/stopImmediatePropagation unconditional)
+      // rather than partially falling through to useFlatFocusNav's own
+      // generic spatial fallback, so the pair's navigation is airtight
+      // regardless of restrictSyrupNavRef, same shape as MilkSelection.js's
+      // own ICE_ADJACENCY-driven ice-cube leg.
+      if (active === mintSyrup) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        // Per request: both syrup bottles show the halo until the player's
+        // first arrow press, then it collapses to just the focused one --
+        // see syrupSpotlightMoved's own comment above.
+        setSyrupSpotlightMoved(true);
+        if (action === 'Right') {
+          guavaSyrup?.focus();
+        } else if (!restrictSyrupNavRef.current) {
+          if (action === 'Down') {
+            matchaFoam?.focus();
+          } else if (action === 'Up') {
+            gearButton?.focus();
+          }
+        }
+        return;
+      }
+
+      // Guava-syrup: Left -> mint-syrup (the only leg still allowed once
+      // restricted), Right -> honey-syrup (order 2+ -- falls through to
       // matcha-powder, continuing the same rightward chain matcha-powder's
       // own Right -> guava-powder already forms, whenever honey-syrup isn't
-      // rendered yet), Down -> matcha-cold-foam, Up -> settings (same target
-      // as mint-syrup's own Up above).
+      // rendered yet), Down -> matcha-cold-foam, Up -> settings (same
+      // target as mint-syrup's own Up above). Right/Down/Up are all gated
+      // behind !restrictSyrupNavRef.current -- harmless in practice since
+      // that ref is only ever true on order 1, when honey-syrup doesn't
+      // exist yet anyway, but kept explicit for the same "every escape
+      // route gated, not just the ones that happen to matter today"
+      // reasoning as mint-syrup's own leg above.
       if (active === guavaSyrup) {
-        if (action === 'Right') {
-          e.preventDefault();
-          e.stopImmediatePropagation();
-          (honeySyrup ?? matchaPowder)?.focus();
-        } else if (action === 'Down') {
-          e.preventDefault();
-          e.stopImmediatePropagation();
-          matchaFoam?.focus();
-        } else if (action === 'Up') {
-          e.preventDefault();
-          e.stopImmediatePropagation();
-          gearButton?.focus();
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        setSyrupSpotlightMoved(true);
+        if (action === 'Left') {
+          mintSyrup?.focus();
+        } else if (!restrictSyrupNavRef.current) {
+          if (action === 'Right') {
+            (honeySyrup ?? matchaPowder)?.focus();
+          } else if (action === 'Down') {
+            matchaFoam?.focus();
+          } else if (action === 'Up') {
+            gearButton?.focus();
+          }
         }
         return;
       }
 
-      // Honey-syrup (order 3+ only, sits to the right of guava-syrup): Left
-      // -> guava-syrup, Right -> matcha-powder (continuing the same
-      // rightward chain), Down -> matcha-cold-foam (same target as the rest
-      // of the syrup row's own Down), Up -> settings.
+      // Honey-syrup (order 2+, sits to the right of guava-syrup): Left ->
+      // guava-syrup, Right -> mango-syrup (order 3+ -- falls through to
+      // matcha-powder, continuing the same rightward chain, whenever
+      // mango-syrup isn't rendered yet), Down -> matcha-cold-foam (same
+      // target as the rest of the syrup row's own Down), Up -> settings.
       if (active === honeySyrup) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
         if (action === 'Left') {
-          e.preventDefault();
-          e.stopImmediatePropagation();
           guavaSyrup?.focus();
         } else if (action === 'Right') {
-          e.preventDefault();
-          e.stopImmediatePropagation();
-          matchaPowder?.focus();
+          (mangoSyrup ?? matchaPowder)?.focus();
         } else if (action === 'Down') {
-          e.preventDefault();
-          e.stopImmediatePropagation();
           matchaFoam?.focus();
         } else if (action === 'Up') {
-          e.preventDefault();
-          e.stopImmediatePropagation();
           gearButton?.focus();
         }
         return;
       }
 
-      // Matcha-powder: Right -> guava-powder, Up -> order button, Down ->
-      // the mint-leaves pot (order 3+ only -- falls through to the cup
-      // whenever the pot isn't rendered yet, since it sits directly below
-      // the powder pair once it exists -- see mintLeavesUnlocked above).
-      if (active === matchaPowder) {
-        if (action === 'Right') {
-          e.preventDefault();
-          e.stopImmediatePropagation();
-          guavaPowder?.focus();
-        } else if (action === 'Up') {
-          e.preventDefault();
-          e.stopImmediatePropagation();
-          orderButton?.focus();
-        } else if (action === 'Down') {
-          e.preventDefault();
-          e.stopImmediatePropagation();
-          (mintLeavesPot ?? cup)?.focus();
-        }
-        return;
-      }
-
-      // Guava-powder: Up -> order button, Down -> the mint-leaves pot (same
-      // fallback-to-cup reasoning as matcha-powder's own Down above). Right
-      // is trapped (a no-op) -- it's the last item in the pair, so it
-      // shouldn't fall through to useFlatFocusNav's generic spatial
-      // fallback, which was jumping out to the order button on Right
-      // instead of only on Up.
-      if (active === guavaPowder) {
-        if (action === 'Up') {
-          e.preventDefault();
-          e.stopImmediatePropagation();
-          orderButton?.focus();
-        } else if (action === 'Down') {
-          e.preventDefault();
-          e.stopImmediatePropagation();
-          (mintLeavesPot ?? cup)?.focus();
+      // Mango-syrup (order 3+, sits to the right of honey-syrup): Left ->
+      // honey-syrup, Right -> lavender-syrup (order 4+ -- falls through to
+      // matcha-powder, same rightward-chain reasoning), Down ->
+      // matcha-cold-foam, Up -> settings.
+      if (active === mangoSyrup) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        if (action === 'Left') {
+          honeySyrup?.focus();
         } else if (action === 'Right') {
-          e.preventDefault();
-          e.stopImmediatePropagation();
+          (lavenderSyrup ?? matchaPowder)?.focus();
+        } else if (action === 'Down') {
+          matchaFoam?.focus();
+        } else if (action === 'Up') {
+          gearButton?.focus();
         }
         return;
       }
 
-      // Mint-leaves pot (order 3+ only, sits below the powder pair): Up ->
-      // matcha-powder (mirroring that item's own Down leg above), Down ->
-      // cup. Left/Right are trapped (no-ops) -- it's a single item with no
-      // horizontal neighbor, same "don't fall through to the generic
-      // spatial fallback" reasoning as guava-powder's own Right trap.
-      if (active === mintLeavesPot) {
-        if (action === 'Up') {
-          e.preventDefault();
-          e.stopImmediatePropagation();
+      // Lavender-syrup (order 4+, sits to the right of mango-syrup): Left
+      // -> mango-syrup, Right -> peach-syrup (order 5+ -- falls through to
+      // matcha-powder, same rightward-chain reasoning), Down ->
+      // matcha-cold-foam, Up -> settings.
+      if (active === lavenderSyrup) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        if (action === 'Left') {
+          mangoSyrup?.focus();
+        } else if (action === 'Right') {
+          (peachSyrup ?? matchaPowder)?.focus();
+        } else if (action === 'Down') {
+          matchaFoam?.focus();
+        } else if (action === 'Up') {
+          gearButton?.focus();
+        }
+        return;
+      }
+
+      // Peach-syrup (order 5+, the row's last member): Left ->
+      // lavender-syrup, Right -> matcha-powder (crossing over into the
+      // powder row, same escape every other rightmost syrup item's own
+      // Right already does), Down -> matcha-cold-foam, Up -> settings.
+      if (active === peachSyrup) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        if (action === 'Left') {
+          lavenderSyrup?.focus();
+        } else if (action === 'Right') {
           matchaPowder?.focus();
         } else if (action === 'Down') {
-          e.preventDefault();
-          e.stopImmediatePropagation();
+          matchaFoam?.focus();
+        } else if (action === 'Up') {
+          gearButton?.focus();
+        }
+        return;
+      }
+
+      // Matcha-powder: Right -> guava-powder (the only leg still allowed
+      // once restrictPowderNavRef.current is true -- see its own comment
+      // above), Up -> order button, Down -> the mint-leaves pot (order 3+
+      // only -- falls through to the cup whenever the pot isn't rendered
+      // yet, since it sits directly below the powder pair once it exists --
+      // see mintLeavesUnlocked above). Left is trapped either way -- it's
+      // the leftmost item, nothing further left to land on. Every action is
+      // fully handled here (preventDefault/stopImmediatePropagation
+      // unconditional) rather than partially falling through to
+      // useFlatFocusNav's own generic spatial fallback, so the pair's
+      // navigation is airtight regardless of restrictPowderNavRef, same
+      // shape as the syrup/foam pairs' own legs above.
+      if (active === matchaPowder) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        // Per request: both powders show the halo until the player's first
+        // arrow press, then it collapses to just the focused one -- see
+        // powderSpotlightMoved's own comment above.
+        setPowderSpotlightMoved(true);
+        if (action === 'Right') {
+          guavaPowder?.focus();
+        } else if (!restrictPowderNavRef.current) {
+          if (action === 'Up') {
+            orderButton?.focus();
+          } else if (action === 'Down') {
+            (mintLeavesPot ?? cup)?.focus();
+          }
+        }
+        return;
+      }
+
+      // Guava-powder: Left -> matcha-powder (the only leg still allowed
+      // once restricted), Right -> choco-powder (order 3+ -- null before
+      // then, traps same as this used to unconditionally), Up -> order
+      // button, Down -> the mint-leaves pot (same fallback-to-cup reasoning
+      // as matcha-powder's own Down above).
+      if (active === guavaPowder) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        setPowderSpotlightMoved(true);
+        if (action === 'Left') {
+          matchaPowder?.focus();
+        } else if (action === 'Right') {
+          chocoPowder?.focus();
+        } else if (!restrictPowderNavRef.current) {
+          if (action === 'Up') {
+            orderButton?.focus();
+          } else if (action === 'Down') {
+            (mintLeavesPot ?? cup)?.focus();
+          }
+        }
+        return;
+      }
+
+      // Choco-powder (order 3+, the row's last member, sits to the right of
+      // guava-powder): Left -> guava-powder, Up -> order button, Down -> the
+      // mint-leaves pot (same fallback-to-cup reasoning as the rest of the
+      // powder row's own Down). Right is trapped -- it's the last item.
+      if (active === chocoPowder) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        if (action === 'Left') {
+          guavaPowder?.focus();
+        } else if (action === 'Up') {
+          orderButton?.focus();
+        } else if (action === 'Down') {
+          (mintLeavesPot ?? cup)?.focus();
+        }
+        return;
+      }
+
+      // Mint-leaves pot (order 2+, sits below the powder pair): Up ->
+      // matcha-powder (mirroring that item's own Down leg above), Right ->
+      // banana-chips-pot (order 4+ -- null before then, traps), Down ->
+      // cup. Left is trapped -- it's the leftmost item in the pot row.
+      if (active === mintLeavesPot) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        if (action === 'Up') {
+          matchaPowder?.focus();
+        } else if (action === 'Right') {
+          bananaChipsPot?.focus();
+        } else if (action === 'Down') {
           cup?.focus();
-        } else if (action === 'Left' || action === 'Right') {
-          e.preventDefault();
-          e.stopImmediatePropagation();
+        }
+        return;
+      }
+
+      // Banana-chips pot (order 4+, sits to the right of the mint-leaves
+      // pot): Left -> mint-leaves pot, Right -> cherry-blossoms pot (order
+      // 5+ -- null before then, traps), Up -> matcha-powder, Down -> cup.
+      if (active === bananaChipsPot) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        if (action === 'Left') {
+          mintLeavesPot?.focus();
+        } else if (action === 'Right') {
+          cherryBlossomsPot?.focus();
+        } else if (action === 'Up') {
+          matchaPowder?.focus();
+        } else if (action === 'Down') {
+          cup?.focus();
+        }
+        return;
+      }
+
+      // Cherry-blossoms pot (order 5+, the pot row's last member): Left ->
+      // banana-chips pot, Up -> matcha-powder, Down -> cup. Right is
+      // trapped -- it's the last item in the row.
+      if (active === cherryBlossomsPot) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        if (action === 'Left') {
+          bananaChipsPot?.focus();
+        } else if (action === 'Up') {
+          matchaPowder?.focus();
+        } else if (action === 'Down') {
+          cup?.focus();
         }
         return;
       }
@@ -1249,13 +1717,16 @@ const ToppingsStation = ({
   // uses, so this cup renders with the exact same art/size it had there.
   const incomingCupType = incomingDrink?.cupType ?? 'glass';
   const incomingDrinkSize = CUP_TYPES[incomingCupType].tableSize;
-  // Same centering formula INCOMING_DRINK_SPOT above uses, just against
-  // this particular cup's own (possibly narrower, if plastic) size instead
-  // of always TABLE_SIZE, so it's still centered in the frame regardless of
-  // which cup type arrived.
+  // Same centering formula INCOMING_DRINK_SPOT above uses (DRINK_VERTICAL_
+  // OFFSET included, so it stays aligned with that approximation), just
+  // against this particular cup's own (possibly narrower, if plastic) size
+  // instead of always TABLE_SIZE, so it's still centered horizontally in
+  // the frame regardless of which cup type arrived -- plus
+  // INCOMING_DRINK_LEFT_OFFSET_FRAC's own per-type nudge (0 for glass/
+  // plastic, so only the mug actually moves).
   const incomingDrinkHomeSpot = {
-    left: 50 - incomingDrinkSize.width / 2,
-    top: 50 - incomingDrinkSize.height / 2,
+    left: 50 - incomingDrinkSize.width / 2 + (INCOMING_DRINK_LEFT_OFFSET_FRAC[incomingCupType] ?? 0) * incomingDrinkSize.width,
+    top: 50 - incomingDrinkSize.height / 2 + DRINK_VERTICAL_OFFSET,
   };
   // The drink's own live render position. Unlike the individual toppings
   // above (which only ever move a bottle/tin around, never the drink
@@ -1319,7 +1790,14 @@ const ToppingsStation = ({
   const [syrupPositions, setSyrupPositions] = useState(() => {
     const positions = {};
     for (const item of toppingItems) {
-      if (item.key === 'guava-syrup' || item.key === 'mint-syrup' || item.key === 'honey-syrup') {
+      if (
+        item.key === 'guava-syrup' ||
+        item.key === 'mint-syrup' ||
+        item.key === 'honey-syrup' ||
+        item.key === 'mango-syrup' ||
+        item.key === 'lavender-syrup' ||
+        item.key === 'peach-syrup'
+      ) {
         positions[item.key] = { left: item.left, top: item.top };
       }
     }
@@ -1383,6 +1861,29 @@ const ToppingsStation = ({
   // the overlay's own render condition further down).
   const showSyrupSpotlight = customerNumber === 1 && (!cupSyrup || pouringKey !== null);
 
+  // Whether the player has actually pressed an arrow key or Enter yet
+  // during this beat -- per request, both syrup bottles show the white
+  // focus halo (see topping-focus-halo on the syrup JSX further down) the
+  // instant showSyrupSpotlight turns on, and collapses down to just the one
+  // actually focused bottle the moment the player makes their first move
+  // (see the mint-syrup/guava-syrup legs of the nav-graph effect above, and
+  // handleSyrupKeyDown below, both of which flip this true). Reset back to
+  // false every time showSyrupSpotlight itself turns on, so it's ready
+  // fresh if this beat were ever to run again.
+  const [syrupSpotlightMoved, setSyrupSpotlightMoved] = useState(false);
+  useEffect(() => {
+    if (showSyrupSpotlight) setSyrupSpotlightMoved(false);
+  }, [showSyrupSpotlight]);
+
+  // Keeps restrictSyrupNavRef (declared/read far above, alongside
+  // containerRef, for the same early-registration ordering reasons) in sync
+  // with showSyrupSpotlight. No dependency array -- re-reads every render,
+  // same "cheap and never a render behind" shape as MilkSelection.js's own
+  // restrict*NavRef sync effects.
+  useEffect(() => {
+    restrictSyrupNavRef.current = showSyrupSpotlight;
+  });
+
   // Pre-selects mint-syrup (SYRUP_PAIR_BASE's own first/leftmost item, see
   // its own comment above) the moment this beat starts, same "focus the
   // first exempted item so Enter/drag both work immediately with no extra
@@ -1428,7 +1929,13 @@ const ToppingsStation = ({
   const [foamPositions, setFoamPositions] = useState(() => {
     const positions = {};
     for (const item of toppingItems) {
-      if (item.key === 'matcha-cold-foam' || item.key === 'reg-cold-foam' || item.key === 'banana-foam') {
+      if (
+        item.key === 'matcha-cold-foam' ||
+        item.key === 'reg-cold-foam' ||
+        item.key === 'banana-foam' ||
+        item.key === 'strawberry-foam' ||
+        item.key === 'blueberry-foam'
+      ) {
         positions[item.key] = { left: item.left, top: item.top };
       }
     }
@@ -1475,6 +1982,16 @@ const ToppingsStation = ({
   // showFoamSpotlight itself already picks up from showSyrupSpotlight.
   const showFoamSpotlight = customerNumber === 1 && !showSyrupSpotlight && (!cupFoam || foamPouringKey !== null);
 
+  // Same "every item shows the halo until the first move" rule as
+  // syrupSpotlightMoved above, just for the foam pair during this beat --
+  // see topping-focus-halo on the foam JSX further down, and the
+  // regFoam/matchaFoam legs of the nav-graph effect/handleFoamKeyDown
+  // below, both of which flip this true.
+  const [foamSpotlightMoved, setFoamSpotlightMoved] = useState(false);
+  useEffect(() => {
+    if (showFoamSpotlight) setFoamSpotlightMoved(false);
+  }, [showFoamSpotlight]);
+
   // Pre-selects matcha-cold-foam (FOAM_PAIR_BASE's own first/leftmost item,
   // same reasoning as mint-syrup's own focus effect above) the moment this
   // beat starts.
@@ -1484,6 +2001,15 @@ const ToppingsStation = ({
     }
   }, [showFoamSpotlight]);
 
+  // Keeps restrictFoamNavRef (declared/read far above, alongside
+  // containerRef, for the same early-registration ordering reasons) in sync
+  // with showFoamSpotlight. No dependency array -- re-reads every render,
+  // same "cheap and never a render behind" shape as this file's other
+  // restrict refs' own sync effects.
+  useEffect(() => {
+    restrictFoamNavRef.current = showFoamSpotlight;
+  });
+
   // ---- Matcha-powder/guava-powder: pick up, pour on top of the drink, or
   // snap back home -- identical shape to the syrup/foam state above, see
   // the big comment above POWDER_HOVER_GAP for what's different about
@@ -1492,7 +2018,7 @@ const ToppingsStation = ({
   const [powderPositions, setPowderPositions] = useState(() => {
     const positions = {};
     for (const item of toppingItems) {
-      if (item.key === 'matcha-powder' || item.key === 'guava-powder') {
+      if (item.key === 'matcha-powder' || item.key === 'guava-powder' || item.key === 'choco-powder') {
         positions[item.key] = { left: item.left, top: item.top };
       }
     }
@@ -1542,6 +2068,16 @@ const ToppingsStation = ({
     !showFoamSpotlight &&
     (!cupPowder || powderPouringKey !== null);
 
+  // Same "every item shows the halo until the first move" rule as
+  // syrupSpotlightMoved/foamSpotlightMoved above, just for the powder pair
+  // during this beat -- see topping-focus-halo on the powder JSX further
+  // down, and the matchaPowder/guavaPowder legs of the nav-graph effect/
+  // handlePowderKeyDown below, both of which flip this true.
+  const [powderSpotlightMoved, setPowderSpotlightMoved] = useState(false);
+  useEffect(() => {
+    if (showPowderSpotlight) setPowderSpotlightMoved(false);
+  }, [showPowderSpotlight]);
+
   // Pre-selects matcha-powder (POWDER_PAIR's own first/leftmost item, same
   // reasoning as mint-syrup's/matcha-cold-foam's own focus effects above)
   // the moment this beat starts.
@@ -1550,6 +2086,15 @@ const ToppingsStation = ({
       containerRef.current?.querySelector('[data-topping-key="matcha-powder"]')?.focus();
     }
   }, [showPowderSpotlight]);
+
+  // Keeps restrictPowderNavRef (declared/read far above, alongside
+  // containerRef, for the same early-registration ordering reasons) in sync
+  // with showPowderSpotlight. No dependency array -- re-reads every render,
+  // same "cheap and never a render behind" shape as this file's other
+  // restrict refs' own sync effects.
+  useEffect(() => {
+    restrictPowderNavRef.current = showPowderSpotlight;
+  });
 
   // ---- Fourth first-order-only walkthrough beat, sending the
   // drink on -- picks up the instant showPowderSpotlight above ends (powder
@@ -1616,6 +2161,18 @@ const ToppingsStation = ({
   // come from; it starts at 0 simply because no leaf has been aimed yet.
   const [leafPourOffset, setLeafPourOffset] = useState(0);
 
+  // ---- Banana-chips/cherry-blossoms pots: same one-shot-garnish shape as
+  // mint-leaves-pot immediately above (own state trio each, per this
+  // project's own "duplicate rather than generalize across similarly-shaped
+  // mechanics" convention -- see the syrup/foam/powder state above for the
+  // same pattern) -- just their own stage/flag/offset triples.
+  const [chipStage, setChipStage] = useState('idle'); // 'idle' | 'aiming' | 'placing'
+  const [cupBananaChip, setCupBananaChip] = useState(false);
+  const [chipPourOffset, setChipPourOffset] = useState(0);
+  const [blossomStage, setBlossomStage] = useState('idle'); // 'idle' | 'aiming' | 'placing'
+  const [cupCherryBlossom, setCupCherryBlossom] = useState(false);
+  const [blossomPourOffset, setBlossomPourOffset] = useState(0);
+
   // ---- Shared aim-lever minigame -- see the big comment on LEVER_PERIOD_MS
   // above. leverFor tracks which of the three pending placements this run
   // is actually for ('foam' | 'powder' | 'leaf'), read once by
@@ -1624,7 +2181,7 @@ const ToppingsStation = ({
   // three separate stage variables to figure out "which one is this for"
   // would be more fragile than just tracking it directly.
   const [leverStage, setLeverStage] = useState('idle'); // 'idle' | 'active'
-  const [leverFor, setLeverFor] = useState(null); // 'foam' | 'powder' | 'leaf' | null
+  const [leverFor, setLeverFor] = useState(null); // 'foam' | 'powder' | 'leaf' | 'chip' | 'blossom' | null
   // Live marker center position (0-100, 50 == dead center), written by the
   // rAF physics effect below -- a ref, not state, same "no React re-render
   // needed every frame, the DOM node is mutated directly instead" reasoning
@@ -1690,6 +2247,14 @@ const ToppingsStation = ({
     setLeafPourOffset(offsetFrac * LEAF_MOVE_RANGE);
     setLeafStage('placing');
   };
+  const resolveChipLever = (offsetFrac) => {
+    setChipPourOffset(offsetFrac * CHIP_MOVE_RANGE);
+    setChipStage('placing');
+  };
+  const resolveBlossomLever = (offsetFrac) => {
+    setBlossomPourOffset(offsetFrac * BLOSSOM_MOVE_RANGE);
+    setBlossomStage('placing');
+  };
 
   // The one real interaction with the lever -- Enter/center catches it
   // wherever it currently reads. shouldDebounceEnter guards against a
@@ -1712,6 +2277,8 @@ const ToppingsStation = ({
     if (target === 'foam') resolveFoamLever(offsetFrac);
     else if (target === 'powder') resolvePowderLever(offsetFrac);
     else if (target === 'leaf') resolveLeafLever(offsetFrac);
+    else if (target === 'chip') resolveChipLever(offsetFrac);
+    else if (target === 'blossom') resolveBlossomLever(offsetFrac);
   };
 
   // Which topping (if any, across all three pairs) currently has the white
@@ -1741,6 +2308,8 @@ const ToppingsStation = ({
     foamPourStage === 'idle' &&
     powderPourStage === 'idle' &&
     leafStage === 'idle' &&
+    chipStage === 'idle' &&
+    blossomStage === 'idle' &&
     drinkSendStage === 'idle';
   const canPourFoam =
     !!incomingDrink &&
@@ -1748,6 +2317,8 @@ const ToppingsStation = ({
     pourStage === 'idle' &&
     powderPourStage === 'idle' &&
     leafStage === 'idle' &&
+    chipStage === 'idle' &&
+    blossomStage === 'idle' &&
     drinkSendStage === 'idle';
   const canPourPowder =
     !!incomingDrink &&
@@ -1755,9 +2326,11 @@ const ToppingsStation = ({
     pourStage === 'idle' &&
     foamPourStage === 'idle' &&
     leafStage === 'idle' &&
+    chipStage === 'idle' &&
+    blossomStage === 'idle' &&
     drinkSendStage === 'idle';
   // Same mutual-exclusion gating as the three pours above, just for the
-  // mint-leaves pot -- mintLeavesUnlocked (order 3+) gates whether the pot
+  // mint-leaves pot -- mintLeavesUnlocked (order 2+) gates whether the pot
   // is even rendered at all, this additionally gates whether it can
   // actually be used right now.
   const canPlaceLeaf =
@@ -1767,6 +2340,31 @@ const ToppingsStation = ({
     pourStage === 'idle' &&
     foamPourStage === 'idle' &&
     powderPourStage === 'idle' &&
+    chipStage === 'idle' &&
+    blossomStage === 'idle' &&
+    drinkSendStage === 'idle';
+  // Same shape as canPlaceLeaf above, just for the two newer standalone
+  // garnishes -- bananaChipsUnlocked (order 4+)/cherryBlossomsUnlocked
+  // (order 5+) gate whether each pot is even rendered at all.
+  const canPlaceChip =
+    bananaChipsUnlocked &&
+    !!incomingDrink &&
+    chipStage === 'idle' &&
+    pourStage === 'idle' &&
+    foamPourStage === 'idle' &&
+    powderPourStage === 'idle' &&
+    leafStage === 'idle' &&
+    blossomStage === 'idle' &&
+    drinkSendStage === 'idle';
+  const canPlaceBlossom =
+    cherryBlossomsUnlocked &&
+    !!incomingDrink &&
+    blossomStage === 'idle' &&
+    pourStage === 'idle' &&
+    foamPourStage === 'idle' &&
+    powderPourStage === 'idle' &&
+    leafStage === 'idle' &&
+    chipStage === 'idle' &&
     drinkSendStage === 'idle';
   // The drink itself can be sent on once there's actually a drink and
   // nothing's currently mid-pour onto it (same "don't let two things move
@@ -1778,7 +2376,9 @@ const ToppingsStation = ({
     pourStage === 'idle' &&
     foamPourStage === 'idle' &&
     powderPourStage === 'idle' &&
-    leafStage === 'idle';
+    leafStage === 'idle' &&
+    chipStage === 'idle' &&
+    blossomStage === 'idle';
 
   const beginSyrupPour = (key) => {
     if (!canPourSyrup) return;
@@ -1972,11 +2572,26 @@ const ToppingsStation = ({
     if (action !== 'Enter') return;
     if (shouldDebounceEnter(e)) return;
     e.preventDefault();
+    // Same "first move collapses the halo down to just the focused one"
+    // rule as the nav-graph effect's own mint-syrup/guava-syrup legs --
+    // Enter counts as a move too.
+    setSyrupSpotlightMoved(true);
     playButtonClick();
     if (canPourSyrup) {
       beginSyrupPour(item.key);
       return;
     }
+    // Bug fix: canPourSyrup is false both when this item can't pour yet AND
+    // while it (or another topping) is already mid-pour -- previously this
+    // branch didn't distinguish the two, so pressing Enter again on the
+    // bottle that's actively pouring snapped its on-screen position straight
+    // back to its shelf spot while pourStage/pouringKey stayed 'pouring',
+    // leaving the flipped (WHISK_FLIP_DEG) bottle and its falling stream/
+    // spill rendering stuck at the shelf instead of over the cup -- reported
+    // as the bottle looking "upside down and dripping" in place. Bail out
+    // here instead of resetting position for the item that's actually mid-
+    // pour; only snap idle, out-of-sync items back home.
+    if (pouringKey === item.key) return;
     setSyrupPositions((prev) => ({ ...prev, [item.key]: { left: item.left, top: item.top } }));
   };
 
@@ -2044,11 +2659,19 @@ const ToppingsStation = ({
     if (action !== 'Enter') return;
     if (shouldDebounceEnter(e)) return;
     e.preventDefault();
+    // Same "first move collapses the halo down to just the focused one"
+    // rule as the nav-graph effect's own regFoam/matchaFoam legs -- Enter
+    // counts as a move too.
+    setFoamSpotlightMoved(true);
     playButtonClick();
     if (canPourFoam) {
       beginFoamPour(item.key);
       return;
     }
+    // Same fix as handleSyrupKeyDown's own version of this branch just
+    // above -- don't snap the item that's already mid-pour back to its
+    // shelf spot while its stage is still active.
+    if (foamPouringKey === item.key) return;
     setFoamPositions((prev) => ({ ...prev, [item.key]: { left: item.left, top: item.top } }));
   };
 
@@ -2110,11 +2733,19 @@ const ToppingsStation = ({
     if (action !== 'Enter') return;
     if (shouldDebounceEnter(e)) return;
     e.preventDefault();
+    // Same "first move collapses the halo down to just the focused one"
+    // rule as the nav-graph effect's own matchaPowder/guavaPowder legs --
+    // Enter counts as a move too.
+    setPowderSpotlightMoved(true);
     playButtonClick();
     if (canPourPowder) {
       beginPowderPour(item.key);
       return;
     }
+    // Same fix as handleSyrupKeyDown's own version of this branch above --
+    // don't snap the item that's already mid-pour back to its shelf spot
+    // while its stage is still active.
+    if (powderPouringKey === item.key) return;
     setPowderPositions((prev) => ({ ...prev, [item.key]: { left: item.left, top: item.top } }));
   };
 
@@ -2152,13 +2783,63 @@ const ToppingsStation = ({
     return () => clearTimeout(t);
   }, [leafStage]);
 
-  const handleMintLeavesPotKeyDown = (e) => {
+  // ---- Banana-chips/cherry-blossoms pots -- identical shape to the
+  // mint-leaves pot immediately above, own copies (same "duplicate rather
+  // than generalize" convention this whole file already follows for
+  // syrup/foam/powder).
+  const beginChipPlace = () => {
+    if (!canPlaceChip) return;
+    setChipStage('aiming');
+  };
+
+  useEffect(() => {
+    if (chipStage === 'aiming') {
+      setLeverFor('chip');
+      setLeverStage('active');
+      return undefined;
+    }
+    if (chipStage !== 'placing') return undefined;
+    playToppingPlace();
+    const t = setTimeout(() => {
+      setCupBananaChip(true);
+      setChipStage('idle');
+    }, LEAF_PLACE_MS);
+    return () => clearTimeout(t);
+  }, [chipStage]);
+
+  const beginBlossomPlace = () => {
+    if (!canPlaceBlossom) return;
+    setBlossomStage('aiming');
+  };
+
+  useEffect(() => {
+    if (blossomStage === 'aiming') {
+      setLeverFor('blossom');
+      setLeverStage('active');
+      return undefined;
+    }
+    if (blossomStage !== 'placing') return undefined;
+    playToppingPlace();
+    const t = setTimeout(() => {
+      setCupCherryBlossom(true);
+      setBlossomStage('idle');
+    }, LEAF_PLACE_MS);
+    return () => clearTimeout(t);
+  }, [blossomStage]);
+
+  // Single dispatcher for all three pots (mirroring how syrup/foam/powder's
+  // own handle*KeyDown(item) factories take the item and act on its key) --
+  // routes Enter to whichever begin*Place function the pot's own key
+  // actually corresponds to.
+  const handlePotKeyDown = (key) => (e) => {
     const action = getActionFromKeyEvent(e);
     if (action !== 'Enter') return;
     if (shouldDebounceEnter(e)) return;
     e.preventDefault();
     playButtonClick();
-    beginLeafPlace();
+    if (key === 'banana-chips-pot') beginChipPlace();
+    else if (key === 'cherry-blossoms-pot') beginBlossomPlace();
+    else beginLeafPlace();
   };
 
   // ---- Sending the finished drink on to Serving -- select + Enter, same
@@ -2186,6 +2867,8 @@ const ToppingsStation = ({
       syrup: cupSyrup,
       powder: cupPowder,
       leaf: cupMintLeaf,
+      chip: cupBananaChip,
+      blossom: cupCherryBlossom,
       // Forwarded on so FinalCombination.js renders the same cup art/size
       // this screen (and Milk Selection before it) actually used -- same
       // "known simplification, now fixed" reasoning as this screen's own
@@ -2202,6 +2885,8 @@ const ToppingsStation = ({
         foamKey: cupFoam?.key,
         powderKey: cupPowder?.key,
         mintLeavesApplied: cupMintLeaf,
+        bananaChipsApplied: cupBananaChip,
+        cherryBlossomsApplied: cupCherryBlossom,
         // syrupMessUpCountRef.current -- the balance minigame's own raw
         // mess-up count from whichever syrup pour actually landed (see that
         // ref's own comment further up) -- read here at the handoff, same
@@ -2212,11 +2897,13 @@ const ToppingsStation = ({
         // fraction scoreToppings' own leverCredit expects (see that
         // function's comment) -- null (rather than 0, which would read as a
         // dead-center catch) when the topping was never applied, same "no
-        // reading" null milkFillPercent already uses in scoreMixingDrink's
-        // own call site.
+        // reading" null spillCount already uses in scoreMixingDrink's own
+        // call site (MilkSelection.js).
         foamPlacementFrac: cupFoam ? foamPourOffset / FOAM_MOVE_RANGE : null,
         powderPlacementFrac: cupPowder ? powderPourOffset / POWDER_MOVE_RANGE : null,
         leafPlacementFrac: cupMintLeaf ? leafPourOffset / LEAF_MOVE_RANGE : null,
+        chipPlacementFrac: cupBananaChip ? chipPourOffset / CHIP_MOVE_RANGE : null,
+        blossomPlacementFrac: cupCherryBlossom ? blossomPourOffset / BLOSSOM_MOVE_RANGE : null,
         order,
       })
     );
@@ -2339,6 +3026,13 @@ const ToppingsStation = ({
   // additional shift on top of whatever this landing box already carries.
   const leafLandingBox = cupFoam && renderedFoamCapBox ? renderedFoamCapBox : incomingTopBox;
   const incomingLeafBox = cupMintLeaf && leafLandingBox ? getLeafBoxFor(leafLandingBox, leafPourOffset) : null;
+  // Same "settle on the foam's own top ellipse if there's foam to catch it"
+  // choice as leafLandingBox above, for the two newer standalone garnishes.
+  const chipLandingBox = cupFoam && renderedFoamCapBox ? renderedFoamCapBox : incomingTopBox;
+  const incomingChipBox = cupBananaChip && chipLandingBox ? getChipBoxFor(chipLandingBox, chipPourOffset) : null;
+  const blossomLandingBox = cupFoam && renderedFoamCapBox ? renderedFoamCapBox : incomingTopBox;
+  const incomingBlossomBox =
+    cupCherryBlossom && blossomLandingBox ? getBlossomBoxFor(blossomLandingBox, blossomPourOffset) : null;
 
   // ---- Spill puddles for a missed lever catch -- see leverMissFor's own
   // comment above. null while nothing's actually been applied yet (nothing
@@ -2346,6 +3040,8 @@ const ToppingsStation = ({
   const foamSpill = cupFoam ? leverMissFor(foamPourOffset, FOAM_MOVE_RANGE) : null;
   const powderSpill = cupPowder ? leverMissFor(powderPourOffset, POWDER_MOVE_RANGE) : null;
   const leafSpill = cupMintLeaf ? leverMissFor(leafPourOffset, LEAF_MOVE_RANGE) : null;
+  const chipSpill = cupBananaChip ? leverMissFor(chipPourOffset, CHIP_MOVE_RANGE) : null;
+  const blossomSpill = cupCherryBlossom ? leverMissFor(blossomPourOffset, BLOSSOM_MOVE_RANGE) : null;
   // Lever bar's own fixed position -- see getLeverBarPos' own comment above
   // for why this doesn't need to track the drink's live render position.
   const leverBarPos = getLeverBarPos();
@@ -2375,7 +3071,7 @@ const ToppingsStation = ({
             comment on SYRUP_HOVER_GAP above for why a full flip rather than
             milk bottles' own partial tilt. */}
         {toppingItems
-          .filter((item) => item.key === 'guava-syrup' || item.key === 'mint-syrup' || item.key === 'honey-syrup')
+          .filter((item) => SYRUP_PAIR_WITH_PEACH.some((s) => s.key === item.key))
           .map((item) => {
           const isPouring = pouringKey === item.key;
           const basePos = syrupPositions[item.key];
@@ -2386,6 +3082,18 @@ const ToppingsStation = ({
               src={item.src}
               alt={`${item.alt}. Select it and press Enter to pour some in. While it's pouring, use Left/Right to aim the stream.`}
               className={`station-item movable${isPouring ? ' settling' : ''}${
+                // Per request: both syrup bottles get the white focus halo
+                // the instant showSyrupSpotlight turns on, until the
+                // player's first arrow/Enter press (syrupSpotlightMoved --
+                // see its own comment above), at which point this drops
+                // away and the normal single-bottle :focus-visible halo
+                // (see .station-item.movable:focus-visible in
+                // MatchaMaking.css) takes back over on its own. Excluded
+                // while actually pouring (isPouring), same "don't halo the
+                // one mid-animation" reasoning as Milk Selection's own
+                // bottles excluding their own isPouring one.
+                showSyrupSpotlight && !syrupSpotlightMoved && !isPouring ? ' topping-focus-halo' : ''
+              }${
                 showSyrupSpotlight ? ' topping-spotlight-exempt' : ''
               }`}
               data-focusable
@@ -2421,7 +3129,7 @@ const ToppingsStation = ({
             below (the two beats are mutually exclusive by construction, see
             showFoamSpotlight's own comment, but each only ever exempts its
             own target). */}
-        {toppingItems.filter((item) => item.key === 'matcha-cold-foam' || item.key === 'reg-cold-foam' || item.key === 'banana-foam').map(
+        {toppingItems.filter((item) => FOAM_PAIR_WITH_BLUEBERRY.some((f) => f.key === item.key)).map(
           (item) => {
             const isPouring = foamPouringKey === item.key;
             const basePos = foamPositions[item.key];
@@ -2432,6 +3140,16 @@ const ToppingsStation = ({
                 src={item.src}
                 alt={`${item.alt}. Select it and press Enter to pour some in. While it's pouring, catch the lever right in the middle to land it clean.`}
                 className={`station-item movable${isPouring ? ' settling' : ''}${
+                  // Per request: both foam bottles get the white focus halo
+                  // the instant showFoamSpotlight turns on, until the
+                  // player's first arrow/Enter press (foamSpotlightMoved --
+                  // see its own comment above), at which point this drops
+                  // away and the normal single-bottle :focus-visible halo
+                  // takes back over on its own. Excluded while actually
+                  // pouring (isPouring), same "don't halo the one mid-
+                  // animation" reasoning as the syrup pair's own images.
+                  showFoamSpotlight && !foamSpotlightMoved && !isPouring ? ' topping-focus-halo' : ''
+                }${
                   showFoamSpotlight ? ' topping-spotlight-exempt' : ''
                 }`}
                 data-focusable
@@ -2464,7 +3182,7 @@ const ToppingsStation = ({
             beats -- deliberately not exempt during
             showSyrupSpotlight/showFoamSpotlight, same mutual-exclusivity
             reasoning as those two beats' own images. */}
-        {toppingItems.filter((item) => POWDER_PAIR.some((p) => p.key === item.key)).map((item) => {
+        {toppingItems.filter((item) => POWDER_PAIR_WITH_CHOCO.some((p) => p.key === item.key)).map((item) => {
           const isPouring = powderPouringKey === item.key;
           const basePos = powderPositions[item.key];
           const pos = isPouring ? { left: basePos.left + powderPourOffset, top: basePos.top } : basePos;
@@ -2474,6 +3192,16 @@ const ToppingsStation = ({
               src={item.src}
               alt={`${item.alt}. Select it and press Enter to pour some in. While it's pouring, catch the lever right in the middle to land it clean.`}
               className={`station-item movable${isPouring ? ' settling' : ''}${
+                // Per request: both powders get the white focus halo the
+                // instant showPowderSpotlight turns on, until the player's
+                // first arrow/Enter press (powderSpotlightMoved -- see its
+                // own comment above), at which point this drops away and
+                // the normal single-item :focus-visible halo takes back
+                // over on its own. Excluded while actually pouring
+                // (isPouring), same "don't halo the one mid-animation"
+                // reasoning as the syrup/foam pairs' own images.
+                showPowderSpotlight && !powderSpotlightMoved && !isPouring ? ' topping-focus-halo' : ''
+              }${
                 showPowderSpotlight ? ' topping-spotlight-exempt' : ''
               }`}
               data-focusable
@@ -2493,42 +3221,68 @@ const ToppingsStation = ({
             />
           );
         })}
-        {/* Mint-leaves pot -- order 3+ only. D-pad-selectable but not
-            draggable, same ".selectable" treatment MatchaMaking.js's own
-            grade tins use (Enter/Space only, no mouse-drag mechanic) -- see
-            the big comment above MINT_LEAVES_POT_ITEM in this file. */}
-        {mintLeavesUnlocked && (
-          <img
-            src={MINT_LEAVES_POT_ITEM.src}
-            alt={`${MINT_LEAVES_POT_ITEM.alt}. Select it and press Enter to pick up a leaf and place it on the drink.`}
-            className="station-item selectable"
-            data-focusable
-            data-topping-key="mint-leaves-pot"
-            tabIndex={0}
-            style={{
-              left: `${MINT_LEAVES_POT_POS.left}%`,
-              top: `${MINT_LEAVES_POT_POS.top}%`,
-              width: `${MINT_LEAVES_POT_POS.width}%`,
-              height: `${MINT_LEAVES_POT_POS.height}%`,
-            }}
-            onKeyDown={handleMintLeavesPotKeyDown}
-            onFocus={() => setFocusedTopping('mint-leaves-pot')}
-            onBlur={() => setFocusedTopping((prev) => (prev === 'mint-leaves-pot' ? null : prev))}
-          />
-        )}
+        {/* Pot row -- mint-leaves pot (order 2+), banana-chips pot (order
+            4+), cherry-blossoms pot (order 5+), growing left of the
+            powder pair the same way the syrup/foam rows grow (see potItems
+            above). D-pad-selectable but not draggable, same ".selectable"
+            treatment MatchaMaking.js's own grade tins use (Enter/Space
+            only, no mouse-drag mechanic) -- see the big comment above
+            MINT_LEAVES_POT_ITEM in this file. Each pot's alt text/Enter
+            action differs by what it actually gives the player, so alt and
+            onKeyDown are looked up per item.key rather than hardcoded to
+            the leaf's own copy. */}
+        {potItems.map((item) => {
+          const potAlt =
+            item.key === 'banana-chips-pot'
+              ? 'pick up a banana chip and place it on the drink'
+              : item.key === 'cherry-blossoms-pot'
+              ? 'pick up a cherry blossom and place it on the drink'
+              : 'pick up a leaf and place it on the drink';
+          return (
+            <img
+              key={item.key}
+              src={item.src}
+              alt={`${item.alt}. Select it and press Enter to ${potAlt}.`}
+              className="station-item selectable"
+              data-focusable
+              data-topping-key={item.key}
+              tabIndex={0}
+              style={{
+                left: `${item.left}%`,
+                top: `${item.top}%`,
+                width: `${item.width}%`,
+                height: `${item.height}%`,
+              }}
+              onKeyDown={handlePotKeyDown(item.key)}
+              onFocus={() => setFocusedTopping(item.key)}
+              onBlur={() => setFocusedTopping((prev) => (prev === item.key ? null : prev))}
+            />
+          );
+        })}
         {/* Name label above whichever topping currently has the white focus
             halo (see focusedTopping above) -- e.g. "guava syrup", "matcha
             foam". A single block covering all six items (rather than one
             per pair) since exactly one of them can be focused at a time;
             pos is worked out the same way each pair's own .map() above
             works it out (its resting position, shifted by that pair's own
-            pourOffset while it's actually pouring). */}
-        {toppingItems.filter((item) => item.key === focusedTopping).map((item) => {
+            pourOffset while it's actually pouring). Foam is the one
+            exception, per request -- its label disappears entirely the
+            instant Enter's pressed and the pour actually starts
+            (foamPouringKey === item.key), rather than continuing to follow
+            the bottle through its own pour animation the way syrup's/
+            powder's own labels still do. */}
+        {toppingItems
+          .filter((item) => item.key === focusedTopping)
+          .filter((item) => {
+            const isFoam = FOAM_PAIR_WITH_BLUEBERRY.some((f) => f.key === item.key);
+            return !(isFoam && foamPouringKey === item.key);
+          })
+          .map((item) => {
           let pos;
-          if (item.key === 'guava-syrup' || item.key === 'mint-syrup' || item.key === 'honey-syrup') {
+          if (SYRUP_PAIR_WITH_PEACH.some((s) => s.key === item.key)) {
             const basePos = syrupPositions[item.key];
             pos = pouringKey === item.key ? { left: basePos.left + pourOffset, top: basePos.top } : basePos;
-          } else if (item.key === 'matcha-cold-foam' || item.key === 'reg-cold-foam' || item.key === 'banana-foam') {
+          } else if (FOAM_PAIR_WITH_BLUEBERRY.some((f) => f.key === item.key)) {
             const basePos = foamPositions[item.key];
             pos = foamPouringKey === item.key ? { left: basePos.left + foamPourOffset, top: basePos.top } : basePos;
           } else {
@@ -2549,22 +3303,26 @@ const ToppingsStation = ({
             </p>
           );
         })}
-        {/* Same focus-halo name label as the block above, just for the
-            mint-leaves pot specifically -- it isn't part of toppingItems
-            (it's not one of the pour-mechanic pairs that block already
-            iterates), so it needs its own small one-item version here. */}
-        {focusedTopping === 'mint-leaves-pot' && (
-          <p
-            className="topping-label"
-            aria-hidden="true"
-            style={{
-              left: `${MINT_LEAVES_POT_POS.left + MINT_LEAVES_POT_POS.width / 2}%`,
-              top: `${MINT_LEAVES_POT_POS.top - TOPPING_LABEL_GAP}%`,
-            }}
-          >
-            mint leaves
-          </p>
-        )}
+        {/* Same focus-halo name label as the block above, just for the pot
+            row -- it isn't part of toppingItems (it's not one of the
+            pour-mechanic pairs that block already iterates), so it needs
+            its own small version here, covering all three pots the same
+            way the block above covers every syrup/foam/powder item. */}
+        {potItems
+          .filter((item) => item.key === focusedTopping)
+          .map((item) => (
+            <p
+              key={item.key}
+              className="topping-label"
+              aria-hidden="true"
+              style={{
+                left: `${item.left + item.width / 2}%`,
+                top: `${item.top - TOPPING_LABEL_GAP}%`,
+              }}
+            >
+              {item.key === 'banana-chips-pot' ? 'banana chips' : item.key === 'cherry-blossoms-pot' ? 'cherry blossoms' : 'mint leaves'}
+            </p>
+          ))}
         {/* Carried-over drink -- now interactive (select + Enter to send),
             same treatment the bowl/cup themselves get one screen earlier
             once they're ready to move on. Every fill/fleck below is
@@ -2787,6 +3545,45 @@ const ToppingsStation = ({
                   top: `${incomingLeafBox.top}%`,
                   width: `${incomingLeafBox.width}%`,
                   height: `${incomingLeafBox.height}%`,
+                }}
+              />
+            )}
+            {/* Banana chip/cherry blossom garnishes -- same shape as the
+                mint-leaf garnish just above (own single-piece PNG, not the
+                whole-bowl pot art), reusing .cup-leaf-garnish directly since
+                it's already just plain positioning/animation with no color
+                of its own. */}
+            {incomingChipBox && (
+              <img
+                src="./BananaChip.png"
+                alt=""
+                aria-hidden="true"
+                draggable={false}
+                className={`cup-leaf-garnish${drinkSendStage === 'vanishing' ? ' bowl-vanishing' : ''}${
+                  showSyrupSpotlight || showFoamSpotlight || showPowderSpotlight || showSendSpotlight ? ' topping-spotlight-exempt' : ''
+                }`}
+                style={{
+                  left: `${incomingChipBox.left}%`,
+                  top: `${incomingChipBox.top}%`,
+                  width: `${incomingChipBox.width}%`,
+                  height: `${incomingChipBox.height}%`,
+                }}
+              />
+            )}
+            {incomingBlossomBox && (
+              <img
+                src="./CherryBlossom.png"
+                alt=""
+                aria-hidden="true"
+                draggable={false}
+                className={`cup-leaf-garnish${drinkSendStage === 'vanishing' ? ' bowl-vanishing' : ''}${
+                  showSyrupSpotlight || showFoamSpotlight || showPowderSpotlight || showSendSpotlight ? ' topping-spotlight-exempt' : ''
+                }`}
+                style={{
+                  left: `${incomingBlossomBox.left}%`,
+                  top: `${incomingBlossomBox.top}%`,
+                  width: `${incomingBlossomBox.width}%`,
+                  height: `${incomingBlossomBox.height}%`,
                 }}
               />
             )}
@@ -3073,6 +3870,8 @@ const ToppingsStation = ({
         {renderToppingSpill(foamSpill, FOAM_STREAM_COLORS[cupFoam?.key], 'foam-spill')}
         {renderToppingSpill(powderSpill, POWDER_STREAM_COLORS[cupPowder?.key], 'powder-spill')}
         {renderToppingSpill(leafSpill, LEAF_SPILL_COLOR, 'leaf-spill')}
+        {renderToppingSpill(chipSpill, CHIP_SPILL_COLOR, 'chip-spill')}
+        {renderToppingSpill(blossomSpill, BLOSSOM_SPILL_COLOR, 'blossom-spill')}
         {/* Falling foam stream -- same idea as the syrup stream above, see
             the big comment on FOAM_STREAM_COLORS/getFoamHoverPos in this
             file. Only shown during the actual 'pouring' stage.
@@ -3197,8 +3996,13 @@ const ToppingsStation = ({
             own left edge with a small gap, top: 34.5% levels with its
             vertical center (24 + 21 / 2). Eyeballed the same way every
             other exact position in this project is, may need a small nudge
-            once actually seen against the live render. */}
-        {showPowderSpotlight && (
+            once actually seen against the live render. Gated on
+            !powderPouringKey in addition to showPowderSpotlight itself --
+            same "go pick one" vs "now pour it" distinction as
+            .topping-syrup-callout's own !pouringKey guard above, per
+            request that this disappear the instant a powder's actually
+            been picked rather than staying up through its own pour. */}
+        {showPowderSpotlight && !powderPouringKey && (
           <div className="topping-powder-callout">
             <p className="topping-powder-callout-text">use the arrows and pick the right powder</p>
             <svg
@@ -3301,12 +4105,26 @@ const ToppingsStation = ({
             make-drink-zone className exempt only during showSendSpotlight,
             and spotlightExempt on <ProgressBar> itself exempt only during
             showAdvanceSpotlight) punch through it via a higher z-index.
-            pointer-events: none so it never blocks input while it's up. */}
-        {(showSyrupSpotlight ||
-          showFoamSpotlight ||
-          showPowderSpotlight ||
-          showSendSpotlight ||
-          showAdvanceSpotlight) && <div className="topping-spotlight-overlay" aria-hidden="true" />}
+            pointer-events: none so it never blocks input while it's up.
+            BUG FIX: this actually has to render AFTER <ProgressBar> (not
+            before it, as it originally did here) to work at all --
+            .progress-bar-wrap (ProgressBar.css) carries its own hardcoded
+            z-index: 25, an exact TIE with this overlay's own z-index: 25,
+            and equal-z-index ties resolve by DOM/paint order (later
+            element wins), not by which one's "more exempt". With the
+            overlay rendered first (as it originally was), the bar -- later
+            in the DOM either way -- always won that tie and showed through
+            untinted regardless of spotlightExempt, covering the bar during
+            this whole walkthrough only by accident never actually working.
+            Moving this below <ProgressBar> makes THIS the later element
+            instead, so it correctly covers the bar by default now, and only
+            spotlightExempt's own explicit z-index: 26 override (see
+            .progress-bar-wrap.ordering-spotlight-exempt in
+            CustomerOrdering.css) punches back through, exactly as every
+            other exempt element on this screen already does. Matches
+            MatchaMaking.js/MilkSelection.js, where <ProgressBar> was
+            already rendered before their own overlay for this same
+            reason. */}
         <OrderReceiptButton order={order} />
         <ProgressBar
           activeStep={activeStep}
@@ -3340,6 +4158,11 @@ const ToppingsStation = ({
           // MilkSelection.js/ProgressBar.js for the shared reasoning).
           spotlightExempt={showAdvanceSpotlight}
         />
+        {(showSyrupSpotlight ||
+          showFoamSpotlight ||
+          showPowderSpotlight ||
+          showSendSpotlight ||
+          showAdvanceSpotlight) && <div className="topping-spotlight-overlay" aria-hidden="true" />}
       </div>
     </div>
   );

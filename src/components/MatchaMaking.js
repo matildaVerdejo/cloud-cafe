@@ -20,17 +20,18 @@ import { scoreMatchaMaking } from '../gameloop/scoring';
 // Each item PNG has already been cropped to its own visible content (no
 // leftover transparent padding), so width/height here can use the image's
 // own aspect ratio without distortion.
-// Base three, always available. Hojicha (added per request, order 4 onward
-// only -- see hojichaUnlocked in the component below) sits at the end of
-// this list, same "new one lands as the rightmost tin once unlocked"
-// convention as MilkSelection.js's own BOTTLE_KEYS_WITH_STRAWBERRY. Unlike
-// that file's bottle row though, there's no free space to its right to grow
-// into here -- the tin cluster's right edge (86.35) already sits hard
-// against the scoop spoons/bar (87.58+, see SCOOP_SPOON_LEFT/SCOOP_BAR_BOX
-// below) -- so STATIC_ITEMS_WITH_HOJICHA below doesn't just append a
-// same-sized fourth tin, it re-lays-out all four narrower within the exact
-// same overall footprint the original three occupied (63.65 to 86.35), so
-// order 4+ never needs more horizontal room than orders 1-3 already used.
+// Base three, always available. Hojicha (order 3 onward, moved up from
+// order 4 per a later request -- see hojichaUnlocked in the component
+// below) sits at the end of this list, same "new one lands as the rightmost
+// tin once unlocked" convention as MilkSelection.js's own
+// BOTTLE_KEYS_WITH_STRAWBERRY. Unlike that file's bottle row though, there's
+// no free space to its right to grow into here -- the tin cluster's right
+// edge (86.35) already sits hard against the scoop spoons/bar (87.58+, see
+// SCOOP_SPOON_LEFT/SCOOP_BAR_BOX below) -- so STATIC_ITEMS_WITH_HOJICHA
+// below doesn't just append a same-sized fourth tin, it re-lays-out all
+// four narrower within the exact same overall footprint the original three
+// occupied (63.65 to 86.35), so order 3+ never needs more horizontal room
+// than orders 1-2 already used.
 const STATIC_ITEMS_BASE = [
   { key: 'cafe-grade', src: './CafeGrade.png', alt: 'Cafe grade matcha tin', left: 63.65, top: 25.66, width: 6.9, height: 19.34 },
   { key: 'classic-grade', src: './ClassicGrade.png', alt: 'Classic grade matcha tin', left: 71.55, top: 25.47, width: 6.9, height: 19.53 },
@@ -913,14 +914,15 @@ function getCurrentScaleX(el) {
 
 const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order, onSendToMilk, onScored }) => {
   const containerRef = useRef(null);
-  // Hojicha tin unlocked order 4 onward, same "read once, unmounts between
-  // customers" reasoning as CustomerOrdering.js's own baseOptions/
-  // toppingOptions -- this whole component unmounts/remounts each new
-  // customer, so customerNumber is fixed for this mount's lifetime. tinItems
-  // drives both JSX loops below (the tins themselves and the focused-tin
-  // label) -- see STATIC_ITEMS_BASE/STATIC_ITEMS_WITH_HOJICHA above for the
-  // actual layout math.
-  const hojichaUnlocked = customerNumber >= 4;
+  // Hojicha tin unlocked order 3 onward (moved up from order 4, per
+  // request), same "read once, unmounts between customers" reasoning as
+  // CustomerOrdering.js's own baseOptions/toppingOptions -- this whole
+  // component unmounts/remounts each new customer, so customerNumber is
+  // fixed for this mount's lifetime. tinItems drives both JSX loops below
+  // (the tins themselves and the focused-tin label) -- see
+  // STATIC_ITEMS_BASE/STATIC_ITEMS_WITH_HOJICHA above for the actual layout
+  // math.
+  const hojichaUnlocked = customerNumber >= 3;
   const tinItems = hojichaUnlocked ? STATIC_ITEMS_WITH_HOJICHA : STATIC_ITEMS_BASE;
   // Declared up here (rather than scattered near where each one used to
   // live -- heaterButtonRef/kettleRef/whiskRef were each declared right
@@ -1644,13 +1646,23 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
   // 'idle'), same "flash until acted on" shape as every earlier beat.
   const showBowlHint = whiskStage === 'done' && bowlStage === 'idle';
 
-  // Ninth walkthrough beat, first order only -- reuses showBowlHint's own
-  // boundary, exempting the bowl (see MOVABLE_ITEMS' isBowl handling
-  // further down) and the whole ProgressBar (see spotlightExempt passed to
-  // <ProgressBar> further down, OR'd together with showStationAdvanceSpotlight
-  // below so the bar stays exempt continuously across both of this
-  // screen's last two beats) instead of a hint label + flashing halo.
-  const showBowlCarrySpotlight = customerNumber === 1 && showBowlHint;
+  // Ninth walkthrough beat, first order only -- exempting the bowl (see
+  // MOVABLE_ITEMS' isBowl handling further down) and the whole ProgressBar
+  // (see spotlightExempt passed to <ProgressBar> further down, OR'd
+  // together with showStationAdvanceSpotlight below so the bar stays
+  // exempt continuously across both of this screen's last two beats)
+  // instead of a hint label + flashing halo.
+  //
+  // Spans bowlStage 'idle' THROUGH 'carrying'/'vanishing' now (previously
+  // just reused showBowlHint's own boundary, which is bowlStage === 'idle'
+  // only) -- report was that the pink tint disappeared entirely the
+  // instant the player actually sent the bowl off, since none of this
+  // screen's other showXSpotlight flags cover the carry/fade, leaving the
+  // whole screen fully unmasked until showStationAdvanceSpotlight picks up
+  // at bowlStage === 'sent'. Ends there instead (excludes 'sent') so the
+  // handoff between the two stays seamless, same "OR'd together, no gap"
+  // reasoning the ProgressBar's own spotlightExempt prop already relies on.
+  const showBowlCarrySpotlight = customerNumber === 1 && whiskStage === 'done' && bowlStage !== 'sent';
 
   // Tenth and final walkthrough beat -- reuses the SAME boundary this
   // screen's own final highlight beat already uses (bowlStage === 'sent',
@@ -2884,10 +2896,14 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
                 below pointing down at the spoon/bowl, same shape as
                 .matcha-tin-callout above. Sits at the same general spot the
                 old big-spoon-hint used (SPOON_HINT_LEFT/TOP), just styled
-                like the rest of this walkthrough instead. Gone the instant
-                showSpoonSpotlight ends (the pour's actually finished,
-                bigSpoonStage reaches 'done'). */}
-            {showSpoonSpotlight && (
+                like the rest of this walkthrough instead. The spotlight
+                exemption (showSpoonSpotlight, on the spoon itself elsewhere
+                in this file) still runs all the way to bigSpoonStage
+                'done' as before, but per request this label specifically
+                now also requires bigSpoonStage === 'idle' -- it should
+                disappear as soon as the spoon actually starts its
+                moving-then-pouring dump sequence, not linger through it. */}
+            {showSpoonSpotlight && bigSpoonStage === 'idle' && (
               <div
                 className="matcha-spoon-callout"
                 // Shifted further left than SPOON_HINT_LEFT itself (the old
@@ -3091,8 +3107,13 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
             pointing down at the kettle, same shape as .matcha-tin-callout.
             Gone the instant showKettleSpotlight ends (the water's actually
             landed -- see showKettlePourSpotlight above, which takes over
-            from here). */}
-        {showKettleSpotlight && (
+            from here), OR as soon as the kettle starts gliding toward the
+            bowl, per request -- showKettleSpotlight itself still spans the
+            whole 'idle'-through-glide window (so the kettle stays exempt
+            from the tint the entire time, same as before), but this label
+            specifically now also requires kettleStage === 'idle' so it
+            doesn't linger once the player's actually started the pour. */}
+        {showKettleSpotlight && kettleStage === 'idle' && (
           <div className="matcha-kettle-callout" style={{ left: `${KETTLE_CALLOUT_LEFT}%`, top: `${KETTLE_HINT_TOP}%` }}>
             <p className="matcha-kettle-callout-text">pour the water</p>
             <svg
@@ -3472,8 +3493,10 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
                 // Shifted further up/left than the mixBarPos-derived anchor
                 // itself (the old hint's own position, still used as-is for
                 // orders 2/3) per feedback, then further left again per
-                // additional feedback.
-                style={{ left: `${mixBarPos.left + MIX_BAR_WIDTH / 2 - 14}%`, top: `${mixBarPos.top - 16}%` }}
+                // additional feedback, then nudged back right a little (-14
+                // to -8) per further feedback that it had ended up sitting
+                // too far left.
+                style={{ left: `${mixBarPos.left + MIX_BAR_WIDTH / 2 - 8}%`, top: `${mixBarPos.top - 16}%` }}
               >
                 <p className="matcha-mix-callout-text">use the arrow keys to whisk without spilling</p>
                 <svg
@@ -3536,23 +3559,26 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
               );
             });
           })()}
-        {/* "Make Drink" drop-zone -- appears once whisking is done and
-            disappears the instant the bowl actually heads there (bowlStage
-            leaving 'idle' -- see beginBowlCarry above), same beat as the
-            bowl's own highlight/hint retiring, since the bowl's already
-            gliding to this exact spot by then and the marker's served its
-            purpose. Not itself focusable -- it's a drop target the *bowl*
-            gets sent to via its own Enter press (handleBowlKeyDown), same
-            "the marker just marks a zone, the movable item is what's
-            actually selected" pattern the ice box/cup drop zones use on the
-            Milk Selection screen. aria-hidden since the bowl's own alt text
-            (see the isBowl branch above) already describes this action to
-            screen readers. Just a plain gray square with a thick arrow
-            pointing at it -- no text, no animation (see .make-drink-zone's
-            own comment in MatchaMaking.css). */}
-        {whiskStage === 'done' && bowlStage === 'idle' && (
+        {/* "Make Drink" drop-zone -- appears once whisking is done. Stays up
+            through bowlStage 'carrying' now, not just 'idle' -- it's the
+            actual destination the bowl is gliding to, so per request it
+            should still be there (and visible through the walkthrough's
+            pink tint, see the exempt class below) the whole time the bowl
+            is being carried toward it, only disappearing once the bowl's
+            actually arrived and starts fading in place ('vanishing'), at
+            which point the marker's served its purpose. Not itself
+            focusable -- it's a drop target the *bowl* gets sent to via its
+            own Enter press (handleBowlKeyDown), same "the marker just marks
+            a zone, the movable item is what's actually selected" pattern
+            the ice box/cup drop zones use on the Milk Selection screen.
+            aria-hidden since the bowl's own alt text (see the isBowl branch
+            above) already describes this action to screen readers. Just a
+            plain gray square with a thick arrow pointing at it -- no text,
+            no animation (see .make-drink-zone's own comment in
+            MatchaMaking.css). */}
+        {whiskStage === 'done' && (bowlStage === 'idle' || bowlStage === 'carrying') && (
           <div
-            className="make-drink-zone"
+            className={`make-drink-zone${showBowlCarrySpotlight ? ' matcha-spotlight-exempt' : ''}`}
             aria-hidden="true"
             style={{
               left: `${MAKE_DRINK_ZONE.left}%`,

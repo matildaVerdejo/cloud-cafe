@@ -23,10 +23,11 @@
 // expand/collapse view. Most checks are plain all-or-nothing (credit is
 // omitted, and pct() below just reads 1/0 off `correct` instead) -- the
 // exceptions today are Matcha Making's own teaspoons and water-temperature
-// checks (see scoreMatchaMaking) and Mixing Drink's own milk-pour-amount
-// check (see scoreMixingDrink), all three graduated 0-1 credit instead,
-// since "how close were you" is a real, continuous thing on each of those
-// gauges rather than a simple hit-or-miss.
+// checks (see scoreMatchaMaking), graduated 0-1 credit instead, since "how
+// close were you" is a real, continuous thing on those gauges rather than a
+// simple hit-or-miss. Mixing Drink's own milk-pour check used to be a third
+// (grading the balance-the-ball minigame's own spill count) but that
+// minigame's been removed entirely -- see scoreMixingDrink's own comment.
 //
 // No known gaps left of the "order form can ask for something the station
 // can't actually produce" shape this section used to document -- CUP_OPTIONS'
@@ -52,6 +53,7 @@ const BASE_LABEL = {
   coconut: 'coconut water',
   strawberry: 'strawberry milk',
   yuzu: 'sparkling yuzu',
+  jasmine: 'jasmine tea',
 };
 const TOPPING_LABEL = {
   'guava-syrup': 'guava syrup',
@@ -63,6 +65,14 @@ const TOPPING_LABEL = {
   'matcha-powder': 'matcha powder',
   'mint-leaves': 'mint leaves',
   'banana-foam': 'banana foam',
+  'mango-syrup': 'mango syrup',
+  'choco-powder': 'choco powder',
+  'lavender-syrup': 'lavender syrup',
+  'strawberry-foam': 'strawberry foam',
+  'banana-chips': 'banana chips',
+  'peach-syrup': 'peach syrup',
+  'blueberry-foam': 'blueberry foam',
+  'cherry-blossoms': 'cherry blossoms',
 };
 
 // selectedTin (MatchaMaking's own tin keys, e.g. 'cafe-grade') -> the plain
@@ -380,44 +390,6 @@ export function scoreMatchaMaking({ selectedTin, scoopFillPercent, tempFillPerce
   return { percent: pct(checks), checks };
 }
 
-// ---- Graduated milk-pour credit -------------------------------------------
-// Per request: the new hold-to-fill milk pour gauge (MilkSelection.js's own
-// MILK_FILL_DURATION_MS/milkPourZoneFor) shouldn't be all-or-nothing either
-// -- releasing right in the middle of the yellow band is full credit,
-// releasing further off (into green/underfilled or red/overfilled) costs
-// progressively more, same graduated shape as tempCredit above rather than a
-// flat pass/fail. MILK_ZONE_GREEN_END/MILK_ZONE_RED_START are this file's own
-// small copy of MilkSelection.js's identically-named constants -- same "own
-// copy rather than importing a sibling screen's layout constants" convention
-// TEMP_ZONE_LEFT/RIGHT above already documents. They're derived off
-// MilkSelection.js's own MILK_GAUGE_SECTIONS (7) the same way that file
-// derives them, rather than copied as bare numbers, so this stays in sync
-// with wherever the bar's actual 4th (yellow) section boundary sits instead
-// of drifting if that ever changes. MILK_EXACT_LINE/MILK_ZONE_HALF_WIDTH are
-// derived from them the same way TEMP_EXACT_LINE/TEMP_ZONE_HALF_WIDTH are
-// derived from TEMP_ZONE_LEFT/RIGHT.
-const MILK_GAUGE_SECTIONS = 7;
-const MILK_ZONE_GREEN_END = (100 / MILK_GAUGE_SECTIONS) * 3;
-const MILK_ZONE_RED_START = (100 / MILK_GAUGE_SECTIONS) * 4;
-const MILK_EXACT_LINE = (MILK_ZONE_GREEN_END + MILK_ZONE_RED_START) / 2;
-const MILK_ZONE_HALF_WIDTH = (MILK_ZONE_RED_START - MILK_ZONE_GREEN_END) / 2;
-const MILK_GREEN_FLOOR_CREDIT = 0.75;
-// Wider fuzz guard than SCOOP_EXACT_EPSILON/TEMP_EXACT_EPSILON above -- this
-// reading comes from a requestAnimationFrame loop timing a held key against
-// MILK_FILL_DURATION_MS (see pal.js's heldDurationMs), not a live CSS pixel/
-// transform measurement, so it's noisier frame-to-frame than either of those
-// two gauges' own readings; a dead-on release could still land a percentage
-// point or so off the mathematical center.
-const MILK_EXACT_EPSILON = 1;
-
-function milkPourCredit(distance) {
-  if (distance <= MILK_ZONE_HALF_WIDTH) {
-    return 1 - (distance / MILK_ZONE_HALF_WIDTH) * (1 - MILK_GREEN_FLOOR_CREDIT);
-  }
-  const overshoot = distance - MILK_ZONE_HALF_WIDTH;
-  return Math.max(0, MILK_GREEN_FLOOR_CREDIT * (1 - overshoot / MILK_ZONE_HALF_WIDTH));
-}
-
 // ---- Mixing Drink ---------------------------------------------------------
 // Grades Milk Selection's own contribution -- cup type, ice count, and
 // milk/base -- against the placed order. Called from MilkSelection's own
@@ -429,22 +401,12 @@ function milkPourCredit(distance) {
 //   cupType: Milk Selection's own activeCup state ('glass' | 'plastic').
 //   iceCubes: Milk Selection's own icePlaced.filter(Boolean).length.
 //   milkType: Milk Selection's own cupMilk?.type.
-//   milkFillPercent: Milk Selection's own milkFillPercent state (0-100, same
-//     percent-space MILK_ZONE_GREEN_END/RED_START above use) -- wherever the
-//     pour gauge's needle landed the instant the player released it, frozen
-//     the same "rAF loop just stops updating it" way MatchaMaking's own
-//     tempFillPercent freezes on stopBar. null when no milk was ever poured
-//     (cupMilk itself never got set), in which case the check below just
-//     reads as "no reading" rather than crediting/blaming a specific side.
 //   order: the placed order from CustomerOrdering.
-export function scoreMixingDrink({ cupType, iceCubes, milkType, milkFillPercent, order }) {
-  // Graduated the same way scoreMatchaMaking's own teaspoons/temperature
-  // checks are -- see milkPourCredit's own comment above.
-  const milkPourDistance = typeof milkFillPercent === 'number' ? Math.abs(milkFillPercent - MILK_EXACT_LINE) : null;
-  const milkPourCreditValue = milkPourDistance === null ? 0 : milkPourCredit(milkPourDistance);
-  const milkPourExact = milkPourDistance !== null && milkPourDistance <= MILK_EXACT_EPSILON;
-  const milkPourInBand = milkPourDistance !== null && milkPourDistance <= MILK_ZONE_HALF_WIDTH;
-  const milkPourTooMuch = typeof milkFillPercent === 'number' && milkFillPercent > MILK_EXACT_LINE;
+// No 'milk-pour' check any more -- that used to grade the balance-the-ball
+// minigame's own spill count, which was removed entirely from
+// MilkSelection.js per request (reported as never rendering visibly) in
+// favor of plain click-and-pour, with nothing left to grade there.
+export function scoreMixingDrink({ cupType, iceCubes, milkType, order }) {
   const checks = [
     {
       key: 'cup',
@@ -464,18 +426,6 @@ export function scoreMixingDrink({ cupType, iceCubes, milkType, milkFillPercent,
       correct: milkType === order?.baseMilk,
       detail: `wanted ${BASE_LABEL[order?.baseMilk]}, used ${BASE_LABEL[milkType] ?? '—'}.`,
     },
-    {
-      key: 'milk-pour',
-      label: 'milk pour amount',
-      correct: milkPourExact,
-      credit: milkPourCreditValue,
-      detail:
-        milkPourDistance === null
-          ? 'no milk was poured.'
-          : milkPourInBand
-          ? `a touch ${milkPourTooMuch ? 'over' : 'under'}filled.`
-          : `${milkPourTooMuch ? 'overfilled and spilled' : 'underfilled'}.`,
-    },
   ];
   return { percent: pct(checks), checks };
 }
@@ -487,13 +437,13 @@ export function scoreMixingDrink({ cupType, iceCubes, milkType, milkFillPercent,
 // credit, catching it further off (however far it drifted before the
 // player pressed Enter) costs progressively more, same two-segment
 // "still good near the middle, bad the further out you go" shape as
-// tempCredit/milkPourCredit above. LEVER_CENTER_TOLERANCE is this file's
-// own copy of ToppingsStation.js's identically-named/-valued constant (same
-// "own copy rather than importing a sibling screen's layout constants"
-// convention every other graduated check in this file already follows).
+// tempCredit above. LEVER_CENTER_TOLERANCE is this file's own copy of
+// ToppingsStation.js's identically-named/-valued constant (same "own copy
+// rather than importing a sibling screen's layout constants" convention
+// every other graduated check in this file already follows).
 //
-// Unlike tempFillPercent/milkFillPercent (raw 0-100 gauge readings this
-// file re-derives its own distance-from-center math for), the caller here
+// Unlike tempFillPercent (a raw 0-100 gauge reading this file re-derives
+// its own distance-from-center math for), the caller here
 // passes an already-normalized distance -- *PlacementFrac below, -1..1,
 // where 0 is dead center and +/-1 is the full swing to either edge of the
 // lever's own travel (see ToppingsStation.js's own offsetFrac, computed off
@@ -523,6 +473,9 @@ function leverCredit(distanceFrac) {
 //   foamKey: ToppingsStation's own cupFoam?.key ('matcha-cold-foam' | 'reg-cold-foam' | 'banana-foam' | null).
 //   powderKey: ToppingsStation's own cupPowder?.key ('guava-powder' | 'matcha-powder' | null).
 //   mintLeavesApplied: ToppingsStation's own cupMintLeaf boolean.
+//   bananaChipsApplied/cherryBlossomsApplied: ToppingsStation's own
+//     cupBananaChip/cupCherryBlossom booleans -- same shape as
+//     mintLeavesApplied, one standalone garnish each (order 4+/5+).
 //   syrupSpillCount: ToppingsStation's own syrupMessUpCountRef.current -- the
 //     raw count of every mess-up during the syrup pour's own balance
 //     minigame (ball drifted out of the green zone), same "raw ref count,
@@ -531,11 +484,12 @@ function leverCredit(distanceFrac) {
 //     below) when syrupKey is set -- no syrup poured means nothing to grade
 //     here, same as every other check in this file only applying when its
 //     own underlying action actually happened.
-//   foamPlacementFrac/powderPlacementFrac/leafPlacementFrac: ToppingsStation's
-//     own offsetFrac at the instant each topping's aim-lever was caught
-//     (-1..1, 0 == dead center -- see leverCredit's own comment above), or
-//     null if that topping was never applied. Each only actually graded (see
-//     the '*-placement' checks below) when its own topping key/flag is set,
+//   foamPlacementFrac/powderPlacementFrac/leafPlacementFrac/
+//   chipPlacementFrac/blossomPlacementFrac: ToppingsStation's own offsetFrac
+//     at the instant each topping's aim-lever was caught (-1..1, 0 == dead
+//     center -- see leverCredit's own comment above), or null if that
+//     topping was never applied. Each only actually graded (see the
+//     '*-placement' checks below) when its own topping key/flag is set,
 //     same "nothing to grade if it never happened" reasoning as syrupKey/
 //     syrupSpillCount above.
 //   order: the placed order from CustomerOrdering.
@@ -544,10 +498,14 @@ export function scoreToppings({
   foamKey,
   powderKey,
   mintLeavesApplied,
+  bananaChipsApplied,
+  cherryBlossomsApplied,
   syrupSpillCount,
   foamPlacementFrac,
   powderPlacementFrac,
   leafPlacementFrac,
+  chipPlacementFrac,
+  blossomPlacementFrac,
   order,
 }) {
   const applied = [
@@ -555,6 +513,8 @@ export function scoreToppings({
     foamKey ? FOAM_KEY_TO_ORDER[foamKey] ?? foamKey : null,
     powderKey,
     mintLeavesApplied ? 'mint-leaves' : null,
+    bananaChipsApplied ? 'banana-chips' : null,
+    cherryBlossomsApplied ? 'cherry-blossoms' : null,
   ].filter(Boolean);
   const requested = order?.toppings ?? [];
 
@@ -589,10 +549,11 @@ export function scoreToppings({
       detail: `spilled ${syrupSpillCount}x while pouring.`,
     });
   }
-  // Graded like the milk-pour-amount check above (correct only right on the
-  // middle, graduated credit tapering off the further the lever was caught
-  // from center) -- but, like syrup-pour above, only shows up if that
-  // topping was actually applied.
+  // Graduated credit via leverCredit (correct only right on the middle,
+  // tapering off the further the lever was caught from center -- same
+  // "how close were you" shape as scoreMatchaMaking's own teaspoon/
+  // water-temperature checks) -- but, like syrup-pour above, only shows up
+  // if that topping was actually applied.
   if (foamKey) {
     const distance = Math.min(1, Math.abs(foamPlacementFrac ?? 1));
     checks.push({
@@ -618,6 +579,29 @@ export function scoreToppings({
     checks.push({
       key: 'leaf-placement',
       label: 'mint leaf placement',
+      correct: distance <= LEVER_CENTER_TOLERANCE,
+      credit: leverCredit(distance),
+      detail: distance <= LEVER_CENTER_TOLERANCE ? 'landed clean.' : 'spilled off to the side while placing.',
+    });
+  }
+  // Same graduated-credit shape as leaf-placement above -- banana chips and
+  // cherry blossoms are each their own standalone garnish (own pot, own
+  // lever-catch), not variants of mint-leaves.
+  if (bananaChipsApplied) {
+    const distance = Math.min(1, Math.abs(chipPlacementFrac ?? 1));
+    checks.push({
+      key: 'chip-placement',
+      label: 'banana chips placement',
+      correct: distance <= LEVER_CENTER_TOLERANCE,
+      credit: leverCredit(distance),
+      detail: distance <= LEVER_CENTER_TOLERANCE ? 'landed clean.' : 'spilled off to the side while placing.',
+    });
+  }
+  if (cherryBlossomsApplied) {
+    const distance = Math.min(1, Math.abs(blossomPlacementFrac ?? 1));
+    checks.push({
+      key: 'blossom-placement',
+      label: 'cherry blossoms placement',
       correct: distance <= LEVER_CENTER_TOLERANCE,
       credit: leverCredit(distance),
       detail: distance <= LEVER_CENTER_TOLERANCE ? 'landed clean.' : 'spilled off to the side while placing.',

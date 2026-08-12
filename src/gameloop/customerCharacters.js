@@ -7,7 +7,7 @@
 // via lazy(() => import(...)) for code-splitting; a static import of that
 // component from App.js would pull its whole bundle in eagerly and defeat
 // that split.
-export const CUSTOMER_CHARACTER_KEYS = ['annie', 'otto', 'katie', 'teddy', 'coco'];
+export const CUSTOMER_CHARACTER_KEYS = ['annie', 'otto', 'kitty', 'teddy', 'coco'];
 
 // Plain Fisher-Yates shuffle.
 function shuffle(list) {

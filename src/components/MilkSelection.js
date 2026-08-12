@@ -8,14 +8,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 // under Vercel's CI=true (see App.js's own import comment) -- fixed
 // proactively here before it manifests as the same failure.
 import { useFlatFocusNav } from '../gameloop/useFlatFocusNav';
-import {
-  getActionFromKeyEvent,
-  shouldDebounceEnter,
-  trackKeyDown,
-  trackKeyUp,
-  isHeld,
-  heldDurationMs,
-} from '../gameloop/pal';
+import { getActionFromKeyEvent, shouldDebounceEnter } from '../gameloop/pal';
 import { playButtonClick, playLiquidPouring, playIceCubeDrop } from '../gameloop/sfx';
 import ProgressBar from './ProgressBar';
 import OrderReceiptButton from './OrderReceiptButton';
@@ -67,12 +60,12 @@ export const TABLE_SIZE = { width: 19.40, height: 37.16 }; // same aspect ratio,
 // currently "in play" instead of always the glass one.
 //
 // PlasticCup.png was re-saved pre-cropped to its own alpha bounding box
-// (292x369), same "trimmed tight to the actual drawing, like GlassCup.png
-// already is" treatment -- the original file the user added had roughly
-// 58% of its width as transparent side padding (the cup art centered in a
-// much wider canvas), which would have both squished the cup (its aspect
-// ratio wouldn't have matched the box) and made it read much smaller than
-// the glass cup if used as-is, since most of that box would have been
+// (294x369), same "trimmed tight to the actual drawing, like GlassCup.png
+// already is" treatment -- the file the user added had roughly 57% of its
+// width as transparent side padding (the cup art centered in a much wider
+// canvas), which would have both squished the cup (its aspect ratio
+// wouldn't have matched the box) and made it read much smaller than the
+// glass cup if used as-is, since most of that box would have been
 // invisible padding rather than actual cup.
 //
 // Sized to match the glass cup's own HEIGHT at each spot (the more
@@ -82,7 +75,7 @@ export const TABLE_SIZE = { width: 19.40, height: 37.16 }; // same aspect ratio,
 // derive width from the source art's own proportions" formula the milk
 // bottles use (BOTTLE_WIDTH above), so the cup isn't stretched or squished
 // to fit glass's own width.
-const PLASTIC_CUP_CANVAS_ASPECT = 292 / 369; // width/height of the (cropped) PlasticCup.png
+const PLASTIC_CUP_CANVAS_ASPECT = 294 / 369; // width/height of the (cropped) PlasticCup.png
 const PLASTIC_SHELF_SIZE = {
   width: SHELF_SIZE.height * PLASTIC_CUP_CANVAS_ASPECT * (9 / 16),
   height: SHELF_SIZE.height,
@@ -299,17 +292,32 @@ const BOTTLE_KEYS_WITH_STRAWBERRY = [
   ...BOTTLE_KEYS_BASE,
   { key: 'strawberry', src: './StrawberryMilk.png', alt: 'Strawberry milk', leftPad: 24 / 169, rightPad: (169 - 108) / 169 },
 ];
-// Sparkling yuzu (added per request, order 4 onward only -- see
-// yuzuUnlocked in the component below) sits at the end of this list too,
-// same "new one lands as the new rightmost bottle" reasoning as strawberry
-// above -- stacks on top of it rather than replacing it, so order 4+ gets
-// all six. leftPad/rightPad measured off SparklingYuzu.png's own alpha
-// bounding box (169x325 canvas, bbox (67, 53, 144, 264)) the same way as
-// every other bottle here -- turns out to exactly match coconut's own
-// bounds, hence the identical fractions.
+// Sparkling yuzu (order 3 onward -- moved up from order 4 per a later
+// request -- see yuzuUnlocked in the component below) sits at the end of
+// this list too, same "new one lands as the new rightmost bottle" reasoning
+// as strawberry above -- stacks on top of it rather than replacing it, so
+// order 3+ gets all six. leftPad/rightPad measured off SparklingYuzu.png's
+// own alpha bounding box (169x325 canvas, bbox (67, 53, 144, 264)) the same
+// way as every other bottle here -- turns out to exactly match coconut's
+// own bounds, hence the identical fractions.
 const BOTTLE_KEYS_WITH_YUZU = [
   ...BOTTLE_KEYS_WITH_STRAWBERRY,
   { key: 'yuzu', src: './SparklingYuzu.png', alt: 'Sparkling yuzu', leftPad: 67 / 169, rightPad: (169 - 144) / 169 },
+];
+// Jasmine tea -- new order-4-and-later bottle, per request, stacking on top
+// of yuzu the same way every earlier bottle stacked on the last (nothing
+// ever drops off the counter). leftPad/rightPad measured off JasmineTea.png's
+// own alpha bounding box (360x693 canvas, bbox (53, 120, 230, 569)) the same
+// way as every other bottle here -- its canvas is a different pixel size
+// than the original four/five/six (169x325-ish) but a near-identical aspect
+// ratio (360/693 = 0.5195 vs 169/325 = 0.52), close enough that reusing the
+// same shared BOTTLE_CANVAS_ASPECT-derived box for it reads as the same
+// bottle size as its neighbors, same tolerance this project already accepts
+// elsewhere (see BANANA_FOAM_ITEM's own canvasAspect comment in
+// ToppingsStation.js for a similar "close enough" call).
+const BOTTLE_KEYS_WITH_JASMINE = [
+  ...BOTTLE_KEYS_WITH_YUZU,
+  { key: 'jasmine', src: './JasmineTea.png', alt: 'Jasmine tea', leftPad: 53 / 360, rightPad: (360 - 230) / 360 },
 ];
 
 // Display name per bottle, shown as a label beneath whichever one currently
@@ -323,6 +331,7 @@ const BOTTLE_LABELS = {
   coconut: 'coconut water',
   strawberry: 'strawberry milk',
   yuzu: 'sparkling yuzu',
+  jasmine: 'jasmine tea',
 };
 
 // Small gap between a bottle's own top edge and its label above it --
@@ -403,6 +412,25 @@ const { items: BOTTLE_ITEMS_WITH_YUZU, home: BOTTLE_HOME_WITH_YUZU } = layoutBot
   BOTTLE_HEIGHT_YUZU_TIER,
   BOTTLE_VISUAL_GAP_YUZU_TIER
 );
+// Jasmine tea (order 4+) makes seven bottles -- the yuzu tier's own 0.7338
+// scale was solved specifically for six to land the cluster at a 28%-wide
+// footprint (69-97, centered on BOTTLE_CLUSTER_CENTER); a seventh bottle at
+// that same scale would push the cluster to ~34% wide. Solved the same way
+// (clusterBoxWidth scales linearly with width/height/gap, since every term
+// in layoutBottles' own gap formula is proportional to bottleWidth) so all
+// seven land at that identical 28%-wide footprint instead of growing past
+// it -- same "shrink to fit the same footprint" fix as the yuzu tier's own
+// comment above, and MatchaMaking's STATIC_ITEMS_WITH_HOJICHA before that.
+const BOTTLE_JASMINE_TIER_SCALE = 0.6049;
+const BOTTLE_WIDTH_JASMINE_TIER = BOTTLE_WIDTH * BOTTLE_JASMINE_TIER_SCALE;
+const BOTTLE_HEIGHT_JASMINE_TIER = BOTTLE_HEIGHT * BOTTLE_JASMINE_TIER_SCALE;
+const BOTTLE_VISUAL_GAP_JASMINE_TIER = BOTTLE_VISUAL_GAP * BOTTLE_JASMINE_TIER_SCALE;
+const { items: BOTTLE_ITEMS_WITH_JASMINE, home: BOTTLE_HOME_WITH_JASMINE } = layoutBottles(
+  BOTTLE_KEYS_WITH_JASMINE,
+  BOTTLE_WIDTH_JASMINE_TIER,
+  BOTTLE_HEIGHT_JASMINE_TIER,
+  BOTTLE_VISUAL_GAP_JASMINE_TIER
+);
 
 // ---- Pouring a bottle into the cup ---------------------------------------
 // Same shape as MatchaMaking's kettle-pouring-into-the-bowl sequence:
@@ -436,161 +464,17 @@ const BOTTLE_POUR_ROTATE_DEG = -35; // simple tilt for the pour -- no pinned tra
 const BOTTLE_MOVE_MS = 350; // time to glide to the hover spot -- same reasoning as MatchaMaking's KETTLE_MOVE_MS
 const BOTTLE_POUR_MS = 900; // how long the tilt/pour holds before gliding back home
 
-// ---- Milk pour hold-to-fill gauge -----------------------------------------
-// Per request: pouring a milk/water bottle is no longer instant. Once a
-// bottle finishes its glide to the hover-over-cup spot (pourStage 'moving'
-// -> BOTTLE_MOVE_MS elapses, same as before), it now parks in a new
-// 'measuring' stage instead of pouring immediately -- see the pourStage
-// effect below. A speedometer-style gauge appears (curved arc + circular
-// button, see the JSX further down and MilkSelection.css's own
-// .milk-pour-*) and waits for the player to press-and-hold Enter/center.
-// While held, a needle sweeps left (green, 0%) to right (red, 100%) over
-// MILK_FILL_DURATION_MS; releasing locks in wherever it landed and hands off
-// to the existing 'pouring' stage (cup fill appears, sound plays, bottle
-// glides home), same as before this gauge existed. Landing in the yellow
-// band (MILK_ZONE_GREEN_END..MILK_ZONE_RED_START) pours a correctly-filled
-// cup; releasing early (still green) underfills; holding past the yellow
-// (into red) overfills and spills -- both cost points, see scoreMixingDrink
-// in gameloop/scoring.js, which keeps its own copy of these same three
-// numbers (same "own small copy rather than importing a sibling screen's
-// layout constants" convention that file's own TEMP_ZONE_LEFT/RIGHT already
-// documents).
-//
-// This only applies to the four milk/water bottles -- the carried-over
-// matcha bowl (pouringKey === 'bowl') skips straight from 'moving' to
-// 'pouring' the same way it always has, unaffected by any of this.
-//
-// Held-input note: driven entirely by pal.js's keydown-heartbeat + release
-// watchdog (trackKeyDown/isHeld/heldDurationMs) per the TV keycode held-input
-// policy, NOT by waiting for a keyup event -- TV remotes deliver keyup
-// unreliably (late or never). See the window keydown/keyup listener and the
-// requestAnimationFrame loop further down.
-const MILK_FILL_DURATION_MS = 3000; // full 0 -> 100% gauge sweep if held the whole way through -- slow enough to actually aim for the yellow section, not a snap reaction
-
-// The bar is divided into 7 equal, hard-edged sections (no blended
-// gradient) rather than a smooth green->yellow->red fade -- see
-// MILK_GAUGE_SECTION_COLORS below for the actual colors, one flat color per
-// section: bright green, two yellow-green steps, yellow (the perfect
-// section, dead center), two red-orange steps, bright red.
-// MILK_ZONE_GREEN_END/RED_START mark the boundary between section 3/4 and
-// 4/5 respectively, so "the yellow section" and "the scored perfect zone"
-// are the exact same span, not two independently-tuned numbers that could
-// drift apart.
-const MILK_GAUGE_SECTIONS = 7;
-const MILK_ZONE_GREEN_END = (100 / MILK_GAUGE_SECTIONS) * 3; // below this: still one of the two green-ish sections (underfilled)
-const MILK_ZONE_RED_START = (100 / MILK_GAUGE_SECTIONS) * 4; // above this: one of the two red-ish sections (overfilled/spilling)
-// One flat color per section, left (0%) to right (100%) -- see the JSX
-// below, which draws one <path> arc per entry rather than a single
-// gradient-stroked arc.
-const MILK_GAUGE_SECTION_COLORS = [
-  '#57b84a', // 1: bright green
-  '#8cc63f', // 2: yellow-green
-  '#c4d92e', // 3: more yellow-green
-  '#f5c518', // 4: yellow -- the perfect section
-  '#e8862f', // 5: orange, leaning red
-  '#e2582f', // 6: red-orange
-  '#e0392b', // 7: bright red
-];
-
-// Where the gauge reading (0-100) lands: 'under' (green), 'perfect'
-// (yellow band), or 'over' (red) -- shared by the visual fill-height scale
-// below and the scoreMixingDrink call in beginSendDrink.
-function milkPourZoneFor(fillPercent) {
-  if (fillPercent < MILK_ZONE_GREEN_END) return 'under';
-  if (fillPercent > MILK_ZONE_RED_START) return 'over';
-  return 'perfect';
-}
-
-// How tall the milk fill renders per outcome -- multiplies .cup-milk-fill's
-// own cupMilkGrow keyframe end value (see the --milk-fill-scale custom
-// property set in the JSX below and its own comment in MilkSelection.css).
-// Per request, the three outcomes need to read as clearly different at a
-// glance (an earlier version's 1.08 for 'over' was barely distinguishable
-// from perfect's own 1) -- 'under' now renders visibly short of a full cup,
-// 'over' visibly crests the rim, and 'over' additionally spills (see
-// MILK_SPILL_MAX_COUNT/milkSpillCountFor and .milk-spill-puddle below) --
-// underfilling doesn't spill anything, there's nothing to overflow.
-const MILK_FILL_SCALE_BY_ZONE = { under: 0.5, perfect: 1, over: 1.18 };
-
-// ---- Overfill spill puddles -----------------------------------------------
-// Per request: an overfilled pour should read as clearly worse than a
-// perfect one, the same way MatchaMaking's own whisking mistakes scatter an
-// escalating run of puddle images around the bowl (see that file's own
-// SPILL_IMAGES_BY_GRADE/SPILL_STAGE_HEIGHTS) -- more, bigger puddles the
-// worse the mistake. This is a CSS-drawn equivalent (radial-gradient blobs,
-// see .milk-spill-puddle in MilkSelection.css) rather than swapped-in PNGs:
-// MatchaMaking's own puddle art is a separate hand-authored image set per
-// matcha grade, and there's no equivalent pre-made art for the five milk/
-// water types here -- a puddle blob colored from each type's own
-// MILK_STREAM_COLORS reads as the same kind of spill without needing new
-// art assets. Only ever shown for an 'over' pour -- see milkSpillCountFor.
-const MILK_SPILL_MAX_COUNT = 4; // same cap as MatchaMaking's own 4-image spill set
-const MILK_SPILL_STAGE_SIZES = [7, 9, 11.5, 14]; // % of container width, escalating like MatchaMaking's own SPILL_STAGE_HEIGHTS
-// Fixed scatter of puddle spots around the cup's own base, one per possible
-// spill index -- same "fixed per-index offsets, purely decorative" reasoning
-// as MatchaMaking's own SPILL_DIMS/SPILL_STAGE_ROTATIONS, expressed as
-// fractions of the cup's own current box (cupRenderPos/cupRenderSize) rather
-// than fixed container %, so they scatter around whichever cup type/size is
-// actually active instead of a position tuned for only one of them.
-const MILK_SPILL_SPOTS = [
-  { leftFrac: -0.18, topFrac: 0.82, rotate: -10 },
-  { leftFrac: 0.78, topFrac: 0.8, rotate: 12 },
-  { leftFrac: 0.08, topFrac: 0.98, rotate: -6 },
-  { leftFrac: 0.55, topFrac: 1.0, rotate: 6 },
-];
-
-// How many spill puddles an overfilled pour gets, 1..MILK_SPILL_MAX_COUNT --
-// 0 for anything that isn't 'over' (milkPourZoneFor already excludes
-// 'under'/'perfect' from ever calling this in practice, but the explicit
-// early-out keeps this correct standalone too). Scales with how far past
-// MILK_ZONE_RED_START the release landed, as a fraction of the remaining
-// room up to a full 100% hold -- releasing just barely into red spills one
-// puddle, holding all the way to a maxed-out 100% gauge spills all four,
-// same escalating-severity idea as MatchaMaking's own mess-up-count-driven
-// spill array, just driven by gauge distance instead of a live counter.
-function milkSpillCountFor(fillPercent) {
-  if (fillPercent <= MILK_ZONE_RED_START) return 0;
-  const overFraction = Math.min(1, (fillPercent - MILK_ZONE_RED_START) / (100 - MILK_ZONE_RED_START));
-  return Math.max(1, Math.ceil(overFraction * MILK_SPILL_MAX_COUNT));
-}
-
-// Gauge widget geometry -- see milkGaugeCenterLeft/milkGaugeAnchorTop/
-// milkNeedleX/milkNeedleY in the component body (which anchor this above
-// the cup) and the SVG markup in the JSX below (which this shares its
-// 200x96 viewBox/pivot with). Rendered as a rectangular-cross-section bar
-// bent into an arc, same gray body/border look as MatchaMaking's own
-// .heater-temp-bar/.scoop-bar (see MilkSelection.css) -- MILK_ARC_RADIUS is
-// the colored-segments' own radius; the gray casing arc drawn behind them
-// (see .milk-pour-arc-casing) uses the same radius/pivot, just a wider
-// stroke, so it reads as a frame around the segments rather than a
-// concentric ring offset from them.
-// Per request, the bar sits lower/closer to the button than an earlier
-// version did -- MILK_ARC_RADIUS is smaller (88 -> 62) and MILK_NEEDLE_PIVOT
-// is correspondingly lower in a shorter 200x96 viewBox (was 200x120), rather
-// than just repositioning the SVG within the same tall viewBox, so the
-// widget's own rendered height shrinks along with it instead of leaving
-// dead space above a smaller arc.
-const MILK_GAUGE_WIDTH_PCT = 15; // container-relative %, same unit every other position in this file uses
-const MILK_GAUGE_ABOVE_GAP = 2; // % gap between whatever the gauge is anchored above and the gauge's own bottom edge
-const MILK_NEEDLE_PIVOT = { x: 100, y: 80 }; // matches the SVG arc's own center below
-const MILK_ARC_RADIUS = 62;
-const MILK_NEEDLE_LEN = 42; // shorter than the bar's own inner edge (radius minus half the segment stroke width) per request, so it reads as a small dial pointer rather than reaching all the way out to the bar
-
-// SVG path for one arc segment spanning [pctStart, pctEnd] (0-100, same
-// percent-space milkFillPercent uses) at the given radius, pivoted at
-// MILK_NEEDLE_PIVOT -- shared by the 7 colored segments and the gray casing
-// arc (which just passes 0/100 for the full sweep) in the JSX below, rather
-// than duplicating this trig at each call site.
-function milkGaugeArcPath(pctStart, pctEnd, radius) {
-  const angleFor = (pct) => ((180 - (pct / 100) * 180) * Math.PI) / 180;
-  const a0 = angleFor(pctStart);
-  const a1 = angleFor(pctEnd);
-  const x0 = MILK_NEEDLE_PIVOT.x + radius * Math.cos(a0);
-  const y0 = MILK_NEEDLE_PIVOT.y - radius * Math.sin(a0);
-  const x1 = MILK_NEEDLE_PIVOT.x + radius * Math.cos(a1);
-  const y1 = MILK_NEEDLE_PIVOT.y - radius * Math.sin(a1);
-  return `M ${x0} ${y0} A ${radius} ${radius} 0 0 1 ${x1} ${y1}`;
-}
+// ---- Milk pour: plain click-and-pour, no minigame --------------------------
+// Per request: the balance-the-ball minigame (bar/zone/ball, physics tick,
+// and the spill puddles it could trigger) never rendered visibly during the
+// pour -- reported as invisible even after hardening its z-index -- so it's
+// removed entirely rather than debugged further. Pouring is back to the
+// plain "glide to hover spot, tip, fill the cup" sequence every bottle (and
+// the matcha bowl) already used for the 'moving' -> 'pouring' legs; there's
+// no longer a distinct middle stage or way to "spill" a pour at all. See
+// beginPour/the pourStage effect further down for the simplified sequence,
+// and scoreMixingDrink in gameloop/scoring.js (no longer passed a
+// spillCount) for the scoring side of this same removal.
 
 // How long the finished cup takes to glide into the Send Drink zone, and
 // how long its shrink/fade takes once it's arrived -- same values as
@@ -624,6 +508,11 @@ const MILK_STREAM_COLORS = {
   // rgb(240, 184, 8)), same "matches the bottle art" reasoning as every
   // other entry here.
   yuzu: 'rgba(245, 190, 40, 0.92)',
+  // Sampled off JasmineTea.png's own liquid color (its lower, below-label
+  // portion of the bottle body, away from the pale lavender cap/label --
+  // ~rgb(220, 196, 145)), same "matches the bottle art" reasoning as every
+  // other entry here.
+  jasmine: 'rgba(220, 196, 145, 0.92)',
 };
 
 // Generic version of the milk-box math, parameterized on a cup position/
@@ -884,6 +773,21 @@ const MilkSelection = ({
   onScored,
 }) => {
   const containerRef = useRef(null);
+  // Traps every direction on the Order receipt button during this screen's
+  // very first walkthrough beat (showOrderButtonLock, declared much further
+  // down, alongside showOrderHint/showStationSpotlight) -- per request, the
+  // player shouldn't be able to move anywhere else until they've actually
+  // opened the order receipt once. Same full directional lockdown shape as
+  // restrictBowlNavRef/restrictSendNavRef below (a single item, no siblings
+  // to cycle between). Declared here (rather than only where
+  // showOrderButtonLock itself lives) for the same early-registration
+  // reason every other ref in this group is -- the nav-graph effect right
+  // below has to be registered before useFlatFocusNav, so it needs to read
+  // the CURRENT value without any of these flags in its own dependency
+  // array. Kept in sync the same "ref declared early, synced late" pattern
+  // as every other ref here, by a small effect declared right after
+  // showOrderButtonLock itself.
+  const restrictOrderNavRef = useRef(false);
   // Traps Up/Down while a shelf cup is focused during the first-order
   // walkthrough's own cup-picking beat (showCupSpotlight, declared much
   // further down) -- per request, the player shouldn't be able to arrow
@@ -949,23 +853,29 @@ const MilkSelection = ({
   // after showSendSpotlight itself.
   const restrictSendNavRef = useRef(false);
 
-  // Strawberry milk (order 2 onward) and sparkling yuzu (order 4 onward,
-  // added per request, stacking on top of strawberry rather than
-  // replacing it) -- this screen fully unmounts/remounts between customers
-  // (App.js only ever renders one page-slide's component at a time), so
-  // customerNumber is effectively fixed for this whole mount's lifetime;
-  // no need for this to be reactive/memoized, just read once here and used
-  // to pick which of the three precomputed layouts (see layoutBottles/
-  // BOTTLE_ITEMS_BASE/BOTTLE_ITEMS_WITH_STRAWBERRY/BOTTLE_ITEMS_WITH_YUZU
-  // above) this particular order gets.
+  // Strawberry milk (order 2 onward), sparkling yuzu (order 3 onward, moved
+  // up from order 4), and jasmine tea (new, order 4 onward) -- every tier
+  // stacks on top of the last rather than replacing it, per request. This
+  // screen fully unmounts/remounts between customers (App.js only ever
+  // renders one page-slide's component at a time), so customerNumber is
+  // effectively fixed for this whole mount's lifetime; no need for this to
+  // be reactive/memoized, just read once here and used to pick which of the
+  // four precomputed layouts (see layoutBottles/BOTTLE_ITEMS_BASE/
+  // BOTTLE_ITEMS_WITH_STRAWBERRY/BOTTLE_ITEMS_WITH_YUZU/
+  // BOTTLE_ITEMS_WITH_JASMINE above) this particular order gets.
   const strawberryUnlocked = customerNumber >= 2;
-  const yuzuUnlocked = customerNumber >= 4;
-  const bottleItems = yuzuUnlocked
+  const yuzuUnlocked = customerNumber >= 3;
+  const jasmineUnlocked = customerNumber >= 4;
+  const bottleItems = jasmineUnlocked
+    ? BOTTLE_ITEMS_WITH_JASMINE
+    : yuzuUnlocked
     ? BOTTLE_ITEMS_WITH_YUZU
     : strawberryUnlocked
     ? BOTTLE_ITEMS_WITH_STRAWBERRY
     : BOTTLE_ITEMS_BASE;
-  const bottleHome = yuzuUnlocked
+  const bottleHome = jasmineUnlocked
+    ? BOTTLE_HOME_WITH_JASMINE
+    : yuzuUnlocked
     ? BOTTLE_HOME_WITH_YUZU
     : strawberryUnlocked
     ? BOTTLE_HOME_WITH_STRAWBERRY
@@ -1198,8 +1108,16 @@ const MilkSelection = ({
 
       // Order button -> Left goes to settings, Down goes to the first
       // (glass) cup, same reciprocal pair every other frame's own order
-      // button/gear share.
+      // button/gear share. Fully locked down (every direction swallowed)
+      // during this screen's own first walkthrough beat -- see
+      // restrictOrderNavRef's own comment above -- so the player can't
+      // arrow away before actually opening the receipt once.
       if (active === orderButton) {
+        if (restrictOrderNavRef.current) {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          return;
+        }
         if (action === 'Left') {
           e.preventDefault();
           e.stopImmediatePropagation();
@@ -1323,6 +1241,65 @@ const MilkSelection = ({
     cupSpotRef.current = cupSpot;
   }, [cupSpot]);
 
+  // First-visit highlight on the Order receipt button (top-right, see
+  // OrderReceiptButton.js/.css) -- the very first thing that flashes here,
+  // same "check the order before touching anything else" beat Matcha
+  // Making already runs (see showOrderHint there). Keeps flashing through
+  // as many opens as the player likes, and only retires once they've
+  // opened *and then closed* it -- see the onToggle passed to
+  // <OrderReceiptButton> below, which is what flips this to false. That
+  // retirement is also the cue for the next beat, cup-picking (showCupSpotlight
+  // just below is now gated behind !showOrderHint the same way
+  // MatchaMaking's own showTinHint is gated behind its showOrderHint).
+  const [showOrderHint, setShowOrderHint] = useState(true);
+
+  // First-order-only walkthrough spotlight, same pattern as MatchaMaking's
+  // own showStationSpotlight -- lands on this screen already pink-tinted,
+  // exempting only the Order receipt button, and clears on the exact same
+  // rising edge that retires showOrderHint above. customerNumber === 1
+  // keeps this off for the 2nd/3rd rounds, same as every other beat in this
+  // walkthrough -- they still get the plain flashing highlight/hint text
+  // showOrderHint already drives, just without the pink tint over
+  // everything else.
+  const showStationSpotlight = customerNumber === 1 && showOrderHint;
+
+  // First-order-only nav lockdown -- separate, shorter-lived flag from
+  // showOrderHint/showStationSpotlight above (which stay up through as many
+  // opens as the player likes and only retire once the drawer's been opened
+  // AND closed again): this one exists purely to gate restrictOrderNavRef
+  // (declared/read far above, before this station's own nav-graph effect --
+  // see that ref's own comment) and retires the instant the player's
+  // pressed Enter on the Order button ONCE, same rising-edge shape as
+  // Matcha Making's own showOrderButtonLock. Set true by the onToggle
+  // passed to <OrderReceiptButton> below, on the opening toggle
+  // specifically (nowOpen === true) -- unlike showOrderHint's own onToggle
+  // branch, which only cares about the closing one.
+  const [hasOpenedOrderReceipt, setHasOpenedOrderReceipt] = useState(false);
+  const showOrderButtonLock = customerNumber === 1 && !hasOpenedOrderReceipt;
+
+  // Moves focus onto the Order receipt button the instant showOrderButtonLock
+  // turns on -- pairs with suppressInitialFocus on <ProgressBar> further
+  // down so the station dot never grabs the walkthrough's very first
+  // selection instead, same "the highlighted thing becomes the next thing
+  // selected" pattern as Matcha Making's own showOrderButtonLock focus
+  // effect. Reaches for the button by class (same as this station's own
+  // nav-graph effect above) since OrderReceiptButton doesn't expose a ref
+  // up to its parent.
+  useEffect(() => {
+    if (showOrderButtonLock) {
+      document.querySelector('.order-receipt-button')?.focus();
+    }
+  }, [showOrderButtonLock]);
+
+  // Keeps restrictOrderNavRef (declared/read far above, alongside
+  // containerRef, for the same early-registration ordering reasons) in sync
+  // with showOrderButtonLock. No dependency array -- re-reads every render,
+  // same "cheap and never a render behind" shape as this file's other
+  // restrict*NavRef sync effects.
+  useEffect(() => {
+    restrictOrderNavRef.current = showOrderButtonLock;
+  });
+
   // First-order-only walkthrough beat, continued from Customer Ordering/
   // Matcha Making -- reuses an EXISTING state boundary rather than tracking
   // a separate one-way flag, same "the underlying UI already appears/
@@ -1334,8 +1311,11 @@ const MilkSelection = ({
   // to a different one -- both routes set cupSpot to 'table', see
   // handleCupKeyDown/handleCupSwitchKeyDown above), so "still on the shelf"
   // already means exactly "hasn't picked a cup yet" with no extra state
-  // needed.
-  const showCupSpotlight = customerNumber === 1 && cupSpot === 'shelf';
+  // needed. Also gated behind !showOrderHint now (this screen's own new
+  // first beat, above) so cup-picking doesn't start until the order's
+  // actually been checked -- same "next beat waits for the previous one's
+  // retirement" shape as MatchaMaking's own showTinHint.
+  const showCupSpotlight = customerNumber === 1 && !showOrderHint && cupSpot === 'shelf';
 
   // Moves focus onto the first (glass) shelf cup the instant showCupSpotlight
   // turns on -- pairs with suppressInitialFocus on <ProgressBar> further
@@ -1611,29 +1591,6 @@ const MilkSelection = ({
   // cup, instead of still showing a full pool of matcha sitting in it.
   const [bowlPoured, setBowlPoured] = useState(false);
 
-  // ---- Milk pour hold-to-fill gauge (see MILK_FILL_DURATION_MS above) ------
-  // 0-100 live reading, updated every animation frame while pourStage is
-  // 'measuring' (see the rAF effect below). Left at whatever it last read
-  // once the player releases (the rAF loop simply stops updating it the
-  // instant pourStage moves on to 'pouring') -- that frozen value is both
-  // what drives the fill-height/overflow visuals and what beginSendDrink
-  // hands to scoreMixingDrink later. Reset to 0 at the start of every fresh
-  // pour (see beginPour) so a re-pour of a different bottle doesn't start
-  // from a stale reading.
-  const [milkFillPercent, setMilkFillPercent] = useState(0);
-  // Whether the player has actually pressed Enter at least once yet this
-  // 'measuring' stage -- distinguishes "gauge showing, waiting for the first
-  // press" (isHeld('Enter') reads false because nothing's been pressed yet)
-  // from "player already pressed and let go" (isHeld('Enter') reads false
-  // because the hold ended) -- only the second case should end the stage.
-  // Reset alongside milkFillPercent at the start of every fresh pour.
-  const milkGaugeStartedRef = useRef(false);
-  // Focus target for the gauge's circular button -- auto-focused the instant
-  // 'measuring' begins (see the effect below) so D-pad/keyboard users don't
-  // have to navigate to it manually; it's the only focusable thing on screen
-  // that gesture could plausibly land on anyway (the bottle itself stops
-  // being draggable/focusable mid-pour, same as always).
-  const milkGaugeButtonRef = useRef(null);
   // The "liquid pour" Audio instance currently playing for this pour (see
   // playLiquidPouring below) -- held in a ref (not state, nothing here
   // needs to re-render off it) purely so it can be paused/cut short the
@@ -1688,8 +1645,7 @@ const MilkSelection = ({
 
   // Third first-order-only walkthrough beat, picking up the instant
   // showIceSpotlight above ends (all 3 ice cubes placed) and retiring the
-  // instant a base is actually poured (cupMilk flips non-null, same state
-  // the milk-pour gauge itself keys on -- see canPourMilk below). Same
+  // instant a base is actually poured (cupMilk flips non-null). Same
   // "reuse an existing state boundary" reasoning every other beat on this
   // screen already documents. Declared here, after cupMilk itself, rather
   // than back up alongside showCupSpotlight/showIceSpotlight, since it
@@ -1898,30 +1854,6 @@ const MilkSelection = ({
       ? SCOOP_FILL_COLORS[incomingBowl?.grade] ?? SCOOP_FILL_COLORS['classic-grade']
       : MILK_STREAM_COLORS[pouringKey] ?? MILK_STREAM_COLORS.oat;
 
-  // ---- Milk pour gauge: position + needle geometry --------------------------
-  // Per request, the whole widget (bar, needle, button) sits above the cup.
-  // Anchored off the cup's own box (cupRenderPos/cupRenderSize), NOT off
-  // pourSource/the bottle's hover box -- an earlier version anchored above
-  // the bottle instead, but the bottle's hover box is tall enough
-  // (BOTTLE_HEIGHT is 38% of the container) that its own top edge sits
-  // almost exactly at the very top of the 1920x1080 canvas while it's
-  // hovering over the cup; stacking the gauge above THAT pushed its top
-  // outside 0%, and .milk-selection-container clips overflow -- so the
-  // whole widget was rendering fully off-canvas (invisible, not just
-  // mispositioned). Anchoring off the cup instead keeps it comfortably
-  // inside the canvas (cup top is ~40%) at the cost of overlapping the
-  // lower part of the bottle's own art while it's mid-pour -- an acceptable
-  // trade since "off-screen" is strictly worse than "slightly overlapping".
-  const milkGaugeCenterLeft = cupRenderPos.left + cupRenderSize.width / 2;
-  const milkGaugeAnchorTop = cupRenderPos.top - MILK_GAUGE_ABOVE_GAP;
-  // Needle sweeps a half-circle: 180deg (pointing left, 0% -- green) at
-  // milkFillPercent 0, down to 0deg (pointing right, 100% -- red) at 100.
-  // Pivoted at MILK_NEEDLE_PIVOT, which matches the SVG arc's own center in
-  // the JSX below (same 200x120 viewBox on both).
-  const milkNeedleAngleRad = ((180 - (milkFillPercent / 100) * 180) * Math.PI) / 180;
-  const milkNeedleX = MILK_NEEDLE_PIVOT.x + MILK_NEEDLE_LEN * Math.cos(milkNeedleAngleRad);
-  const milkNeedleY = MILK_NEEDLE_PIVOT.y - MILK_NEEDLE_LEN * Math.sin(milkNeedleAngleRad);
-
   const beginPour = (key) => {
     // Hovers over whichever cup is actually active's own table spot/size
     // (CUP_TYPES[activeCup]) rather than always the glass cup's -- both
@@ -1951,14 +1883,6 @@ const MilkSelection = ({
         ...prev,
         [key]: getBottleHoverPos(activeTableSpot, activeTableSize, item),
       }));
-      // Fresh milk/water pour -- clear out whatever the gauge last read so a
-      // re-pour (e.g. a second bottle after an earlier one) doesn't carry
-      // over a stale reading into its own 'measuring' stage below. Scoped to
-      // this branch only, not the bowl's above -- a matcha-on-top pour after
-      // the milk base must NOT reset milkFillPercent, since beginSendDrink
-      // still needs that earlier milk pour's own reading later.
-      setMilkFillPercent(0);
-      milkGaugeStartedRef.current = false;
     }
     setPouringKey(key);
     setPourStage('moving');
@@ -1966,13 +1890,11 @@ const MilkSelection = ({
 
   useEffect(() => {
     if (pourStage === 'moving') {
-      // The matcha bowl has no pour gauge -- straight to 'pouring', same as
-      // before this gauge existed. Every milk/water bottle now parks in
-      // 'measuring' first and waits for the player to work the gauge (see
-      // the JSX/rAF effect further down); 'pouring' only starts once they
-      // release it.
-      const nextStage = pouringKey === 'bowl' ? 'pouring' : 'measuring';
-      const t = setTimeout(() => setPourStage(nextStage), BOTTLE_MOVE_MS);
+      // Straight to 'pouring' once the glide finishes -- no minigame stage
+      // in between any more (the matcha bowl always worked this way; every
+      // milk/water bottle now does too, per request to drop the balance
+      // minigame entirely and go back to plain click-and-pour).
+      const t = setTimeout(() => setPourStage('pouring'), BOTTLE_MOVE_MS);
       return () => clearTimeout(t);
     }
     if (pourStage === 'pouring') {
@@ -1992,16 +1914,9 @@ const MilkSelection = ({
         // this visit, same moment the cup's own matcha fill appears.
         setBowlPoured(true);
       } else {
-        // fillZone keys both the fill-height scale (MILK_FILL_SCALE_BY_ZONE)
-        // and spillCount (0 unless fillZone is 'over' -- see
-        // milkSpillCountFor) drives the spill puddles below -- see
-        // milkFillPercent's own comment above for why it's already the
-        // right, frozen reading by the time this fires.
-        setCupMilk({
-          type: pouringKey,
-          fillZone: milkPourZoneFor(milkFillPercent),
-          spillCount: milkSpillCountFor(milkFillPercent),
-        });
+        // The fill always renders at its original fixed height (see
+        // .cup-milk-fill's own cupMilkGrow keyframe in MilkSelection.css).
+        setCupMilk({ type: pouringKey });
       }
       const t = setTimeout(() => {
         pourAudioRef.current?.pause();
@@ -2021,85 +1936,7 @@ const MilkSelection = ({
       };
     }
     return undefined;
-  }, [pourStage, pouringKey, incomingBowl, INCOMING_BOWL_SPOT, bottleHome, milkFillPercent]);
-
-  // ---- Milk pour gauge: feed pal.js's held-input heartbeat -----------------
-  // Scoped to only listen while the gauge is actually up (pourStage ===
-  // 'measuring') -- there's no reason to track Enter holds the rest of the
-  // time, and this deliberately doesn't reuse any other screen-wide keydown
-  // effect so it can't interfere with the bottles' own handleBottleKeyDown or
-  // any other station's Enter handling. preventDefault on the down side stops
-  // a held Enter from also re-triggering native button activation/scrolling
-  // while the gauge has focus. keyup is passed through purely as the early-
-  // release hint pal.js's own trackKeyUp documents -- the rAF loop below
-  // still works correctly even on hardware that never fires it.
-  useEffect(() => {
-    if (pourStage !== 'measuring') return undefined;
-    const handleKeyDown = (e) => {
-      if (getActionFromKeyEvent(e) !== 'Enter') return;
-      e.preventDefault();
-      trackKeyDown(e);
-    };
-    const handleKeyUp = (e) => {
-      if (getActionFromKeyEvent(e) !== 'Enter') return;
-      trackKeyUp(e);
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    window.addEventListener('keyup', handleKeyUp);
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-      window.removeEventListener('keyup', handleKeyUp);
-    };
-  }, [pourStage]);
-
-  // ---- Milk pour gauge: live needle + release detection ---------------------
-  // Polls pal.js's isHeld/heldDurationMs every animation frame rather than
-  // deriving the reading from React state updates on each keydown -- TV
-  // remotes can repeat far slower than 60fps, and this is what keeps the
-  // needle sweeping smoothly between repeats instead of visibly stepping.
-  // milkGaugeStartedRef is what tells "hasn't been pressed yet" (keep
-  // waiting) apart from "was held, now isn't" (an actual release) -- without
-  // it, the very first frame of this effect would read isHeld('Enter') as
-  // false and immediately treat the still-untouched gauge as "released" at
-  // 0%.
-  useEffect(() => {
-    if (pourStage !== 'measuring') return undefined;
-    let cancelled = false;
-    let frameId;
-    const tick = () => {
-      if (cancelled) return;
-      if (isHeld('Enter')) {
-        milkGaugeStartedRef.current = true;
-        const pct = Math.min(100, (heldDurationMs('Enter') / MILK_FILL_DURATION_MS) * 100);
-        setMilkFillPercent(pct);
-      } else if (milkGaugeStartedRef.current) {
-        // Was held, now released (either a real keyup or pal.js's own
-        // release watchdog) -- lock in wherever the last frame's reading
-        // landed (already in milkFillPercent) and hand off to the existing
-        // 'pouring' stage above.
-        setPourStage('pouring');
-        return;
-      }
-      frameId = requestAnimationFrame(tick);
-    };
-    frameId = requestAnimationFrame(tick);
-    return () => {
-      cancelled = true;
-      cancelAnimationFrame(frameId);
-    };
-  }, [pourStage]);
-
-  // ---- Milk pour gauge: auto-focus the button the instant it appears -------
-  // Same "send focus straight to the thing that just became the only
-  // meaningful next action" reasoning as MatchaMaking's own big-spoon
-  // spotlight -- the bottle itself stops being focusable/draggable the
-  // moment it's mid-pour (see the bottleItems.map JSX below), so without
-  // this a D-pad user would have nothing left to navigate to.
-  useEffect(() => {
-    if (pourStage === 'measuring') {
-      milkGaugeButtonRef.current?.focus();
-    }
-  }, [pourStage]);
+  }, [pourStage, pouringKey, incomingBowl, INCOMING_BOWL_SPOT, bottleHome]);
 
   // Snapshotting cupMilk/cupMatcha here (rather than letting ToppingsStation
   // read this screen's own state, which won't exist anymore once the player
@@ -2141,7 +1978,6 @@ const MilkSelection = ({
         cupType: activeCup,
         iceCubes: icePlaced.filter(Boolean).length,
         milkType: cupMilk?.type,
-        milkFillPercent: cupMilk ? milkFillPercent : null,
         order,
       })
     );
@@ -2515,44 +2351,12 @@ const MilkSelection = ({
               top: `${cupMilkBox.top}%`,
               width: `${cupMilkBox.width}%`,
               height: `${cupMilkBox.height}%`,
-              // Read by the cupMilkGrow keyframe's own 100% transform (see
-              // MilkSelection.css) -- MILK_FILL_SCALE_BY_ZONE's own comment
-              // above has the per-outcome values. Falls back to a plain
-              // full cup (1) for any drink poured before this gauge existed
-              // (cupMilk.fillZone undefined) rather than rendering blank.
-              '--milk-fill-scale': MILK_FILL_SCALE_BY_ZONE[cupMilk.fillZone] ?? 1,
+              // No --milk-fill-scale set here anymore -- the fill always
+              // renders at its original fixed height (cupMilkGrow's own
+              // default --milk-fill-scale of 1 in MilkSelection.css).
             }}
           />
         )}
-        {/* Overfill spill puddles -- see MILK_SPILL_MAX_COUNT/
-            MILK_SPILL_SPOTS/milkSpillCountFor's own big comment above.
-            Purely decorative (aria-hidden, pointer-events: none via CSS).
-            Scattered around the cup's own current box (cupRenderPos/
-            cupRenderSize) rather than the milk fill's own box, since -- like
-            MatchaMaking's whisking spills landing around the *bowl*, not
-            inside it -- these read as puddled on the counter around the
-            cup's base, not floating inside the drink itself. Only as many
-            as cupMilk.spillCount calls for (1-4), always starting from
-            MILK_SPILL_SPOTS[0] so a lighter overfill's single puddle always
-            lands in the same spot rather than a random one. */}
-        {cupMilk?.fillZone === 'over' &&
-          cupSpot === 'table' &&
-          cupSendStage !== 'sent' &&
-          MILK_SPILL_SPOTS.slice(0, cupMilk.spillCount ?? 0).map((spot, i) => (
-            <span
-              key={i}
-              className="milk-spill-puddle"
-              aria-hidden="true"
-              style={{
-                left: `${cupRenderPos.left + cupRenderSize.width * spot.leftFrac}%`,
-                top: `${cupRenderPos.top + cupRenderSize.height * spot.topFrac}%`,
-                width: `${MILK_SPILL_STAGE_SIZES[i]}%`,
-                height: `${MILK_SPILL_STAGE_SIZES[i] * 0.7}%`,
-                '--puddle-color': MILK_STREAM_COLORS[cupMilk.type] ?? MILK_STREAM_COLORS.oat,
-                '--puddle-rotate': `${spot.rotate}deg`,
-              }}
-            />
-          ))}
         {/* Matcha poured on top of the milk -- see the big comment on
             CUP_MATCHA_RAISE_FRAC/getMatchaBoxFor above for the box, and
             cupMatcha above for the state. Rendered right after the milk
@@ -2643,83 +2447,6 @@ const MilkSelection = ({
             </p>
           );
         })}
-        {/* Milk pour hold-to-fill gauge -- see the big comment on
-            MILK_FILL_DURATION_MS/milkPourZoneFor/MILK_GAUGE_SECTION_COLORS
-            above, and milkGaugeCenterLeft/milkGaugeAnchorTop/milkNeedleX/
-            milkNeedleY just above this return for the geometry. Only up
-            during 'measuring', and only for an actual milk/water bottle (the
-            matcha bowl skips this stage entirely -- see the pourStage
-            effect). The circular button (not the arc, which is aria-hidden
-            and purely decorative) is the one real focus target --
-            auto-focused the instant this mounts (see the effect above) and
-            the only place the window keydown/keyup listener above needs
-            Enter to land, keyboard/D-pad or otherwise.
-            left/top below are the anchor POINT (bottom-center of the whole
-            widget -- see .milk-pour-gauge's own translate(-50%, -100%) in
-            MilkSelection.css), not a top-left corner, so the widget grows
-            upward from that point regardless of its own rendered height. */}
-        {pourStage === 'measuring' && pouringKey && pouringKey !== 'bowl' && (
-          <div
-            className="milk-pour-gauge"
-            style={{ left: `${milkGaugeCenterLeft}%`, top: `${milkGaugeAnchorTop}%`, width: `${MILK_GAUGE_WIDTH_PCT}%` }}
-          >
-            <svg className="milk-pour-arc" viewBox="0 0 200 96" aria-hidden="true">
-              {/* Gray casing -- same body/border gray pairing as
-                  MatchaMaking's .heater-temp-bar/.scoop-bar (see
-                  MilkSelection.css). Same radius/pivot as the colored
-                  segments below, just a wider stroke, so a few units of it
-                  show on either side as a border/frame around them. */}
-              <path
-                d={milkGaugeArcPath(0, 100, MILK_ARC_RADIUS)}
-                className="milk-pour-arc-casing"
-              />
-              {/* Seven flat, hard-edged color sections -- no gradient. See
-                  MILK_GAUGE_SECTION_COLORS' own comment above for why the
-                  boundaries are derived from MILK_GAUGE_SECTIONS rather than
-                  hardcoded here. */}
-              {MILK_GAUGE_SECTION_COLORS.map((color, i) => (
-                <path
-                  key={color}
-                  d={milkGaugeArcPath(
-                    (i * 100) / MILK_GAUGE_SECTIONS,
-                    ((i + 1) * 100) / MILK_GAUGE_SECTIONS,
-                    MILK_ARC_RADIUS
-                  )}
-                  stroke={color}
-                  className="milk-pour-arc-segment"
-                />
-              ))}
-              <line
-                x1={MILK_NEEDLE_PIVOT.x}
-                y1={MILK_NEEDLE_PIVOT.y}
-                x2={milkNeedleX}
-                y2={milkNeedleY}
-                className="milk-pour-needle"
-              />
-              <circle cx={MILK_NEEDLE_PIVOT.x} cy={MILK_NEEDLE_PIVOT.y} r="5" className="milk-pour-pivot" />
-            </svg>
-            <div
-              ref={milkGaugeButtonRef}
-              className="milk-pour-button"
-              tabIndex={0}
-              data-focusable
-              role="button"
-              aria-label="Milk pour gauge. Hold Enter or the center button, and release once the needle reaches the yellow section."
-            >
-              {/* Plain glyph swapped for an SVG chevron -- per request, a
-                  bigger, visibly thicker arrow than a font glyph's own
-                  weight can reliably give, with stroke-width as the one
-                  direct thickness knob (see .milk-pour-arrow in
-                  MilkSelection.css). */}
-              <svg className="milk-pour-arrow" viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M12 3 L12 17 M5 10 L12 17 L19 10" fill="none" />
-              </svg>
-            </div>
-            <p className="milk-pour-hint" aria-hidden="true">
-              hold enter -- release in the yellow
-            </p>
-          </div>
-        )}
         {/* Falling-liquid pour effect -- see the big comment on
             pourLeft/pourTop/pourHeight/pourColor above. Reuses
             MatchaMaking.css's .spoon-pour/.spoon-pour-grain-N (its
@@ -2727,10 +2454,22 @@ const MilkSelection = ({
             own drop-shadow stacking context, same reasoning as there).
             Only shown during the actual 'pouring' stage, not 'moving' --
             same as the kettle's falling water only appearing once it's
-            arrived and tilted, not while it's still gliding into place. */}
-        {pourStage === 'pouring' && pouringKey && (
+            arrived and tilted, not while it's still gliding into place.
+            Used to be scoped to pouringKey === 'bowl' only, back when the
+            milk/water base's own pour had a separate balance minigame
+            (bar+ball) that was its whole visual -- that minigame's been
+            removed entirely per request (reported as never rendering
+            visibly, see MilkSelection.css's own removal comment on
+            .milk-mix-bar), so every pour is back to this same plain stream,
+            same as the matcha bowl always used. Exempted from the
+            walkthrough tint during both showBaseSpotlight (milk/water base)
+            and showBowlSpotlight (matcha) -- this stream's z-index (20)
+            sits below .milk-spotlight-overlay's (25), so without this it'd
+            paint invisibly under the pink tint during the first order's own
+            walkthrough for either pour. */}
+        {pourStage === 'pouring' && (
           <div
-            className="spoon-pour"
+            className={`spoon-pour${showBaseSpotlight || showBowlSpotlight ? ' milk-spotlight-exempt' : ''}`}
             style={{
               left: `${pourLeft}%`,
               top: `${pourTop}%`,
@@ -2775,7 +2514,45 @@ const MilkSelection = ({
           </div>
         )}
 
-        <OrderReceiptButton order={order} />
+        <OrderReceiptButton
+          order={order}
+          spotlightExempt={showStationSpotlight}
+          onToggle={(nowOpen) => {
+            // Only the *closing* toggle (nowOpen === false) retires
+            // showOrderHint/showStationSpotlight -- the opening one fires
+            // first and shouldn't, since the player hasn't closed it back
+            // up yet. Same split as MatchaMaking's own onToggle.
+            if (!nowOpen) setShowOrderHint(false);
+            // The *opening* toggle, on the other hand, is exactly what
+            // retires showOrderButtonLock -- see that flag's own comment
+            // above for why it's a separate, shorter-lived flag from
+            // showOrderHint. Only ever needs to flip true once (never reset
+            // back).
+            if (nowOpen) setHasOpenedOrderReceipt(true);
+          }}
+        />
+        {/* First-order-only walkthrough callout -- label + arrow sitting to
+            the LEFT of the Order button, arrow pointing right at it, same
+            "arrow at the edge closest to the target, text beside it" shape
+            as .matcha-order-callout in MatchaMaking.css (also sits beside
+            its target with a sideways-pointing arrow rather than above/
+            below it) -- reusing the exact same right/top position since
+            it's the same widget in the same top-right corner on every
+            screen. Gone the instant showStationSpotlight ends (the button's
+            actually been opened and closed once). */}
+        {showStationSpotlight && (
+          <div className="milk-order-callout">
+            <p className="milk-order-callout-text">check cup type, ice amount, and drink base</p>
+            <svg
+              className="milk-order-callout-arrow"
+              viewBox="0 0 40 24"
+              preserveAspectRatio="none"
+              aria-hidden="true"
+            >
+              <polygon points="38,12 2,2 2,22" />
+            </svg>
+          </div>
+        )}
         <ProgressBar
           activeStep={activeStep}
           customerNumber={customerNumber}
@@ -2794,12 +2571,12 @@ const MilkSelection = ({
           currentStepHint={
             showAdvanceSpotlight ? null : 'use your right arrow key to move on to the toppings station.'
           }
-          // Suppressed while showCupSpotlight is up so the current-step
-          // dot's own autoFocus doesn't grab the walkthrough's very first
-          // selection out from under the cup's own focus effect -- same
-          // pairing as Customer Ordering/Matcha Making's own
-          // suppressInitialFocus.
-          suppressInitialFocus={showCupSpotlight}
+          // Suppressed while showOrderButtonLock or showCupSpotlight is up
+          // so the current-step dot's own autoFocus doesn't grab the
+          // walkthrough's very first selection out from under the Order
+          // button's/cup's own focus effects -- same pairing as Customer
+          // Ordering/Matcha Making's own suppressInitialFocus.
+          suppressInitialFocus={showOrderButtonLock || showCupSpotlight}
           // Exempts the whole bar from the walkthrough spotlight once
           // showAdvanceSpotlight is up -- the sixth beat's own target, once
           // there's nothing else left on screen to point at (see that
@@ -2960,23 +2737,27 @@ const MilkSelection = ({
           </div>
         )}
         {/* First-order-only walkthrough spotlight -- covers every beat on
-            this screen's walkthrough (showCupSpotlight, then
-            showIceSpotlight, then showBaseSpotlight, then showBowlSpotlight,
-            then showSendSpotlight, then showAdvanceSpotlight -- same
-            layered-onto-one-overlay shape Matcha Making uses for its own
-            longer walkthrough). Same flat, full-screen pink tint (no SVG
-            mask, no holes, just a div with a higher-z-index element punched
-            through it) as every other spotlight overlay in this project --
-            see .matcha-spotlight-overlay in MatchaMaking.css for the shared
-            reasoning. Rendered LAST (after ProgressBar and all six callouts
-            above, not before) so it actually paints over everything else on
-            this screen by default -- only whichever elements the active
-            beat exempts (see milk-spotlight-exempt on the cup/ice cube/
-            bottle/milk-fill/matcha-fill/bowl/send-zone classNames above, and
-            spotlightExempt on the ProgressBar call for the final beat)
-            punch through it via a higher z-index. pointer-events: none so it
-            never blocks input while it's up. */}
-        {(showCupSpotlight ||
+            this screen's walkthrough (showStationSpotlight, then
+            showCupSpotlight, then showIceSpotlight, then showBaseSpotlight,
+            then showBowlSpotlight, then showSendSpotlight, then
+            showAdvanceSpotlight -- same layered-onto-one-overlay shape
+            Matcha Making uses for its own longer walkthrough). Same flat,
+            full-screen pink tint (no SVG mask, no holes, just a div with a
+            higher-z-index element punched through it) as every other
+            spotlight overlay in this project -- see
+            .matcha-spotlight-overlay in MatchaMaking.css for the shared
+            reasoning. Rendered LAST (after ProgressBar and all seven
+            callouts above, not before) so it actually paints over
+            everything else on this screen by default -- only whichever
+            elements the active beat exempts (the Order receipt widget via
+            spotlightExempt on <OrderReceiptButton> for the first beat, then
+            milk-spotlight-exempt on the cup/ice cube/bottle/milk-fill/
+            matcha-fill/bowl/send-zone classNames above, and spotlightExempt
+            on the ProgressBar call for the final beat) punch through it via
+            a higher z-index. pointer-events: none so it never blocks input
+            while it's up. */}
+        {(showStationSpotlight ||
+          showCupSpotlight ||
           showIceSpotlight ||
           showBaseSpotlight ||
           showBowlSpotlight ||

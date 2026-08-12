@@ -9,8 +9,9 @@ import { scoreOrderTaking } from '../gameloop/scoring';
 // ---- Order-builder option lists ------------------------------------------
 // One list per dropdown/adder below, each a plain { value, label } pair --
 // value is what gets stored in state, label is what's shown to the player.
-// Base three, always orderable. Hojicha (added per request, order 4 onward
-// only, same as its counter tin on Matcha Making -- see gradeOptions in the
+// Per request, every order's own unlocks now STACK on top of every earlier
+// order's (nothing ever drops off the counter again) -- hojicha (now order
+// 3+, same as its counter tin on Matcha Making -- see gradeOptions in the
 // component below) is kept as a separate list rather than merged in
 // directly, same "never ask for what the player hasn't seen on the counter
 // yet" rule as BASE_OPTIONS_WITH_STRAWBERRY below.
@@ -30,12 +31,12 @@ const CUP_OPTIONS = [
 // generateSpokenOrder below) is always something the player can actually
 // match in this same dropdown.
 const ICE_OPTIONS = [0, 1, 2, 3, 4, 5, 6, 7].map((n) => ({ value: n, label: `${n}` }));
-// Base four, always orderable. Strawberry milk (added per request, order 2
-// onward only, same as its counter bottle on Milk Selection -- see
-// baseOptions in the component below) is kept as a separate list rather
-// than merged into this one directly so a first-time player is never asked
-// for -- or hears the customer speak -- an ingredient they haven't been
-// introduced to on the counter yet.
+// Base four, always orderable. Strawberry milk (order 2 onward, same as its
+// counter bottle on Milk Selection -- see baseOptions in the component
+// below) is kept as a separate list rather than merged into this one
+// directly so a first-time player is never asked for -- or hears the
+// customer speak -- an ingredient they haven't been introduced to on the
+// counter yet.
 const BASE_OPTIONS_BASE = [
   { value: 'dairy', label: 'dairy milk' },
   { value: 'oat', label: 'oat milk' },
@@ -43,23 +44,25 @@ const BASE_OPTIONS_BASE = [
   { value: 'coconut', label: 'coconut water' },
 ];
 const BASE_OPTIONS_WITH_STRAWBERRY = [...BASE_OPTIONS_BASE, { value: 'strawberry', label: 'strawberry milk' }];
-// Sparkling yuzu (order 4 onward, added per request) stacks on top of
-// strawberry rather than replacing it, same "separate list, never ask for
-// what hasn't been introduced yet" reasoning as strawberry itself above --
-// see baseOptions in the component below.
+// Sparkling yuzu -- order 3 onward (moved up from order 4, per request) --
+// stacks on top of strawberry rather than replacing it, same "separate
+// list, never ask for what hasn't been introduced yet" reasoning as
+// strawberry itself above -- see baseOptions in the component below.
 const BASE_OPTIONS_WITH_YUZU = [...BASE_OPTIONS_WITH_STRAWBERRY, { value: 'yuzu', label: 'sparkling yuzu' }];
+// Jasmine tea -- new order-4-and-later base, same counter-side unlock as
+// its own bottle on Milk Selection (see jasmineUnlocked there).
+const BASE_OPTIONS_WITH_JASMINE = [...BASE_OPTIONS_WITH_YUZU, { value: 'jasmine', label: 'jasmine tea' }];
 // Same "kept as a separate list, not merged in directly" reasoning as
-// BASE_OPTIONS_BASE/_WITH_STRAWBERRY above -- banana foam (order 2+, see
-// ToppingsStation.js's own bananaFoamUnlocked) and honey syrup/mint leaves
-// (order 3+, see that file's own honeySyrupUnlocked/mintLeavesUnlocked)
-// only become orderable/speakable once the counter itself actually has
-// them, same "never ask for what the player hasn't been introduced to
-// yet" rule. banana-foam was missing entirely here before (a real bug --
-// the counter offered it from order 2 on, but there was no way to ever be
-// asked for it), unlike honey-syrup/mint-leaves, whose value here reuses
+// BASE_OPTIONS_BASE/_WITH_STRAWBERRY above. Every value here reuses
 // ToppingsStation's own item key directly rather than a differently-named
-// order-form value (contrast matcha-cold-foam/reg-cold-foam, which map
-// through FOAM_KEY_TO_ORDER in gameloop/scoring.js).
+// order-form value, EXCEPT matcha-foam/reg-foam (map through
+// FOAM_KEY_TO_ORDER in gameloop/scoring.js to ToppingsStation's own
+// matcha-cold-foam/reg-cold-foam keys) -- every other foam/syrup/powder
+// added since (banana-foam, honey-syrup, mango-syrup, choco-powder,
+// lavender-syrup, strawberry-foam, peach-syrup, blueberry-foam) and the two
+// standalone garnishes (mint-leaves, banana-chips, cherry-blossoms) all use
+// the exact same key on both sides, same "no mapping needed" convention
+// banana-foam set.
 const TOPPING_OPTIONS_BASE = [
   { value: 'guava-syrup', label: 'guava syrup' },
   { value: 'mint-syrup', label: 'mint syrup' },
@@ -68,11 +71,41 @@ const TOPPING_OPTIONS_BASE = [
   { value: 'guava-powder', label: 'guava powder' },
   { value: 'matcha-powder', label: 'matcha powder' },
 ];
-const TOPPING_OPTIONS_ORDER2 = [...TOPPING_OPTIONS_BASE, { value: 'banana-foam', label: 'banana foam' }];
-const TOPPING_OPTIONS_ORDER3 = [
-  ...TOPPING_OPTIONS_ORDER2,
+// Order 2 -- banana foam, honey syrup, and mint leaves all unlock together
+// now (previously staggered across orders 2/3) -- same "read once, unmounts
+// between customers" reasoning as everywhere else in this file, matching
+// ToppingsStation.js's own bananaFoamUnlocked/honeySyrupUnlocked/
+// mintLeavesUnlocked (all >= 2 now).
+const TOPPING_OPTIONS_ORDER2 = [
+  ...TOPPING_OPTIONS_BASE,
+  { value: 'banana-foam', label: 'banana foam' },
   { value: 'honey-syrup', label: 'honey syrup' },
   { value: 'mint-leaves', label: 'mint leaves' },
+];
+// Order 3 -- mango syrup and choco powder, alongside hojicha/sparkling yuzu
+// above (see gradeOptions/baseOptions in the component below).
+const TOPPING_OPTIONS_ORDER3 = [
+  ...TOPPING_OPTIONS_ORDER2,
+  { value: 'mango-syrup', label: 'mango syrup' },
+  { value: 'choco-powder', label: 'choco powder' },
+];
+// Order 4 -- lavender syrup, strawberry foam, and banana chips (a standalone
+// garnish, same "own pot, own key" shape as mint-leaves), alongside jasmine
+// tea above.
+const TOPPING_OPTIONS_ORDER4 = [
+  ...TOPPING_OPTIONS_ORDER3,
+  { value: 'lavender-syrup', label: 'lavender syrup' },
+  { value: 'strawberry-foam', label: 'strawberry foam' },
+  { value: 'banana-chips', label: 'banana chips' },
+];
+// Order 5 (the session's last order, ORDERS_PER_SESSION -- see
+// ProgressBar.js) -- peach syrup, blueberry foam, and cherry blossoms (a
+// second standalone garnish, same shape as mint-leaves/banana-chips).
+const TOPPING_OPTIONS_ORDER5 = [
+  ...TOPPING_OPTIONS_ORDER4,
+  { value: 'peach-syrup', label: 'peach syrup' },
+  { value: 'blueberry-foam', label: 'blueberry foam' },
+  { value: 'cherry-blossoms', label: 'cherry blossoms' },
 ];
 
 // ---- Customer's randomized spoken order ----------------------------------
@@ -105,22 +138,31 @@ const TOPPING_SPEECH_NAMES = {
   'matcha-powder': 'matcha powder',
   'mint-leaves': 'mint leaves',
   'banana-foam': 'banana foam',
+  'mango-syrup': 'mango syrup',
+  'choco-powder': 'choco powder',
+  'lavender-syrup': 'lavender syrup',
+  'strawberry-foam': 'strawberry foam',
+  'banana-chips': 'banana chips',
+  'peach-syrup': 'peach syrup',
+  'blueberry-foam': 'blueberry foam',
+  'cherry-blossoms': 'cherry blossoms',
 };
 
 // ---- Which character is at the counter -----------------------------------
 // Five interchangeable customer characters -- Annie (the bunny, the
-// original/only one before this), Otto (the frog), Katie (the cat), Teddy
-// (the bear), and Coco (the poodle) -- one is picked at random each time a
+// original/only one before this), Otto (the frog), Kitty (the cat, formerly
+// "Katie" -- renamed, same role/slot, see git history), Teddy (the bear),
+// and Coco (the poodle) -- one is picked at random each time a
 // new order starts (see CUSTOMER_CHARACTER's own lazy useState initializer
 // in the component below, same "rolled once per mount, not re-rolled on
 // every render" pattern generateSpokenOrder's own spokenOrder already
 // uses, since this whole component unmounts/remounts between customers).
 // All five share the same bust framing/crop (Annie.png/Otto.png/
-// Katie.png/Teddy.png/Coco.png, each 429x509 -- cropped from a shared
+// Kitty.png/Teddy.png/Coco.png, each 429x509 -- cropped from a shared
 // 455x548 source canvas down to the union of all FIVE characters' own
 // bounding boxes (re-widened from the original three-character union once
 // Teddy's/Coco's own art turned out to reach further toward the canvas
-// edges than Annie/Otto/Katie did -- see the git history around when Teddy/
+// edges than Annie/Otto/Kitty did -- see the git history around when Teddy/
 // Coco were added for the narrower box that used to clip Teddy's left ear/
 // arm), so they render at identical scale/position in .ordering-bunny below
 // regardless of which one gets picked, with a few pixels of headroom (PAD)
@@ -128,7 +170,7 @@ const TOPPING_SPEECH_NAMES = {
 const CUSTOMER_CHARACTERS = {
   annie: { src: './Annie.png', alt: 'Annie the bunny, a customer at the counter' },
   otto: { src: './Otto.png', alt: 'Otto the frog, a customer at the counter' },
-  katie: { src: './Katie.png', alt: 'Katie the cat, a customer at the counter' },
+  kitty: { src: './Kitty.png', alt: 'Kitty the cat, a customer at the counter' },
   teddy: { src: './Teddy.png', alt: 'Teddy the bear, a customer at the counter' },
   coco: { src: './Coco.png', alt: 'Coco the poodle, a customer at the counter' },
 };
@@ -136,15 +178,16 @@ const CUSTOMER_CHARACTERS = {
 // One short voice-over clip per customer character, keyed by character id --
 // tied to WHO is at the counter, not to what they happen to order (the
 // spoken order text itself is randomized separately by generateSpokenOrder
-// above). All five characters have a recorded line now -- Katie's was
-// re-recorded (a straight file swap, same key/path, no code change needed
-// beyond the asset itself) and Otto/Teddy/Coco's were added fresh. The
-// playback effect below still treats a missing entry as "no line to play"
-// rather than erroring, so any future character added without its own line
-// yet would still just silently skip playing anything.
+// above). All five characters have a recorded line now -- Kitty's (kept
+// from when the character was still called Katie -- same clip, just
+// re-keyed/renamed alongside the character rename, no re-record) and
+// Otto/Teddy/Coco's were added fresh. The playback effect below still
+// treats a missing entry as "no line to play" rather than erroring, so any
+// future character added without its own line yet would still just
+// silently skip playing anything.
 const CHARACTER_ORDERING_AUDIO = {
   annie: './AnnieOrdering.wav',
-  katie: './KatieOrdering.wav',
+  kitty: './KittyOrdering.wav',
   otto: './OttoOrdering.wav',
   teddy: './TeddyOrdering.wav',
   coco: './CocoOrdering.wav',
@@ -426,27 +469,44 @@ const CustomerOrdering = ({
   onOrderScored,
 }) => {
   const containerRef = useRef(null);
-  // Strawberry milk becomes orderable from order 2 onward, sparkling yuzu
-  // from order 4 onward -- same unlocks as their counter bottles on Milk
-  // Selection. This screen fully unmounts/remounts between customers
-  // (App.js only ever renders one page-slide's component at a time), so
-  // customerNumber is fixed for this whole mount's lifetime -- no need for
-  // this to be reactive, just read once and used both for the dropdown's
-  // own options and for whatever the customer might randomly ask for (see
-  // generateSpokenOrder below).
+  // Strawberry milk from order 2 onward, sparkling yuzu from order 3 onward
+  // (moved up from order 4), jasmine tea new from order 4 onward -- same
+  // unlocks as their counter bottles on Milk Selection. This screen fully
+  // unmounts/remounts between customers (App.js only ever renders one
+  // page-slide's component at a time), so customerNumber is fixed for this
+  // whole mount's lifetime -- no need for this to be reactive, just read
+  // once and used both for the dropdown's own options and for whatever the
+  // customer might randomly ask for (see generateSpokenOrder below).
   const baseOptions =
-    customerNumber >= 4 ? BASE_OPTIONS_WITH_YUZU : customerNumber >= 2 ? BASE_OPTIONS_WITH_STRAWBERRY : BASE_OPTIONS_BASE;
-  // Hojicha becomes orderable from order 4 onward -- same unlock as its
-  // counter tin on Matcha Making, same "read once" reasoning as baseOptions
-  // just above.
-  const gradeOptions = customerNumber >= 4 ? GRADE_OPTIONS_WITH_HOJICHA : GRADE_OPTIONS_BASE;
-  // Banana foam becomes orderable from order 2 onward, honey syrup/mint
-  // leaves from order 3 onward -- same "read once, unmounts between
-  // customers" reasoning as baseOptions just above -- see
-  // ToppingsStation.js's own bananaFoamUnlocked/honeySyrupUnlocked/
-  // mintLeavesUnlocked for the matching counter-side gates.
+    customerNumber >= 4
+      ? BASE_OPTIONS_WITH_JASMINE
+      : customerNumber >= 3
+      ? BASE_OPTIONS_WITH_YUZU
+      : customerNumber >= 2
+      ? BASE_OPTIONS_WITH_STRAWBERRY
+      : BASE_OPTIONS_BASE;
+  // Hojicha becomes orderable from order 3 onward (moved up from order 4)
+  // -- same unlock as its counter tin on Matcha Making, same "read once"
+  // reasoning as baseOptions just above.
+  const gradeOptions = customerNumber >= 3 ? GRADE_OPTIONS_WITH_HOJICHA : GRADE_OPTIONS_BASE;
+  // Every order's own new toppings stack on top of the last (banana foam/
+  // honey syrup/mint leaves at order 2, mango syrup/choco powder at order 3,
+  // lavender syrup/strawberry foam/banana chips at order 4, peach syrup/
+  // blueberry foam/cherry blossoms at order 5 -- the session's last order,
+  // see ORDERS_PER_SESSION in ProgressBar.js) -- same "read once, unmounts
+  // between customers" reasoning as baseOptions just above -- see
+  // ToppingsStation.js's own per-ingredient *Unlocked flags for the matching
+  // counter-side gates.
   const toppingOptions =
-    customerNumber >= 3 ? TOPPING_OPTIONS_ORDER3 : customerNumber >= 2 ? TOPPING_OPTIONS_ORDER2 : TOPPING_OPTIONS_BASE;
+    customerNumber >= 5
+      ? TOPPING_OPTIONS_ORDER5
+      : customerNumber >= 4
+      ? TOPPING_OPTIONS_ORDER4
+      : customerNumber >= 3
+      ? TOPPING_OPTIONS_ORDER3
+      : customerNumber >= 2
+      ? TOPPING_OPTIONS_ORDER2
+      : TOPPING_OPTIONS_BASE;
   // Declared up here (rather than down by orderFormOpen/the order-builder
   // state, where the rest of these would naturally sit) purely so the two
   // bridge effects right below -- which need these refs -- can be
@@ -1093,7 +1153,7 @@ const CustomerOrdering = ({
             background so it can eventually be swapped per customer"
             approach the matcha/toppings stations use for their own props.
             Now actually swapped per customer -- randomly one of Annie/Otto/
-            Katie/Teddy/Coco (see customerCharacter/CUSTOMER_CHARACTERS
+            Kitty/Teddy/Coco (see customerCharacter/CUSTOMER_CHARACTERS
             above) instead of always Annie's own BunnyOrder.png -- see
             .ordering-bunny in
             CustomerOrdering.css (class name kept as-is even though it's not

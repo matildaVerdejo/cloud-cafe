@@ -14,6 +14,8 @@ import {
   getPowderLiquidBoxFor,
   getFleckPositions,
   getLeafBoxFor,
+  getChipBoxFor,
+  getBlossomBoxFor,
   POWDER_FLECK_OFFSETS_ELLIPSE,
   POWDER_FLECK_OFFSETS_LIQUID,
 } from './ToppingsStation';
@@ -21,17 +23,17 @@ import {
 // Display name per customer character key -- CustomerOrdering.js's own
 // CUSTOMER_CHARACTERS only has src/alt (image concerns), not a plain display
 // name, and order.customerCharacter (see below) only ever carries the raw
-// key ('annie' | 'otto' | 'katie' | 'teddy' | 'coco'), so this is what turns
+// key ('annie' | 'otto' | 'kitty' | 'teddy' | 'coco'), so this is what turns
 // that key into the "<Name> Order" title ScoreCard.js's own score-card-title
 // now shows.
-const CUSTOMER_CHARACTER_NAME = { annie: 'annie', otto: 'otto', katie: 'katie', teddy: 'teddy', coco: 'coco' };
+const CUSTOMER_CHARACTER_NAME = { annie: 'annie', otto: 'otto', kitty: 'kitty', teddy: 'teddy', coco: 'coco' };
 
 // One "reaction sticker" per character per score tier -- fail -> angry,
 // mid -> annoyed, good -> happy, same three tiers computeOverallScore
 // (gameloop/scoring.js) already buckets the round's total into for
 // ScoreCard's own total-pill coloring, just reused here for which sticker
 // shows instead of which color does. Files are the three emotion PNGs per
-// character (Annie/Katie/Otto/Teddy/Coco), each already trimmed to its own
+// character (Annie/Kitty/Otto/Teddy/Coco), each already trimmed to its own
 // alpha bounding box -- rendered with object-fit: contain (see .serving-
 // reaction-sticker in FinalCombination.css) rather than the shared-canvas
 // crop CustomerOrdering.js's own portraits use, since these don't need to
@@ -40,7 +42,7 @@ const CUSTOMER_CHARACTER_NAME = { annie: 'annie', otto: 'otto', katie: 'katie', 
 // natural aspect ratio.
 const REACTION_STICKERS = {
   annie: { fail: './AnnieAngry.png', mid: './AnnieAnnoyed.png', good: './AnnieHappy.png' },
-  katie: { fail: './KatieAngry.png', mid: './KatieAnnoyed.png', good: './KatieHappy.png' },
+  kitty: { fail: './KittyAngry.png', mid: './KittyAnnoyed.png', good: './KittyHappy.png' },
   otto: { fail: './OttoAngry.png', mid: './OttoAnnoyed.png', good: './OttoHappy.png' },
   teddy: { fail: './TeddyAngry.png', mid: './TeddyAnnoyed.png', good: './TeddyHappy.png' },
   coco: { fail: './CocoAngry.png', mid: './CocoAnnoyed.png', good: './CocoHappy.png' },
@@ -275,6 +277,13 @@ const FinalCombination = ({
   // this screen's own fixed finalDrinkSpot-based boxes instead).
   const leafLandingBox = incomingDrink?.foam && incomingFoamCapBox ? incomingFoamCapBox : incomingTopBox;
   const incomingLeafBox = incomingDrink?.leaf && leafLandingBox ? getLeafBoxFor(leafLandingBox) : null;
+  // Same "settle on the foam's own top ellipse if there's foam to catch it"
+  // choice as incomingLeafBox above, for the two newer standalone garnishes
+  // (see ToppingsStation.js's own chipLandingBox/blossomLandingBox).
+  const chipLandingBox = incomingDrink?.foam && incomingFoamCapBox ? incomingFoamCapBox : incomingTopBox;
+  const incomingChipBox = incomingDrink?.chip && chipLandingBox ? getChipBoxFor(chipLandingBox) : null;
+  const blossomLandingBox = incomingDrink?.foam && incomingFoamCapBox ? incomingFoamCapBox : incomingTopBox;
+  const incomingBlossomBox = incomingDrink?.blossom && blossomLandingBox ? getBlossomBoxFor(blossomLandingBox) : null;
 
   return (
     <div className="final-combination-container" ref={containerRef}>
@@ -452,6 +461,39 @@ const FinalCombination = ({
                   top: `${incomingLeafBox.top}%`,
                   width: `${incomingLeafBox.width}%`,
                   height: `${incomingLeafBox.height}%`,
+                }}
+              />
+            )}
+            {/* Banana chip/cherry blossom garnishes, carried over from
+                ToppingsStation's own incomingDrink.chip/blossom flags --
+                same shape as the mint-leaf garnish just above. */}
+            {incomingChipBox && (
+              <img
+                src="./BananaChip.png"
+                alt=""
+                aria-hidden="true"
+                draggable={false}
+                className="cup-leaf-garnish"
+                style={{
+                  left: `${incomingChipBox.left}%`,
+                  top: `${incomingChipBox.top}%`,
+                  width: `${incomingChipBox.width}%`,
+                  height: `${incomingChipBox.height}%`,
+                }}
+              />
+            )}
+            {incomingBlossomBox && (
+              <img
+                src="./CherryBlossom.png"
+                alt=""
+                aria-hidden="true"
+                draggable={false}
+                className="cup-leaf-garnish"
+                style={{
+                  left: `${incomingBlossomBox.left}%`,
+                  top: `${incomingBlossomBox.top}%`,
+                  width: `${incomingBlossomBox.width}%`,
+                  height: `${incomingBlossomBox.height}%`,
                 }}
               />
             )}

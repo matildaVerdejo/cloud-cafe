@@ -23,6 +23,7 @@ const BASE_LABELS = {
   coconut: 'coconut water',
   strawberry: 'strawberry milk',
   yuzu: 'sparkling yuzu',
+  jasmine: 'jasmine tea',
 };
 const TOPPING_LABELS = {
   'guava-syrup': 'guava syrup',
@@ -34,6 +35,14 @@ const TOPPING_LABELS = {
   'matcha-powder': 'matcha powder',
   'mint-leaves': 'mint leaves',
   'banana-foam': 'banana foam',
+  'mango-syrup': 'mango syrup',
+  'choco-powder': 'choco powder',
+  'lavender-syrup': 'lavender syrup',
+  'strawberry-foam': 'strawberry foam',
+  'banana-chips': 'banana chips',
+  'peach-syrup': 'peach syrup',
+  'blueberry-foam': 'blueberry foam',
+  'cherry-blossoms': 'cherry blossoms',
 };
 
 // Lets the player peek at the current order without leaving whichever

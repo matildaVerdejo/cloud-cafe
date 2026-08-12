@@ -175,12 +175,15 @@
    as .ordering-read-order-callout -- reused structure, not the same
    element, since the two are never shown at the same time (read phase vs.
    button phase are mutually exclusive) but each still needs its own
-   independent position. left pulled in from 60% to 50% per request, moving
-   it closer to the order-taking window (the play button that opens the
-   order form) instead of sitting so far to its right. */
+   independent position. left moved right again (50% -> 60%) per a later
+   request -- this box has no centering transform, so with its own 22%
+   width its true center sits at left + 11%; 60% puts that center at ~71%,
+   which lines up with the play button's own center (69% + half its ~3.54%-
+   of-container width =~ 70.8%) far better than 50% did (center ~61%, well
+   left of the button it's supposed to be pointing straight up at). */
 .ordering-button-callout {
   position: absolute;
-  left: 50%;
+  left: 60%;
   top: 70%;
   width: 22%;
   z-index: 26;
@@ -334,7 +337,7 @@
 }
 
 /* The customer character, composited on top of the background art --
-   Annie/Otto/Katie (see CUSTOMER_CHARACTERS in CustomerOrdering.js), one
+   Annie/Otto/Kitty (see CUSTOMER_CHARACTERS in CustomerOrdering.js), one
    randomly picked per customer, rather than always the same fixed asset.
    All three share an identical crop (398x506, ~0.7866 -- cropped from a
    shared 455x548 source canvas down to the union of all three characters'

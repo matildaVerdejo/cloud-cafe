@@ -248,10 +248,12 @@
    Positioned to the gauge's own left (SCOOP_BAR_BOX: left: 93, top: 42,
    height: 40 in MatchaMaking.js, so right: 9% here lands just clear of its
    left edge, top: 55% roughly levels with its vertical center) -- eyeballed
-   the same way every other exact position in this project is. */
+   the same way every other exact position in this project is. Nudged from
+   right: 14% to right: 11% per feedback that the whole callout needed to
+   sit a little further right (closer to the gauge it's pointing at). */
 .matcha-scoop-callout {
   position: absolute;
-  right: 14%;
+  right: 11%;
   top: 43%;
   transform: translateY(-50%);
   width: 24%;
@@ -789,27 +791,22 @@
 }
 
 /* Fifth highlight beat (see showTinHint in MatchaMaking.js) -- all three
-   tins flash at once until a grade's picked. filter: drop-shadow rather
-   than box-shadow since these are <img> elements (drop-shadow follows the
-   art's own alpha shape instead of drawing a box), white two-layer soft
-   glow (was the same light-green (rgb(130, 190, 110)) glow every other
-   beat uses, switched to white per request), with the item's own resting
-   drop-shadow (0 4px 6px rgba(0,0,0,0.18)) kept as the constant first layer
-   so it doesn't vanish between flashes. */
+   tins get a constant white outline until a grade's picked. filter:
+   drop-shadow rather than box-shadow since these are <img> elements
+   (drop-shadow follows the art's own alpha shape instead of drawing a
+   box). Per request, flashing is now reserved for the three minigame
+   gauges only (.scoop-bar-highlight/.heater-temp-bar-highlight/
+   .mix-bar-highlight below) -- every other selected/highlighted item on
+   this screen, this one included, gets this same static (non-animated)
+   white glow instead of the xHaloBlink pulse it used to run. Was
+   `animation: tinHaloBlink 1.1s ease-in-out infinite` alternating between
+   this on-state and a fully-faded-out one; now just sits at the on-state
+   permanently, with the item's own resting drop-shadow
+   (0 4px 6px rgba(0,0,0,0.18)) kept as the constant first layer same as
+   before. */
 .station-item.selectable.tin-highlight {
-  animation: tinHaloBlink 1.1s ease-in-out infinite;
-}
-
-@keyframes tinHaloBlink {
-  0%,
-  100% {
-    filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.18)) drop-shadow(0 0 14px rgba(255, 255, 255, 0.9))
-      drop-shadow(0 0 28px rgba(255, 255, 255, 0.55));
-  }
-  50% {
-    filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.18)) drop-shadow(0 0 0 rgba(255, 255, 255, 0))
-      drop-shadow(0 0 0 rgba(255, 255, 255, 0));
-  }
+  filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.18)) drop-shadow(0 0 14px rgba(255, 255, 255, 0.9))
+    drop-shadow(0 0 28px rgba(255, 255, 255, 0.55));
 }
 
 /* Hint label for the same beat -- centered above the tin cluster (see
@@ -922,8 +919,15 @@
 /* Same shape-hugging white focus glow as .glass-cup/.ice-cube on Milk
    Selection -- filter: drop-shadow() traces the rendered alpha channel, so
    it hugs each item's actual silhouette instead of drawing a rectangle
-   around its transparent padding. */
-.station-item.movable:focus-visible {
+   around its transparent padding. Explicit .topping-focus-halo variant (see
+   syrupSpotlightMoved in ToppingsStation.js) lets both syrup bottles show
+   this glow at once during the first-order syrup-picking walkthrough beat,
+   not just the one that actually has DOM focus -- same "explicit class
+   alongside :focus-visible" shape as MilkSelection.css's own
+   .glass-cup.milk-cup-focus-halo/.ice-cube.milk-ice-focus-halo/
+   .milk-bottle.milk-bottle-focus-halo. */
+.station-item.movable:focus-visible,
+.station-item.movable.topping-focus-halo {
   outline: none;
   box-shadow: none;
   transform: scale(1.06);
@@ -932,27 +936,20 @@
     drop-shadow(0 0 12px rgba(255, 255, 255, 0.75));
 }
 
-/* Tenth highlight beat (see showKettleHint in MatchaMaking.js) -- flashes
+/* Tenth highlight beat (see showKettleHint in MatchaMaking.js) -- outlines
    the kettle the instant the temp bar sequence finishes, retiring the
    instant the player starts the pour. Same filter: drop-shadow approach as
    .station-item.selectable.tin-highlight/.big-spoon.big-spoon-highlight
-   (this is an <img> too), same light-green (rgb(130, 190, 110)) two-layer
-   soft glow as every other beat, with the item's own resting drop-shadow
-   kept as the constant first layer. */
+   (this is an <img> too). Per request, flashing is now reserved for the
+   three minigame gauges only -- this (like every other non-minigame
+   highlight on this screen) is now a constant, non-animated glow instead
+   of the old xHaloBlink pulse, and switched from that pulse's light-green
+   (rgb(130, 190, 110)) to plain white so every static outline on this
+   screen reads the same, with the item's own resting drop-shadow kept as
+   the constant first layer. */
 .station-item.movable.kettle-highlight {
-  animation: kettleHaloBlink 1.1s ease-in-out infinite;
-}
-
-@keyframes kettleHaloBlink {
-  0%,
-  100% {
-    filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.18)) drop-shadow(0 0 14px rgba(130, 190, 110, 0.9))
-      drop-shadow(0 0 28px rgba(130, 190, 110, 0.55));
-  }
-  50% {
-    filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.18)) drop-shadow(0 0 0 rgba(130, 190, 110, 0))
-      drop-shadow(0 0 0 rgba(130, 190, 110, 0));
-  }
+  filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.18)) drop-shadow(0 0 14px rgba(255, 255, 255, 0.9))
+    drop-shadow(0 0 28px rgba(255, 255, 255, 0.55));
 }
 
 /* Hint label for the same beat -- centered above the kettle's spawn spot
@@ -1003,27 +1000,18 @@
   animation: hintRingPulse 2s ease-in-out 0.3s infinite;
 }
 
-/* Eleventh highlight beat (see showWhiskHint in MatchaMaking.js) -- flashes
+/* Eleventh highlight beat (see showWhiskHint in MatchaMaking.js) -- outlines
    the whisk the instant both the matcha and water are in the bowl and the
    kettle's back to idle, retiring the instant the player starts whisking.
    Same filter: drop-shadow approach as .kettle-highlight (this is an <img>
-   too), same light-green (rgb(130, 190, 110)) two-layer soft glow as every
-   other beat, with the item's own resting drop-shadow kept as the constant
-   first layer. */
+   too). Per request, flashing is now reserved for the three minigame
+   gauges only -- constant, non-animated white glow instead of the old
+   xHaloBlink pulse (was light-green, rgb(130, 190, 110), same as
+   .kettle-highlight used to be), with the item's own resting drop-shadow
+   kept as the constant first layer. */
 .station-item.movable.whisk-highlight {
-  animation: whiskHaloBlink 1.1s ease-in-out infinite;
-}
-
-@keyframes whiskHaloBlink {
-  0%,
-  100% {
-    filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.18)) drop-shadow(0 0 14px rgba(130, 190, 110, 0.9))
-      drop-shadow(0 0 28px rgba(130, 190, 110, 0.55));
-  }
-  50% {
-    filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.18)) drop-shadow(0 0 0 rgba(130, 190, 110, 0))
-      drop-shadow(0 0 0 rgba(130, 190, 110, 0));
-  }
+  filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.18)) drop-shadow(0 0 14px rgba(255, 255, 255, 0.9))
+    drop-shadow(0 0 28px rgba(255, 255, 255, 0.55));
 }
 
 /* Hint label for the same beat -- centered above the whisk's spawn spot
@@ -1074,27 +1062,17 @@
   animation: hintRingPulse 2s ease-in-out 0.3s infinite;
 }
 
-/* Thirteenth highlight beat (see showBowlHint in MatchaMaking.js) -- flashes
+/* Thirteenth highlight beat (see showBowlHint in MatchaMaking.js) -- outlines
    the bowl the instant whisking finishes, retiring the instant the player
    sends it off. Same filter: drop-shadow approach as .kettle-highlight/
-   .whisk-highlight (this is an <img> too), white two-layer soft glow (was
-   the same light-green (rgb(130, 190, 110)) glow every other beat uses,
-   switched to white per request), with the item's own resting drop-shadow
-   kept as the constant first layer. */
+   .whisk-highlight (this is an <img> too), white two-layer soft glow. Per
+   request, flashing is now reserved for the three minigame gauges only --
+   this no longer runs the xHaloBlink pulse, just sits at the on-state
+   permanently, with the item's own resting drop-shadow kept as the
+   constant first layer, same as before. */
 .station-item.movable.bowl-highlight {
-  animation: bowlHaloBlink 1.1s ease-in-out infinite;
-}
-
-@keyframes bowlHaloBlink {
-  0%,
-  100% {
-    filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.18)) drop-shadow(0 0 14px rgba(255, 255, 255, 0.9))
-      drop-shadow(0 0 28px rgba(255, 255, 255, 0.55));
-  }
-  50% {
-    filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.18)) drop-shadow(0 0 0 rgba(255, 255, 255, 0))
-      drop-shadow(0 0 0 rgba(255, 255, 255, 0));
-  }
+  filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.18)) drop-shadow(0 0 14px rgba(255, 255, 255, 0.9))
+    drop-shadow(0 0 28px rgba(255, 255, 255, 0.55));
 }
 
 /* Hint label for the same beat -- tracks wherever the bowl currently is
@@ -1287,20 +1265,22 @@
     0 0 10px 4px rgba(224, 69, 58, 0.85);
 }
 
-/* Eighth highlight beat (see showHeaterHint in MatchaMaking.js) -- flashes
+/* Eighth highlight beat (see showHeaterHint in MatchaMaking.js) -- outlines
    the instant the pour finishes, retiring the instant the heater's
    switched on. Only ever applied while the button's in its plain/off
    state (showHeaterHint requires !heaterOn), so it's safe to just append
    two more box-shadow layers after the plain state's own three (depth,
    focus-ring placeholder, on-glow placeholder) rather than needing its own
-   zone-style override. White two-layer soft glow (was the same light-green
-   (rgb(130, 190, 110)) glow every other beat uses, switched to white per
-   request). */
-/* Glow now lives on a ::after pseudo-element (heater-button is already
-   position: absolute above) instead of animating this rule's own
-   box-shadow directly -- see haloGlowFade's own big comment in App.css.
-   The button's own resting shadow/placeholder layers (declared on
-   .heater-button itself above) stay untouched and constant. */
+   zone-style override. White two-layer soft glow. This button toggles the
+   heater on -- it's the button, not the temp-bar gauge itself, so per
+   request it's one of the non-minigame items: a constant, non-animated
+   glow instead of the haloGlowFade pulse it used to run (the water-temp
+   gauge that opens once this is pressed, .heater-temp-bar-highlight below,
+   keeps its flash). Still lives on a ::after pseudo-element (heater-button
+   is already position: absolute above) purely so it layers over the
+   button's own resting shadow/placeholder layers without disturbing them,
+   same structural reason as haloGlowFade's own big comment in App.css,
+   even though nothing here animates anymore. */
 .heater-button.heater-button-highlight::after {
   content: '';
   position: absolute;
@@ -1308,7 +1288,6 @@
   border-radius: inherit;
   pointer-events: none;
   box-shadow: 0 0 30px 12px rgba(255, 255, 255, 0.9), 0 0 65px 26px rgba(255, 255, 255, 0.55);
-  animation: haloGlowFade 1.1s ease-in-out infinite;
 }
 
 /* Hint label for the same beat -- anchored below the heater plate/temp bar
@@ -1848,27 +1827,18 @@
   cursor: default;
 }
 
-/* Seventh highlight beat (see showSpoonHint in MatchaMaking.js) -- flashes
+/* Seventh highlight beat (see showSpoonHint in MatchaMaking.js) -- outlines
    the instant the spoon appears, retiring the instant the player starts
    the pour. filter: drop-shadow (this is an <img>, same reasoning as
    .station-item.selectable.tin-highlight above) with a white two-layer soft
-   glow (was the same light-green (rgb(130, 190, 110)) glow every other beat
-   uses, switched to white per request) and the spoon's own resting
-   drop-shadow kept as the constant first layer. */
+   glow. This is the spoon tool itself, not the teaspoon-amount gauge it
+   measures into (.scoop-bar-highlight, which keeps its flash) -- per
+   request this is one of the non-minigame items, so it's now a constant,
+   non-animated glow instead of the old xHaloBlink pulse, with the spoon's
+   own resting drop-shadow kept as the constant first layer. */
 .big-spoon.big-spoon-highlight {
-  animation: bigSpoonHaloBlink 1.1s ease-in-out infinite;
-}
-
-@keyframes bigSpoonHaloBlink {
-  0%,
-  100% {
-    filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.18)) drop-shadow(0 0 14px rgba(255, 255, 255, 0.9))
-      drop-shadow(0 0 28px rgba(255, 255, 255, 0.55));
-  }
-  50% {
-    filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.18)) drop-shadow(0 0 0 rgba(255, 255, 255, 0))
-      drop-shadow(0 0 0 rgba(255, 255, 255, 0));
-  }
+  filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.18)) drop-shadow(0 0 14px rgba(255, 255, 255, 0.9))
+    drop-shadow(0 0 28px rgba(255, 255, 255, 0.55));
 }
 
 /* Hint label for the same beat -- anchored at the spoon's own spawn spot

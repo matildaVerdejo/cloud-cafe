@@ -127,6 +127,21 @@
   background: linear-gradient(to top, rgba(214, 158, 46, 0.85) 0%, rgba(214, 158, 46, 0.85) 30%, rgba(214, 158, 46, 0) 100%);
 }
 
+/* Mango/lavender/peach syrup -- same shape/gradient treatment as the three
+   above, just their own colors (see SYRUP_STREAM_COLORS in
+   ToppingsStation.js). */
+.cup-syrup-fill.mango-syrup {
+  background: linear-gradient(to top, rgba(237, 168, 47, 0.85) 0%, rgba(237, 168, 47, 0.85) 30%, rgba(237, 168, 47, 0) 100%);
+}
+
+.cup-syrup-fill.lavender-syrup {
+  background: linear-gradient(to top, rgba(181, 156, 214, 0.85) 0%, rgba(181, 156, 214, 0.85) 30%, rgba(181, 156, 214, 0) 100%);
+}
+
+.cup-syrup-fill.peach-syrup {
+  background: linear-gradient(to top, rgba(237, 149, 116, 0.85) 0%, rgba(237, 149, 116, 0.85) 30%, rgba(237, 149, 116, 0) 100%);
+}
+
 /* Cold foam, poured on top of the drink -- its own dedicated shape rather
    than reusing MilkSelection.css's .cup-matcha-fill clip-path (that
    clip-path's top edge is a pointed glass-taper meniscus, sharp corners
@@ -188,6 +203,27 @@
   );
 }
 
+/* Strawberry/blueberry foam -- same treatment, colors sampled from
+   StrawberryFoam.png/BlueberryFoam.png (see FOAM_STREAM_COLORS in
+   ToppingsStation.js). */
+.cup-foam-fill.strawberry-foam {
+  background: linear-gradient(
+    to bottom,
+    rgba(247, 175, 199, 0.7) 0%,
+    rgba(247, 175, 199, 0.7) 92%,
+    rgba(247, 175, 199, 0) 100%
+  );
+}
+
+.cup-foam-fill.blueberry-foam {
+  background: linear-gradient(
+    to bottom,
+    rgba(138, 152, 214, 0.7) 0%,
+    rgba(138, 152, 214, 0.7) 92%,
+    rgba(138, 152, 214, 0) 100%
+  );
+}
+
 /* Foam's flattened top-surface ellipse ("cap" -- see getFoamCapBoxFor in
    ToppingsStation.js), straddling the body's own top edge. A plain circle
    (border-radius: 50%, applied to a non-square box so it renders as an
@@ -219,6 +255,14 @@
   background: rgba(240, 219, 137, 0.85);
 }
 
+.cup-foam-cap.strawberry-foam {
+  background: rgba(247, 175, 199, 0.85);
+}
+
+.cup-foam-cap.blueberry-foam {
+  background: rgba(138, 152, 214, 0.85);
+}
+
 /* Matcha-powder/guava-powder settled flecks (see getFleckPositions/
    POWDER_FLECK_OFFSETS_ELLIPSE/_LIQUID in ToppingsStation.js) -- small
    solid dots rather than a smooth gradient fill, since a sprinkled powder
@@ -246,6 +290,10 @@
 
 .cup-powder-fleck.guava-powder {
   background: rgba(232, 137, 122, 0.95);
+}
+
+.cup-powder-fleck.choco-powder {
+  background: rgba(94, 58, 42, 0.95);
 }
 
 @keyframes powderFleckAppear {
@@ -436,7 +484,7 @@
    the syrup pair's own right edge, vertically centered on it). */
 .topping-syrup-callout {
   position: absolute;
-  left: 22%;
+  left: 18%;
   top: 27%;
   transform: translateY(-50%);
   width: 24%;
@@ -520,7 +568,7 @@
    callout since both pairs share the same left edge (STACK_LEFT_MARGIN). */
 .topping-foam-callout {
   position: absolute;
-  left: 22%;
+  left: 18%;
   top: 60%;
   transform: translateY(-50%);
   width: 24%;
@@ -596,8 +644,8 @@
    positioning math. */
 .topping-powder-callout {
   position: absolute;
-  right: 21%;
-  top: 34.5%;
+  right: 22%;
+  top: 31%;
   transform: translateY(-50%);
   width: 20%;
   z-index: 26;
