@@ -2692,7 +2692,7 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
               top: `${item.top + item.height + TIN_LABEL_GAP}%`,
             }}
           >
-            {TIN_LABELS[item.key]}
+            {TIN_LABELS[item.key].replace(' ', '\n')}
           </p>
         ))}
         {/* Suppressed for the first order specifically -- showTinSpotlight
@@ -3495,8 +3495,9 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
                 // orders 2/3) per feedback, then further left again per
                 // additional feedback, then nudged back right a little (-14
                 // to -8) per further feedback that it had ended up sitting
-                // too far left.
-                style={{ left: `${mixBarPos.left + MIX_BAR_WIDTH / 2 - 8}%`, top: `${mixBarPos.top - 16}%` }}
+                // too far left, then left again (-8 to -11) per further
+                // feedback.
+                style={{ left: `${mixBarPos.left + MIX_BAR_WIDTH / 2 - 11}%`, top: `${mixBarPos.top - 16}%` }}
               >
                 <p className="matcha-mix-callout-text">use the arrow keys to whisk without spilling</p>
                 <svg

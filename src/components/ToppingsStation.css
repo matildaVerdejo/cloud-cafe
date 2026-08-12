@@ -336,7 +336,7 @@
 
 /* Topping name label ("guava syrup"/"matcha foam"/etc, see TOPPING_LABELS/
    focusedTopping in ToppingsStation.js) -- shown above whichever topping
-   currently has the white focus halo. Same dark-brown-with-white-halo look
+   currently has the white focus halo. Same white-with-white-halo look
    as MatchaMaking.js's own .matcha-tin-label/MilkSelection.js's own
    .milk-bottle-label -- see .matcha-tin-label's own comment in
    MatchaMaking.css for exactly where the halo values come from.
@@ -356,12 +356,22 @@
   font-family: 'Pixelify Sans', cursive;
   font-weight: 700;
   font-size: min(34px, 1.7vw);
-  color: #5c4a3a;
+  color: #ffffff;
   text-align: center;
   letter-spacing: 0.02em;
+  /* Paired with the \n TOPPING_LABELS.replace(' ', '\n') insert in the
+     JSX -- two-word names ("guava syrup", "matcha foam", etc) always
+     stack one word over the other rather than sitting side by side, per
+     request. */
+  white-space: pre-line;
   text-shadow: 0 0 4px rgba(255, 255, 255, 0.95), 0 0 16px rgba(255, 255, 255, 0.6), 0 1px 2px rgba(0, 0, 0, 0.4);
   pointer-events: none;
-  z-index: 5;
+  /* 26, not the plain 5 every other absolutely-positioned label on this
+     screen gets -- same value as .topping-spotlight-exempt below, so this
+     label still reads above .topping-spotlight-overlay's own 25 during
+     order 1's pink walkthrough tint instead of getting washed out under
+     it, per request. */
+  z-index: 26;
   animation: toppingLabelIn 0.15s ease-out both;
 }
 
@@ -373,6 +383,38 @@
   100% {
     opacity: 1;
     transform: translate(-50%, -100%) translateY(0);
+  }
+}
+
+/* Modifier for the syrup row's own name label -- per request, syrup names
+   render BELOW their bottle instead of above (every other topping label
+   keeps the base rule's above-the-item placement). The base rule's
+   translate(-50%, -100%) is what lifts a label fully ABOVE its own anchor
+   line regardless of its text height -- this just drops that -100% Y
+   component (plain translateX(-50%) instead) so the label hangs straight
+   down from its anchor line (the bottle's own bottom edge, set inline in
+   ToppingsStation.js) instead. Same "swap the lift direction, keep
+   everything else" shape as .matcha-tin-label vs e.g. .cup-label across
+   MatchaMaking.css/MilkSelection.css -- below-anchored labels there use
+   the exact same plain translateX(-50%) convention. Also swaps
+   toppingLabelIn for its own toppingLabelBelowIn below, since that
+   keyframe bakes the same translate(-50%, -100%) into every frame and
+   would otherwise fight this override for the whole 0.15s the animation's
+   actually running (a plain property here only takes over once the
+   animation ends). */
+.topping-label-below {
+  transform: translateX(-50%);
+  animation: toppingLabelBelowIn 0.15s ease-out both;
+}
+
+@keyframes toppingLabelBelowIn {
+  0% {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-3px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
   }
 }
 
@@ -475,6 +517,88 @@
   z-index: 26;
 }
 
+/* First-order-only walkthrough callout, Order button -- see
+   showStationSpotlight in ToppingsStation.js. Same pink/mint panel look as
+   every other walkthrough callout, row layout (arrow at the end, closest to
+   the button), same shape/position as .milk-order-callout in
+   MilkSelection.css -- it's the exact same widget in the exact same
+   top-right corner (.order-receipt-widget: top: 3%; right: 3%) on every
+   screen, so this reuses that same right: 14%/top: 3% rather than
+   re-eyeballing a new position. z-index: 26 set directly (not via
+   topping-spotlight-exempt) since this is new UI drawn on top of the tint,
+   not one of the things being cut out of it -- same reasoning
+   .milk-order-callout/.milk-cup-callout use their own literal z-index: 26
+   too. */
+.topping-order-callout {
+  position: absolute;
+  right: 14%;
+  top: 3%;
+  width: 24%;
+  z-index: 26;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: min(10px, 0.55vw);
+  pointer-events: none;
+  animation: toppingOrderCalloutIn 0.35s ease-out both;
+}
+
+@keyframes toppingOrderCalloutIn {
+  0% {
+    opacity: 0;
+    transform: translateY(10px) scale(0.94);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.topping-order-callout-text {
+  margin: 0;
+  box-sizing: border-box;
+  padding: min(14px, 0.75vw) min(20px, 1.05vw);
+  border-radius: min(16px, 0.85vw);
+  border: min(2px, 0.11vw) solid rgba(232, 170, 202, 0.65);
+  background: linear-gradient(160deg, #eafaf1 0%, #fdeef6 100%);
+  box-shadow: 0 5px 14px rgba(0, 0, 0, 0.15);
+  color: #5c4a3a;
+  font-family: 'Pixelify Sans', cursive;
+  font-weight: 700;
+  font-size: min(24px, 1.2vw);
+  text-align: center;
+  letter-spacing: 0.01em;
+}
+
+/* Points right, at the Order button beside it. Same real-SVG-triangle
+   convention as every other walkthrough arrow in this project, just laid
+   out sideways (wide viewBox, apex on the right edge) -- same shape as
+   .milk-order-callout-arrow in MilkSelection.css. */
+.topping-order-callout-arrow {
+  flex: none;
+  width: min(46px, 2.4vw);
+  height: min(28px, 1.5vw);
+  animation: toppingOrderCalloutArrowNudge 1.4s ease-in-out infinite;
+}
+
+.topping-order-callout-arrow polygon {
+  fill: #f7c6dc;
+  stroke: rgba(232, 170, 202, 0.9);
+  stroke-width: 3;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+
+@keyframes toppingOrderCalloutArrowNudge {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  50% {
+    transform: translateX(6px);
+  }
+}
+
 /* First-order-only walkthrough callout, syrup pair -- see showSyrupSpotlight
    in ToppingsStation.js. Row layout, but with the arrow FIRST (not last) so
    it renders on the callout's own left edge, closest to the syrup pair it's
@@ -484,8 +608,8 @@
    the syrup pair's own right edge, vertically centered on it). */
 .topping-syrup-callout {
   position: absolute;
-  left: 18%;
-  top: 27%;
+  left: 14%;
+  top: 22%;
   transform: translateY(-50%);
   width: 24%;
   z-index: 26;
@@ -725,8 +849,8 @@
    gives. */
 .topping-send-callout {
   position: absolute;
-  left: 50%;
-  top: 26%;
+  left: 43%;
+  top: 21%;
   transform: translateX(-50%);
   width: min(420px, 26vw);
   z-index: 26;
@@ -801,8 +925,8 @@
    MilkSelection's/MatchaMaking's. */
 .topping-progress-callout {
   position: absolute;
-  left: 32%;
-  bottom: 24%;
+  left: 54%;
+  bottom: 21%;
   transform: translateX(-50%);
   width: 26%;
   z-index: 26;

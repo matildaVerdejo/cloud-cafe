@@ -218,6 +218,54 @@ const FinalCombination = ({
     return () => clearTimeout(timeoutId);
   }, [hasNextOrder, customerNumber]);
 
+  // ---- First-order-only walkthrough (see e.g. showSyrupSpotlight in
+  // ToppingsStation.js for the established shape this mirrors) ------------
+  // Two beats: first, everything but the drink/sticker/score card is dimmed
+  // and the score card itself flashes white with a callout pointing at it,
+  // until the player actually opens one of its four sections; then that
+  // callout is replaced by a second one pointing at the "start order N+1"
+  // button, with everything but the drink/score card/that button dimmed,
+  // until the player presses it. hasOpenedScoreSection is what pivots
+  // between the two -- flipped true by ScoreCard's own onSectionOpen below,
+  // reset back to false on every fresh round the same way
+  // dwellElapsed/showSticker/showCelebration already reset above (only
+  // actually matters for going into a customerNumber === 1 round more than
+  // once wouldn't normally happen, but keeps this state honest either way).
+  const [hasOpenedScoreSection, setHasOpenedScoreSection] = useState(false);
+  useEffect(() => {
+    setHasOpenedScoreSection(false);
+  }, [customerNumber]);
+  const showScoreSpotlight = customerNumber === 1 && !hasOpenedScoreSection;
+  // Gated on hasNextOrder too -- the "start order N+1" button this beat
+  // points at doesn't even render on the final order (see hasNextOrder's
+  // own comment above), so there's nothing for this second beat to spotlight
+  // in that case. In practice customerNumber === 1 always has a next order
+  // (it's the first of several), but this keeps the flag honest regardless.
+  const showNextOrderSpotlight = customerNumber === 1 && hasOpenedScoreSection && hasNextOrder;
+  // Shorthand for "exempt from the pink tint in either beat" -- the drink
+  // cup, its contents, and the score card all stay visible the whole
+  // walkthrough (unlike the sticker/start-next-order-button, which are only
+  // exempt in one beat each -- see their own classNames further down).
+  const finalSpotlightExempt = showScoreSpotlight || showNextOrderSpotlight;
+
+  // Moves focus onto the first score-card row the instant the first beat
+  // goes live, same "auto-focus the beat's own target" pattern every other
+  // station's own walkthrough uses (see e.g. the syrup-bottle focus effect
+  // in ToppingsStation.js). Queried off containerRef rather than a fresh
+  // ref of its own since ScoreCard doesn't otherwise need to forward one out
+  // -- the row's own [data-focusable] is already unique enough to find here.
+  useEffect(() => {
+    if (showScoreSpotlight) {
+      containerRef.current?.querySelector('.score-card-row')?.focus();
+    }
+  }, [showScoreSpotlight]);
+  // Same idea for the second beat's own target, once it goes live.
+  useEffect(() => {
+    if (showNextOrderSpotlight) {
+      containerRef.current?.querySelector('.start-next-order-button')?.focus();
+    }
+  }, [showNextOrderSpotlight]);
+
   // ---- Carried-over drink from Toppings Station (see incomingDrink above)
   // Which cup type this actually is -- ToppingsStation's own
   // beginSendToFinal forwards cupType straight through from what Milk
@@ -307,7 +355,21 @@ const FinalCombination = ({
             comment above) -- appears with a "slam" entrance right after the
             score card's own total pill finishes changing color. */}
         {showSticker && reactionSticker && (
-          <img src={reactionSticker} alt="" aria-hidden="true" draggable={false} className="serving-reaction-sticker" />
+          <img
+            src={reactionSticker}
+            alt=""
+            aria-hidden="true"
+            draggable={false}
+            // First-order-only walkthrough, first beat ONLY -- see
+            // showScoreSpotlight above. Per request the sticker stays clear
+            // of the pink tint while the player's first learning to read
+            // the score sections, but isn't listed among the things still
+            // exempt in the second beat (that one's about the drink/score
+            // card/next-order button instead), so this doesn't also check
+            // showNextOrderSpotlight the way the drink/score-card classes
+            // below do.
+            className={`serving-reaction-sticker${showScoreSpotlight ? ' final-spotlight-exempt' : ''}`}
+          />
         )}
 
         {/* The finished drink, carried over from Toppings Station and set
@@ -330,7 +392,13 @@ const FinalCombination = ({
               alt=""
               aria-hidden="true"
               draggable={false}
-              className="final-drink-cup"
+              // First-order-only walkthrough, BOTH beats -- see
+              // showScoreSpotlight/showNextOrderSpotlight above. The drink
+              // and everything in it stays visible/clear of the pink tint
+              // the whole walkthrough, not just its own first beat, per
+              // request ("except for the cup, it's contents..." is named in
+              // both beats' own exemption lists).
+              className={`final-drink-cup${finalSpotlightExempt ? ' final-spotlight-exempt' : ''}`}
               style={{
                 left: `${finalDrinkSpot.left}%`,
                 top: `${finalDrinkSpot.top}%`,
@@ -366,7 +434,7 @@ const FinalCombination = ({
                   alt=""
                   aria-hidden="true"
                   draggable={false}
-                  className="ice-cube placed"
+                  className={`ice-cube placed${finalSpotlightExempt ? ' final-spotlight-exempt' : ''}`}
                   style={{
                     left: `${iceSlotPos.left}%`,
                     top: `${iceSlotPos.top}%`,
@@ -379,7 +447,7 @@ const FinalCombination = ({
             })}
             {incomingMilkBox && (
               <div
-                className={`cup-milk-fill ${incomingDrink.milk.type}`}
+                className={`cup-milk-fill ${incomingDrink.milk.type}${finalSpotlightExempt ? ' final-spotlight-exempt' : ''}`}
                 aria-hidden="true"
                 style={{
                   left: `${incomingMilkBox.left}%`,
@@ -391,7 +459,7 @@ const FinalCombination = ({
             )}
             {incomingMatchaBox && (
               <div
-                className={`cup-matcha-fill ${incomingDrink.matcha.grade}`}
+                className={`cup-matcha-fill ${incomingDrink.matcha.grade}${finalSpotlightExempt ? ' final-spotlight-exempt' : ''}`}
                 aria-hidden="true"
                 style={{
                   left: `${incomingMatchaBox.left}%`,
@@ -403,7 +471,7 @@ const FinalCombination = ({
             )}
             {incomingDrink.foam && incomingFoamBox && (
               <div
-                className={`cup-foam-fill ${incomingDrink.foam.key}`}
+                className={`cup-foam-fill ${incomingDrink.foam.key}${finalSpotlightExempt ? ' final-spotlight-exempt' : ''}`}
                 aria-hidden="true"
                 style={{
                   left: `${incomingFoamBox.left}%`,
@@ -415,7 +483,7 @@ const FinalCombination = ({
             )}
             {incomingDrink.foam && incomingFoamCapBox && (
               <div
-                className={`cup-foam-cap ${incomingDrink.foam.key}`}
+                className={`cup-foam-cap ${incomingDrink.foam.key}${finalSpotlightExempt ? ' final-spotlight-exempt' : ''}`}
                 aria-hidden="true"
                 style={{
                   left: `${incomingFoamCapBox.left}%`,
@@ -427,7 +495,7 @@ const FinalCombination = ({
             )}
             {incomingDrink.syrup && incomingSyrupBox && (
               <div
-                className={`cup-syrup-fill ${incomingDrink.syrup.key}`}
+                className={`cup-syrup-fill ${incomingDrink.syrup.key}${finalSpotlightExempt ? ' final-spotlight-exempt' : ''}`}
                 aria-hidden="true"
                 style={{
                   left: `${incomingSyrupBox.left}%`,
@@ -441,7 +509,7 @@ const FinalCombination = ({
               powderFleckPositions.map((pos, index) => (
                 <span
                   key={index}
-                  className={`cup-powder-fleck ${incomingDrink.powder.key}`}
+                  className={`cup-powder-fleck ${incomingDrink.powder.key}${finalSpotlightExempt ? ' final-spotlight-exempt' : ''}`}
                   aria-hidden="true"
                   style={{ left: `${pos.left}%`, top: `${pos.top}%` }}
                 />
@@ -455,7 +523,7 @@ const FinalCombination = ({
                 alt=""
                 aria-hidden="true"
                 draggable={false}
-                className="cup-leaf-garnish"
+                className={`cup-leaf-garnish${finalSpotlightExempt ? ' final-spotlight-exempt' : ''}`}
                 style={{
                   left: `${incomingLeafBox.left}%`,
                   top: `${incomingLeafBox.top}%`,
@@ -473,7 +541,7 @@ const FinalCombination = ({
                 alt=""
                 aria-hidden="true"
                 draggable={false}
-                className="cup-leaf-garnish"
+                className={`cup-leaf-garnish${finalSpotlightExempt ? ' final-spotlight-exempt' : ''}`}
                 style={{
                   left: `${incomingChipBox.left}%`,
                   top: `${incomingChipBox.top}%`,
@@ -488,7 +556,7 @@ const FinalCombination = ({
                 alt=""
                 aria-hidden="true"
                 draggable={false}
-                className="cup-leaf-garnish"
+                className={`cup-leaf-garnish${finalSpotlightExempt ? ' final-spotlight-exempt' : ''}`}
                 style={{
                   left: `${incomingBlossomBox.left}%`,
                   top: `${incomingBlossomBox.top}%`,
@@ -512,6 +580,16 @@ const FinalCombination = ({
           matchaScore={matchaScore}
           mixingScore={mixingScore}
           toppingsScore={toppingsScore}
+          // First-order-only walkthrough -- see showScoreSpotlight/
+          // showNextOrderSpotlight above. onSectionOpen is what actually
+          // pivots from the first beat into the second (see
+          // hasOpenedScoreSection); exempt/highlight are read by ScoreCard
+          // itself to punch its own root through the pink tint (both beats)
+          // and flash it white (first beat only) -- see that component's
+          // own comment on these two props.
+          onSectionOpen={() => setHasOpenedScoreSection(true)}
+          exempt={finalSpotlightExempt}
+          highlight={showScoreSpotlight}
         />
 
         {/* Full-screen sparkle burst for a "good" (80+) total -- see the
@@ -522,12 +600,41 @@ const FinalCombination = ({
             of this project already relies on. */}
         {showCelebration && <CelebrationOverlay />}
 
+        {/* First-order-only walkthrough, first beat -- see
+            showScoreSpotlight above. Row layout (text then arrow, arrow
+            pointing right), same "callout sits to the target's left" shape
+            as .topping-order-callout in ToppingsStation.css, pointing at
+            the score card beside it. */}
+        {showScoreSpotlight && (
+          <div className="final-score-callout">
+            <p className="final-score-callout-text">use the arrows to navigate through the different score sections</p>
+            <svg className="final-score-callout-arrow" viewBox="0 0 40 24" preserveAspectRatio="none" aria-hidden="true">
+              <polygon points="38,12 2,2 2,22" />
+            </svg>
+          </div>
+        )}
+
+        {/* First-order-only walkthrough, second beat -- see
+            showNextOrderSpotlight above. Column layout (text above, arrow
+            below pointing down), same shape as .topping-send-callout in
+            ToppingsStation.css, pointing down at the start-next-order
+            button beneath it. */}
+        {showNextOrderSpotlight && (
+          <div className="final-next-callout">
+            <p className="final-next-callout-text">select the button to move to the next order</p>
+            <svg className="final-next-callout-arrow" viewBox="0 0 24 40" preserveAspectRatio="none" aria-hidden="true">
+              <polygon points="12,38 22,4 2,4" />
+            </svg>
+          </div>
+        )}
+
         <ProgressBar
           activeStep={activeStep}
           customerNumber={customerNumber}
           onNavigate={onNavigate}
           onAdvance={onAdvance}
           disableAdvance={hasNextOrder}
+          suppressInitialFocus={showScoreSpotlight}
         />
 
         {/* Starting the next order used to happen via this same
@@ -549,7 +656,15 @@ const FinalCombination = ({
         {hasNextOrder && (
           <button
             type="button"
-            className="start-next-order-button"
+            // First-order-only walkthrough, second beat ONLY -- see
+            // showNextOrderSpotlight above. Exempt punches the button
+            // through the pink tint, -highlight gives it the same static
+            // white glow every other station's own one-off item/button
+            // highlight uses (not the flashing treatment reserved for the
+            // three minigame gauges + this screen's own score card).
+            className={`start-next-order-button${
+              showNextOrderSpotlight ? ' final-spotlight-exempt start-next-order-button-highlight' : ''
+            }`}
             data-focusable
             tabIndex={0}
             // Disabled until the score/sticker reveal has actually finished
@@ -568,6 +683,17 @@ const FinalCombination = ({
             start order {customerNumber + 1}
           </button>
         )}
+
+        {/* Shared pink tint for both walkthrough beats above -- rendered
+            LAST (after ProgressBar and the start-next-order-button) so it
+            paints on top of everything else in DOM order, same z-index-tie
+            fix every other station's own -spotlight-overlay already
+            documents (see e.g. .topping-spotlight-overlay's own comment in
+            ToppingsStation.js). The settings gear needs no exemption of its
+            own -- SettingsPanel is rendered once, globally, in App.js's own
+            .page-container at z-index: 50, already above this overlay's
+            z-index: 25 on every screen including this one. */}
+        {(showScoreSpotlight || showNextOrderSpotlight) && <div className="final-spotlight-overlay" aria-hidden="true" />}
       </div>
     </div>
   );

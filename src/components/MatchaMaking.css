@@ -848,8 +848,9 @@
 
 /* Tin name label ("cafe"/"classic"/"ceremonial", see TIN_LABELS/focusedTin
    in MatchaMaking.js) -- shown under whichever tin currently has the white
-   focus halo. Dark brown text (same #5c4a3a as .order-receipt-button's own
-   text color in OrderReceiptButton.css) with the same two-layer white glow
+   focus halo. White text (was dark brown #5c4a3a, matching
+   .order-receipt-button's own text color in OrderReceiptButton.css, per
+   request) with the same two-layer white glow
    as the tin's own focus halo (button:focus-visible in App.css: a tighter
    4px core plus a softer 16px spread, both rgba(255,255,255,...)) applied
    as a text-shadow instead of that halo's box-shadow, so the label reads
@@ -866,12 +867,21 @@
   font-family: 'Pixelify Sans', cursive;
   font-weight: 700;
   font-size: min(34px, 1.7vw);
-  color: #5c4a3a;
+  color: #ffffff;
   text-align: center;
   letter-spacing: 0.02em;
+  /* Paired with the \n TIN_LABELS.replace(' ', '\n') inserts in the JSX --
+     two-word names (should any be added later) always stack one word over
+     the other rather than sitting side by side, per request. */
+  white-space: pre-line;
   text-shadow: 0 0 4px rgba(255, 255, 255, 0.95), 0 0 16px rgba(255, 255, 255, 0.6), 0 1px 2px rgba(0, 0, 0, 0.4);
   pointer-events: none;
-  z-index: 5;
+  /* 26, not the plain 5 every other absolutely-positioned label on this
+     screen gets -- same value as .matcha-spotlight-exempt below, so this
+     label still reads above .matcha-spotlight-overlay's own 25 during
+     order 1's pink walkthrough tint instead of getting washed out under
+     it, per request. */
+  z-index: 26;
   animation: matchaTinLabelIn 0.15s ease-out both;
 }
 

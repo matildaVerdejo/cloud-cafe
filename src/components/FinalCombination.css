@@ -194,3 +194,220 @@
   box-shadow: none;
 }
 
+/* First-order-only walkthrough beat two -- see showNextOrderSpotlight in
+   FinalCombination.js. A STATIC white glow (not flashing) per request --
+   "highlighted white", not "flash white" the way the score sheet's own
+   first beat does -- same still-glowing-but-not-animated look
+   .station-item.selectable.tin-highlight uses elsewhere in this project
+   for a plain "this is the thing to act on" halo (see that rule's own
+   comment in MatchaMaking.css for why flashing is reserved for the three
+   minigame gauges specifically, not one-off highlighted buttons/items).
+   The button's own resting shadow is kept as the first layer. */
+.start-next-order-button.start-next-order-button-highlight {
+  box-shadow: 0 6px 14px rgba(255, 158, 178, 0.45), 0 0 20px 8px rgba(255, 255, 255, 0.85),
+    0 0 40px 16px rgba(255, 255, 255, 0.5);
+}
+
+/* First-order-only walkthrough exemption -- see showScoreSpotlight/
+   showNextOrderSpotlight in FinalCombination.js. Same "z-index: 26 punches
+   through the per-screen pink overlay's own z-index: 25" convention every
+   other station's own -spotlight-exempt class already uses. Covers the
+   sticker/cup itself plus every one of the drink's own carried-over fill/
+   garnish classes (imported from MilkSelection.css/ToppingsStation.css,
+   already loaded globally the same way this screen's own JSX comment
+   documents reusing them in the first place) and the Start-next-order
+   button -- see each beat's own exempt-list comment in FinalCombination.js
+   for which of these apply to which beat. */
+.serving-reaction-sticker.final-spotlight-exempt,
+.final-drink-cup.final-spotlight-exempt,
+.ice-cube.final-spotlight-exempt,
+.cup-milk-fill.final-spotlight-exempt,
+.cup-matcha-fill.final-spotlight-exempt,
+.cup-foam-fill.final-spotlight-exempt,
+.cup-foam-cap.final-spotlight-exempt,
+.cup-syrup-fill.final-spotlight-exempt,
+.cup-powder-fleck.final-spotlight-exempt,
+.cup-leaf-garnish.final-spotlight-exempt,
+.start-next-order-button.final-spotlight-exempt {
+  z-index: 26;
+}
+
+/* ---- First-order-only walkthrough spotlight -- see showScoreSpotlight/
+   showNextOrderSpotlight in FinalCombination.js. Same flat, full-screen pink
+   tint (no SVG mask, no holes, just a div with a higher-z-index element
+   punched through it) as every other spotlight overlay in this project --
+   see .matcha-spotlight-overlay in MatchaMaking.css for the shared
+   reasoning. Rendered LAST (after ProgressBar and both callouts, not
+   before) so it actually paints over everything else on this screen by
+   default -- only whichever elements the active beat exempts (see
+   final-spotlight-exempt above) punch through it via a higher z-index.
+   Note: the settings gear itself needs no exemption here (or on any other
+   screen) -- it's rendered once in App.js's own .page-container, outside
+   every screen's own container entirely, at its own z-index: 50
+   (.settings-panel-anchor in SettingsPanel.css) -- already well above this
+   overlay's 25 by construction, same reason none of the other three
+   stations' own overlays ever exempt it either. */
+.final-spotlight-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 25;
+  background: rgba(255, 224, 236, 0.6);
+  pointer-events: none;
+}
+
+/* First-order-only walkthrough callout, first beat -- see
+   showScoreSpotlight in FinalCombination.js. Row layout, arrow at the END
+   pointing RIGHT at the score card (which sits at left: 61%, see
+   .score-card in ScoreCard.css), same "sits to its target's left, arrow at
+   the near edge" shape as .milk-cup-callout in MilkSelection.css. right:
+   41% clears the card's own left edge (100 - 61 + a small gap) with
+   translateY(-50%) centering it on the card's own vertical midpoint.
+   z-index: 26 set directly (not via final-spotlight-exempt) since this is
+   new UI drawn on top of the tint, not one of the things being cut out of
+   it -- same reasoning every other station's own order/cup/base callouts
+   use their own literal z-index: 26 too. */
+.final-score-callout {
+  position: absolute;
+  right: 41%;
+  top: 45%;
+  transform: translateY(-50%);
+  width: 24%;
+  z-index: 26;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: min(10px, 0.55vw);
+  pointer-events: none;
+  animation: finalScoreCalloutIn 0.35s ease-out both;
+}
+
+@keyframes finalScoreCalloutIn {
+  0% {
+    opacity: 0;
+    transform: translateY(-50%) translateY(10px) scale(0.94);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(-50%) translateY(0) scale(1);
+  }
+}
+
+.final-score-callout-text {
+  margin: 0;
+  box-sizing: border-box;
+  padding: min(14px, 0.75vw) min(20px, 1.05vw);
+  border-radius: min(16px, 0.85vw);
+  border: min(2px, 0.11vw) solid rgba(232, 170, 202, 0.65);
+  background: linear-gradient(160deg, #eafaf1 0%, #fdeef6 100%);
+  box-shadow: 0 5px 14px rgba(0, 0, 0, 0.15);
+  color: #5c4a3a;
+  font-family: 'Pixelify Sans', cursive;
+  font-weight: 700;
+  font-size: min(24px, 1.2vw);
+  text-align: center;
+  letter-spacing: 0.01em;
+}
+
+/* Points right, at the score card beside it. Same real-SVG-triangle
+   convention as every other walkthrough arrow in this project. */
+.final-score-callout-arrow {
+  flex: none;
+  width: min(46px, 2.4vw);
+  height: min(28px, 1.5vw);
+  animation: finalScoreCalloutArrowNudge 1.4s ease-in-out infinite;
+}
+
+.final-score-callout-arrow polygon {
+  fill: #f7c6dc;
+  stroke: rgba(232, 170, 202, 0.9);
+  stroke-width: 3;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+
+@keyframes finalScoreCalloutArrowNudge {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  50% {
+    transform: translateX(6px);
+  }
+}
+
+/* First-order-only walkthrough callout, second beat -- see
+   showNextOrderSpotlight in FinalCombination.js. Column layout, text
+   above, arrow below pointing down at the Start-next-order button (which
+   sits at right: 3%, bottom: 4%, see .start-next-order-button above) --
+   same "text above/arrow below pointing down at the target" shape as
+   .topping-send-callout in ToppingsStation.css. right: 2% roughly aligns
+   with the button's own right edge, bottom: 13% sits just clear of its own
+   top edge. */
+.final-next-callout {
+  position: absolute;
+  right: 2%;
+  bottom: 13%;
+  width: min(300px, 18vw);
+  z-index: 26;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: min(10px, 0.55vw);
+  pointer-events: none;
+  animation: finalNextCalloutIn 0.35s ease-out both;
+}
+
+@keyframes finalNextCalloutIn {
+  0% {
+    opacity: 0;
+    transform: translateY(10px) scale(0.94);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.final-next-callout-text {
+  margin: 0;
+  box-sizing: border-box;
+  padding: min(14px, 0.75vw) min(20px, 1.05vw);
+  border-radius: min(16px, 0.85vw);
+  border: min(2px, 0.11vw) solid rgba(232, 170, 202, 0.65);
+  background: linear-gradient(160deg, #eafaf1 0%, #fdeef6 100%);
+  box-shadow: 0 5px 14px rgba(0, 0, 0, 0.15);
+  color: #5c4a3a;
+  font-family: 'Pixelify Sans', cursive;
+  font-weight: 700;
+  font-size: min(24px, 1.2vw);
+  text-align: center;
+  letter-spacing: 0.01em;
+}
+
+/* Points down, at the button below. Same real-SVG-triangle convention as
+   every other walkthrough arrow in this project. */
+.final-next-callout-arrow {
+  flex: none;
+  width: min(28px, 1.5vw);
+  height: min(46px, 2.4vw);
+  animation: finalNextCalloutArrowNudge 1.4s ease-in-out infinite;
+}
+
+.final-next-callout-arrow polygon {
+  fill: #f7c6dc;
+  stroke: rgba(232, 170, 202, 0.9);
+  stroke-width: 3;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+
+@keyframes finalNextCalloutArrowNudge {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(6px);
+  }
+}
+

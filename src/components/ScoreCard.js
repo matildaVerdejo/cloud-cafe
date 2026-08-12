@@ -175,7 +175,33 @@ function ScoreCardRow({ cat, result, delay, isOpen, onToggle }) {
   );
 }
 
-const ScoreCard = ({ customerNumber, characterName, orderTakingScore, matchaScore, mixingScore, toppingsScore }) => {
+const ScoreCard = ({
+  customerNumber,
+  characterName,
+  orderTakingScore,
+  matchaScore,
+  mixingScore,
+  toppingsScore,
+  // Optional, opt-in -- only ever passed by FinalCombination.js's own
+  // first-order-only walkthrough (see hasOpenedScoreSection there), fired
+  // the first time (and every time) a row actually opens. Lets that screen
+  // know the player has found their way into a section without this
+  // component needing to know anything about walkthroughs itself -- same
+  // "child fires a plain callback, parent owns the tutorial state" shape
+  // OrderReceiptButton.js's own onToggle already uses.
+  onSectionOpen,
+  // Optional, opt-in -- also only ever passed by FinalCombination.js's own
+  // walkthrough. This card doesn't otherwise take a className prop (nothing
+  // else has ever needed to reach into its own root div from outside), so
+  // these are two dedicated booleans instead: exempt punches the card
+  // through the per-screen pink tint (see .score-card.final-spotlight-
+  // exempt in ScoreCard.css), highlight makes it flash white during the
+  // walkthrough's own first beat (see .score-card.score-card-highlight
+  // there too). Both default to false so every other, non-walkthrough
+  // render of this card (orders 2+) is completely unaffected.
+  exempt = false,
+  highlight = false,
+}) => {
   const scoresByKey = {
     'order-taking': orderTakingScore,
     'matcha-making': matchaScore,
@@ -199,6 +225,11 @@ const ScoreCard = ({ customerNumber, characterName, orderTakingScore, matchaScor
       playButtonClickOff();
     } else {
       playButtonClick();
+      // Only fired on an actual OPEN (not the close branch above) -- per
+      // request, FinalCombination's own second walkthrough beat should
+      // start once the player has "clicked to see" a section, not merely
+      // interacted with the card at all.
+      onSectionOpen?.();
     }
     setOpenKey((prev) => (prev === key ? null : key));
   };
@@ -248,7 +279,7 @@ const ScoreCard = ({ customerNumber, characterName, orderTakingScore, matchaScor
   const orderBadge = customerNumber != null ? `0${customerNumber}/0${ORDERS_PER_SESSION}` : null;
 
   return (
-    <div className="score-card">
+    <div className={`score-card${exempt ? ' final-spotlight-exempt' : ''}${highlight ? ' score-card-highlight' : ''}`}>
       {orderBadge && <p className="score-card-order-badge">{orderBadge}</p>}
       {/* "<Name>'s order" instead of the old generic "Order Score" -- names
           whichever of the three customer characters (see

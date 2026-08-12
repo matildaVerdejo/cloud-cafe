@@ -229,11 +229,12 @@
 
 /* Bottle name label ("oat milk"/"dairy milk"/etc, see BOTTLE_LABELS/
    focusedBottle in MilkSelection.js) -- shown above whichever bottle
-   currently has the white focus halo. Same dark-brown (#5c4a3a, matching
-   .order-receipt-button's own text color in OrderReceiptButton.css) with
-   the same two-layer white glow as MatchaMaking.js's own
-   .matcha-tin-label -- see that rule's own comment for exactly where the
-   halo values come from. translate(-50%, -100%) -- rather than just
+   currently has the white focus halo. White text (was dark-brown #5c4a3a,
+   matching .order-receipt-button's own text color in
+   OrderReceiptButton.css, per request) with the same two-layer white glow
+   as MatchaMaking.js's own .matcha-tin-label -- see that rule's own
+   comment for exactly where the halo values come from. translate(-50%,
+   -100%) -- rather than just
    translateX(-50%) -- is what lifts the whole label above its anchor point
    (the bottle's own top edge minus a small gap, set inline in
    MilkSelection.js) regardless of the label's own text height.
@@ -247,12 +248,21 @@
   font-family: 'Pixelify Sans', cursive;
   font-weight: 700;
   font-size: min(34px, 1.7vw);
-  color: #5c4a3a;
+  color: #ffffff;
   text-align: center;
   letter-spacing: 0.02em;
+  /* Paired with the \n BOTTLE_LABELS.replace(' ', '\n') insert in the JSX
+     -- two-word names ("oat milk", "dairy milk", etc) always stack one
+     word over the other rather than sitting side by side, per request. */
+  white-space: pre-line;
   text-shadow: 0 0 4px rgba(255, 255, 255, 0.95), 0 0 16px rgba(255, 255, 255, 0.6), 0 1px 2px rgba(0, 0, 0, 0.4);
   pointer-events: none;
-  z-index: 5;
+  /* 26, not the plain 5 every other absolutely-positioned label on this
+     screen gets -- same value as .milk-spotlight-exempt below, so this
+     label still reads above .milk-spotlight-overlay's own 25 during order
+     1's pink walkthrough tint instead of getting washed out under it, per
+     request. */
+  z-index: 26;
   animation: milkBottleLabelIn 0.15s ease-out both;
 }
 
@@ -270,7 +280,7 @@
 /* Cup name label ("glass cup"/"plastic cup", see CUP_LABELS/focusedCupType
    in MilkSelection.js) -- shown above whichever cup currently has the
    white focus halo (see .glass-cup:focus-visible above, already shared by
-   both cup types since they both use that same class). Same dark-brown,
+   both cup types since they both use that same class). Same white,
    no-glow-of-its-own look as this file's own .milk-bottle-label and
    MatchaMaking.js's .matcha-tin-label. pointer-events: none plus
    aria-hidden (set in the JSX) since this is purely a visual echo of a
@@ -283,12 +293,21 @@
   font-family: 'Pixelify Sans', cursive;
   font-weight: 700;
   font-size: min(34px, 1.7vw);
-  color: #5c4a3a;
+  color: #ffffff;
   text-align: center;
   letter-spacing: 0.02em;
+  /* Paired with the \n CUP_LABELS.replace(' ', '\n') insert in the JSX --
+     two-word names ("glass cup", "plastic cup") always stack one word
+     over the other rather than sitting side by side, per request. */
+  white-space: pre-line;
   text-shadow: 0 0 4px rgba(255, 255, 255, 0.95), 0 0 16px rgba(255, 255, 255, 0.6), 0 1px 2px rgba(0, 0, 0, 0.4);
   pointer-events: none;
-  z-index: 5;
+  /* 26, not the plain 5 every other absolutely-positioned label on this
+     screen gets -- same value as .milk-spotlight-exempt above, so this
+     label still reads above .milk-spotlight-overlay's own 25 during order
+     1's pink walkthrough tint instead of getting washed out under it, per
+     request. */
+  z-index: 26;
   animation: cupLabelIn 0.15s ease-out both;
 }
 
@@ -557,15 +576,17 @@
 }
 
 /* Third first-order-only walkthrough callout, bottle row -- see
-   showBaseSpotlight in MilkSelection.js. Column layout, text above, arrow
-   below pointing down at the bottles, same shape as .milk-ice-callout
-   above. Positioned above the bottle cluster (see the JSX comment on
+   showBaseSpotlight in MilkSelection.js. Column layout, arrow above
+   pointing up at the bottles, text below -- moved below the bottle
+   cluster with the arrow flipped up per request (was text above/arrow
+   below pointing down, positioned above the cluster). Positioned below
+   the bottle cluster (see the JSX comment on
    <div className="milk-base-callout"> for the actual numbers),
    translateX(-50%) centers the panel over that point. */
 .milk-base-callout {
   position: absolute;
-  left: 75%;
-  top: 32%;
+  left: 73%;
+  top: 78%;
   transform: translateX(-50%);
   width: min(360px, 22vw);
   z-index: 26;
@@ -593,14 +614,18 @@
   letter-spacing: 0.01em;
 }
 
-/* Points down, at the bottle row below. Same real-SVG-triangle convention
-   as every other walkthrough arrow in this project -- same shape as
-   .milk-ice-callout-arrow above. */
+/* Points up, at the bottle row above -- flipped per request (was pointing
+   down at the bottles below). Same real-SVG-triangle convention as every
+   other walkthrough arrow in this project -- same shape as
+   .milk-ice-callout-arrow above, just the polygon's own points reversed
+   (see the JSX) plus its own up-nudge keyframe below instead of
+   .milk-ice-callout-arrow's shared down-nudge one, so the bounce moves
+   toward the bottles it's pointing at rather than away from them. */
 .milk-base-callout-arrow {
   flex: none;
   width: min(28px, 1.5vw);
   height: min(46px, 2.4vw);
-  animation: milkIceCalloutArrowNudge 1.4s ease-in-out infinite;
+  animation: milkBaseCalloutArrowNudge 1.4s ease-in-out infinite;
 }
 
 .milk-base-callout-arrow polygon {
@@ -609,6 +634,21 @@
   stroke-width: 3;
   stroke-linejoin: round;
   vector-effect: non-scaling-stroke;
+}
+
+/* Same bounce as milkIceCalloutArrowNudge, just inverted (-6px instead of
+   6px) so an up-pointing arrow nudges toward the thing it's pointing at
+   (up) instead of away from it -- same "flip the sign for an up arrow"
+   convention as orderingReadOrderCalloutArrowNudge in
+   CustomerOrdering.css. */
+@keyframes milkBaseCalloutArrowNudge {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-6px);
+  }
 }
 
 /* Fourth first-order-only walkthrough callout, matcha bowl -- see
@@ -676,8 +716,8 @@
    screen. */
 .milk-send-callout {
   position: absolute;
-  left: 40%;
-  top: 25%;
+  left: 39%;
+  top: 20%;
   transform: translateX(-50%);
   width: min(420px, 26vw);
   z-index: 26;
