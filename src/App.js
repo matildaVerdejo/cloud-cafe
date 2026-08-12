@@ -375,18 +375,70 @@ function App() {
   const toggleSettings = () => setShowSettings((open) => !open);
 
   // ---- Lifecycle: suspend on hidden/backgrounded, resume on visible ------
+  // Also restores keyboard/D-pad focus on resume -- per report, leaving
+  // this tab (or switching away to another app/window without actually
+  // hiding the tab) and coming back left nothing focused: some browsers/
+  // host webviews reset document.activeElement to <body> on a visibility
+  // or window-focus change, and every keydown handler in this project --
+  // both the exact-ref-matching station nav graphs (e.g. SettingsPanel.js's
+  // own "if (active === gearRef.current) {...}") and useFlatFocusNav's more
+  // generic spatial version -- only acts when document.activeElement is a
+  // real, recognized element. With nothing focused, every Up/Down/Left/
+  // Right press matched no branch anywhere and silently did nothing,
+  // stranding the player with no way to move.
+  //
+  // Fixed by tracking the most recently focused [data-focusable] element as
+  // it happens (lastFocusedRef, updated by the plain window-level 'focusin'
+  // listener below, which fires for every real focus change while the tab
+  // is actually active) and, the moment the tab/window becomes visible or
+  // focused again, refocusing it if focus was actually lost in the
+  // meantime -- falling back to whatever's the first [data-focusable]
+  // element still in the DOM if that exact element is gone too (e.g. this
+  // customer's own round auto-advanced while the player was away).
+  const lastFocusedRef = useRef(null);
   useEffect(() => {
+    const handleFocusIn = (e) => {
+      if (e.target?.hasAttribute?.('data-focusable')) {
+        lastFocusedRef.current = e.target;
+      }
+    };
+    window.addEventListener('focusin', handleFocusIn);
+    return () => window.removeEventListener('focusin', handleFocusIn);
+  }, []);
+
+  useEffect(() => {
+    // Shared by both triggers below -- visibilitychange only fires when the
+    // TAB itself is hidden/shown (switching browser tabs, minimizing);
+    // window 'focus' also catches the OS-level case (alt-tabbing to a
+    // different app/window while this tab stays the visible one in its own
+    // browser window), which some browsers also blur the active element
+    // for. Restoring on both covers "leave the game tab and come back" the
+    // way it was actually reported, plus that adjacent case for free.
+    const restoreFocusIfLost = () => {
+      const active = document.activeElement;
+      // Focus survived the trip -- still a real, attached element, nothing
+      // to do.
+      if (active && active !== document.body && document.contains(active)) return;
+      const restore =
+        lastFocusedRef.current && document.contains(lastFocusedRef.current) && !lastFocusedRef.current.disabled
+          ? lastFocusedRef.current
+          : document.querySelector('[data-focusable]');
+      restore?.focus();
+    };
     const handleVisibility = () => {
       document.body.classList.toggle('gl-suspended', document.hidden);
+      if (!document.hidden) restoreFocusIfLost();
     };
     const handlePageHide = () => {
       document.body.classList.add('gl-suspended');
     };
     document.addEventListener('visibilitychange', handleVisibility);
     window.addEventListener('pagehide', handlePageHide);
+    window.addEventListener('focus', restoreFocusIfLost);
     return () => {
       document.removeEventListener('visibilitychange', handleVisibility);
       window.removeEventListener('pagehide', handlePageHide);
+      window.removeEventListener('focus', restoreFocusIfLost);
     };
   }, []);
 
