@@ -131,7 +131,7 @@
   font-size: min(16px, 0.85vw);
   text-align: center;
   cursor: pointer;
-  transition: transform 0.15s ease;
+  transition: box-shadow 0.15s ease, transform 0.15s ease;
 }
 
 .settings-attributions-button:hover {
@@ -140,6 +140,23 @@
 
 .settings-attributions-button:active {
   transform: scale(0.97);
+}
+
+/* Pink "selected" glow on keyboard/D-pad focus -- per request, matching
+   CustomerOrdering's own order-taking panel (see e.g.
+   .order-dropdown-toggle:focus-visible's own rgba(255, 182, 210, 0.95)
+   drop-shadow in CustomerOrdering.css) instead of the plain white glow
+   every other focusable element in this project gets by default (see
+   button:focus-visible/[tabindex]:focus-visible in App.css) -- box-shadow
+   here rather than that rule's own filter: drop-shadow purely because this
+   is a solid rounded-rect button (box-shadow already hugs its own
+   border-radius perfectly), not a shape drop-shadow needed to trace.
+   Every OTHER settings-panel button below gets this same pink treatment;
+   only .settings-toggle-button (the gear -- "the initial one") is left
+   alone, still using the app-wide default white glow, per request. */
+.settings-attributions-button:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 4px rgba(255, 182, 210, 0.95), 0 0 16px 5px rgba(255, 182, 210, 0.6);
 }
 
 /* Third-party credits dialog -- a "medium", centered, fixed-position modal
@@ -257,9 +274,13 @@
   transform: scale(0.96);
 }
 
+/* Same pink "selected" glow as .settings-attributions-button above, rather
+   than the dark-green tint this used to have -- kept consistent across
+   every button in this whole feature (the attributions button that opens
+   this dialog, and this dialog's own close button) per request. */
 .settings-attributions-close-button:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 4px rgba(41, 81, 5, 0.35), 0 0 16px 5px rgba(41, 81, 5, 0.25);
+  box-shadow: 0 0 0 4px rgba(255, 182, 210, 0.95), 0 0 16px 5px rgba(255, 182, 210, 0.6);
 }
 
 .settings-popover-label {
@@ -296,7 +317,7 @@
   font-size: min(20px, 1vw);
   line-height: 1;
   cursor: pointer;
-  transition: transform 0.15s ease;
+  transition: box-shadow 0.15s ease, transform 0.15s ease;
 }
 
 .settings-volume-button:hover {
@@ -305,6 +326,13 @@
 
 .settings-volume-button:active {
   transform: scale(0.95);
+}
+
+/* Same pink "selected" glow as the attributions button/dialog's own close
+   button above -- see that rule's own comment for the full reasoning. */
+.settings-volume-button:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 4px rgba(255, 182, 210, 0.95), 0 0 16px 5px rgba(255, 182, 210, 0.6);
 }
 
 .settings-volume-readout {
