@@ -1019,6 +1019,23 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
   // leg is completely unaffected the rest of the time.
   const preSettingsFocusRef = useRef(null);
 
+  // Ref copies of whiskStage/bowlStage/kettleStage (all three declared much
+  // further down, alongside their own state machines) -- kept in sync by
+  // three small no-deps effects placed right after each real useState
+  // below, same "ref declared early, synced late" pattern as every other
+  // ref in this group. Needed here specifically because the whisk/bowl/
+  // kettle branches of the big keydown effect right below read these
+  // stages to decide whether they're mid-minigame (locked) or idle (free to
+  // navigate off) -- that effect is registered with an empty dependency
+  // array (see its own comment for why), so reading the raw state directly
+  // there would only ever see whichever value was current at the very first
+  // mount, never any stage change after -- the exact same stale-closure
+  // trap ToppingsStation.js's own pouringKeyRef/foamPouringKeyRef/
+  // powderPouringKeyRef exist to avoid.
+  const whiskStageRef = useRef('idle');
+  const bowlStageRef = useRef('idle');
+  const kettleStageRef = useRef('idle');
+
   // First-order-only walkthrough lockdown -- same idea as Customer
   // Ordering's own restrictNavigationRef (see that file's matching comment):
   // while the player hasn't yet pressed Enter on the Order receipt button
@@ -1244,7 +1261,7 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
       // until bowlPowder/bowlWater are both set, which can only happen by
       // getting to those other two first.
       if (active === whiskRef.current) {
-        if (whiskStage === 'moving' || whiskStage === 'mixing') {
+        if (whiskStageRef.current === 'moving' || whiskStageRef.current === 'mixing') {
           e.preventDefault();
           e.stopImmediatePropagation();
           return;
@@ -1277,7 +1294,7 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
       // escape just above -- reaching the heater/kettle at all depends on
       // getting past the bowl first.
       if (active === bowlRef.current) {
-        if (bowlStage !== 'idle') {
+        if (bowlStageRef.current !== 'idle') {
           e.preventDefault();
           e.stopImmediatePropagation();
           return;
@@ -1328,7 +1345,7 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
       // own Down leg above, which already defaults back to this exact ref),
       // Down -> heater button.
       if (active === kettleRef.current) {
-        if (kettleStage === 'moving' || kettleStage === 'pouring') {
+        if (kettleStageRef.current === 'moving' || kettleStageRef.current === 'pouring') {
           e.preventDefault();
           e.stopImmediatePropagation();
           return;
@@ -1551,7 +1568,12 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
       rafIdsRef.current.forEach(cancelAnimationFrame);
       clearTimeout(tempBarHideTimerRef.current);
     };
-  }, [heaterOn]);
+    // greenAtMs/redAtMs are included per exhaustive-deps -- both are stable
+    // for this whole mount's lifetime (derived from customerNumber, fixed
+    // once this component mounts -- see difficultyStep's own comment), so
+    // listing them here doesn't cause any extra re-runs, just satisfies the
+    // lint rule honestly instead of suppressing it.
+  }, [heaterOn, greenAtMs, redAtMs]);
 
   // Freezes the fill exactly where it currently is (see getCurrentScaleX)
   // and stops the zone timers, locking in whatever color the button is
@@ -1643,6 +1665,12 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
   // MOVABLE_START.kettle and returns straight to 'idle', ready to be picked
   // up again -- unlike the spoon, the kettle isn't a used-up item.
   const [kettleStage, setKettleStage] = useState('idle');
+  // Keeps kettleStageRef (declared early, alongside preSettingsFocusRef --
+  // see that ref's own comment) in sync every render, same no-deps "cheap
+  // and never a render behind" pattern used throughout this file.
+  useEffect(() => {
+    kettleStageRef.current = kettleStage;
+  });
   // The "liquid pour" Audio instance currently playing for the kettle's
   // water pour (see playLiquidPouring below) -- held in a ref, same
   // reasoning/shape as Milk Selection's and Toppings Station's own
@@ -1716,6 +1744,12 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
   //                focusable -- see the settling comment further down for
   //                why that's deliberately not also disabled).
   const [whiskStage, setWhiskStage] = useState('idle');
+  // Keeps whiskStageRef (declared early, alongside preSettingsFocusRef --
+  // see that ref's own comment) in sync every render, same no-deps pattern
+  // as kettleStageRef's own sync effect above.
+  useEffect(() => {
+    whiskStageRef.current = whiskStage;
+  });
   // DOM ref for the balance minigame's ball -- its position is written
   // directly via this ref inside the physics effect further down, once per
   // animation frame, rather than through React state -- see that effect's
@@ -1818,6 +1852,12 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
   //   'sent'      -- fade's finished; the bowl stops rendering entirely
   //                  (see the MOVABLE_ITEMS.map JSX below).
   const [bowlStage, setBowlStage] = useState('idle');
+  // Keeps bowlStageRef (declared early, alongside preSettingsFocusRef -- see
+  // that ref's own comment) in sync every render, same no-deps pattern as
+  // kettleStageRef/whiskStageRef's own sync effects above.
+  useEffect(() => {
+    bowlStageRef.current = bowlStage;
+  });
 
   // Twelfth highlight beat: picks up the instant whisking finishes
   // (whiskStage settles on 'done') and retires the instant the player
@@ -2148,7 +2188,9 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
       setScoopRunning(false);
     }
     return () => clearTimeout(scoopConfirmTimerRef.current);
-  }, [selectedTin]);
+    // scoopSliderDurationMs included per exhaustive-deps -- stable for this
+    // whole mount's lifetime, same reasoning as greenAtMs/redAtMs above.
+  }, [selectedTin, scoopSliderDurationMs]);
 
   // Sends focus straight to the big spoon the instant it's revealed
   // (scoopConfirmed flipping true, which is also exactly when the gauge
@@ -2666,7 +2708,10 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
       window.removeEventListener('keydown', handleKeyDown, { capture: true });
       whiskAudio.pause();
     };
-  }, [whiskStage]);
+    // mixZoneLeftFrac/mixZoneWidthFrac/mixDriftAmplitude/mixDriftAngularFreq
+    // included per exhaustive-deps -- all four are stable for this whole
+    // mount's lifetime, same reasoning as greenAtMs/redAtMs above.
+  }, [whiskStage, mixZoneLeftFrac, mixZoneWidthFrac, mixDriftAmplitude, mixDriftAngularFreq]);
 
   // ---- Falling-powder pour effect: anchored to the mound's actual position
   // within the spoon art (MOUND_CENTER_FRAC above), not the spoon's box

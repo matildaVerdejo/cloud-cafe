@@ -2513,7 +2513,12 @@ const ToppingsStation = ({
     };
     frameId = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frameId);
-  }, [leverStage]);
+    // leverPeriodMs included per exhaustive-deps -- stable for this whole
+    // mount's lifetime (derived from customerNumber, fixed once this
+    // component mounts), so listing it here doesn't cause any extra
+    // re-runs, just satisfies the lint rule honestly instead of suppressing
+    // it.
+  }, [leverStage, leverPeriodMs]);
 
   // Sends focus straight to the bar the instant it appears -- see
   // leverBarRef's own comment above.
@@ -2889,7 +2894,11 @@ const ToppingsStation = ({
       cancelAnimationFrame(rafId);
       window.removeEventListener('keydown', handleKeyDown, { capture: true });
     };
-  }, [pourStage, pouringKey]);
+    // syrupMixZoneLeftFrac/syrupMixZoneWidthFrac/syrupMixDriftAmplitude/
+    // syrupMixDriftAngularFreq included per exhaustive-deps -- all four are
+    // stable for this whole mount's lifetime, same reasoning as
+    // leverPeriodMs above.
+  }, [pourStage, pouringKey, syrupMixZoneLeftFrac, syrupMixZoneWidthFrac, syrupMixDriftAmplitude, syrupMixDriftAngularFreq]);
 
   const handleSyrupKeyDown = (item) => (e) => {
     const action = getActionFromKeyEvent(e);
