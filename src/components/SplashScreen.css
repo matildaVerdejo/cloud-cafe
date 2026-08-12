@@ -16,9 +16,15 @@
    background rather than a full-bleed art file on purpose: this is the
    very first thing painted (see the big comment in SplashScreen.js), so
    there's no image to decode before it can show -- a plain CSS gradient
-   is as close to "free" as a background gets. Palette matches the game's
-   own established mint/cream/green language (the hint boxes throughout
-   this project use the same rgba(232, 248, 224, ...) family). */
+   is as close to "free" as a background gets. Light green -> light pink,
+   per request -- but pulled from richer, more saturated in-game colors
+   than the pale mint/pink panel gradient (#eafaf1/#fdeef6) this used to
+   borrow: #bdecc9 is the same green ScoreCard's own "good" tier total pill
+   uses (.score-card-total--good in ScoreCard.css), #f7afc7 is the same
+   pink ToppingsStation's own strawberry foam cap uses
+   (.cup-foam-cap.strawberry-foam there) -- both real accent colors already
+   used elsewhere in the game, just noticeably bolder than the washed-out
+   pastel this had before. */
 .splash-container {
   position: relative;
   width: 1920px;
@@ -27,7 +33,7 @@
   border-radius: 16px;
   overflow: hidden;
   box-shadow: 0 15px 30px rgba(0, 0, 0, 0.2);
-  background: linear-gradient(180deg, #eef8e6 0%, #dcefd0 55%, #c9e4bd 100%);
+  background: linear-gradient(160deg, #bdecc9 0%, #f7afc7 100%);
   /* Same slow, cheap, whole-container float every other screen's own
      top-level container uses (see .main-container's gentleContainerFloat)
      -- one transform loop on the outermost box rather than several on
@@ -51,117 +57,50 @@
   position: relative;
 }
 
-/* Decorative cloud shapes, animated as ONE group (this wrapper), not
-   individually -- per this GS's tv-universal rule ("always animate the
-   parent container, not each item individually"). Each .splash-cloud is a
-   plain rounded blob (border-radius approximating a puffy cloud outline,
-   same trick used for the foam cap ellipse elsewhere in this project --
-   simple shapes over expensive filters), soft white over the gradient,
-   positioned once and left alone; only .splash-clouds itself drifts. */
-.splash-clouds {
+/* Decorative background wordmark pattern -- replaces the old white-cloud
+   shapes + bunny mascot AND the separate centered title card per request:
+   this tiled grid of small "cloud cafe" repeats (see PATTERN_COLUMNS/
+   PATTERN_ROWS/PATTERN_ITEMS in SplashScreen.js) tilted diagonally as one
+   rigid group is now the only thing on the screen. Oversized (160% width/
+   height) and centered before the rotation so its own corners still fully
+   cover the container's corners once rotated -- a same-size grid rotated
+   in place would leave gaps at the container's own corners. 16 columns
+   packed into that same 160%-wide box makes each column noticeably
+   narrower than one "cloud cafe" repeat's own rendered width -- since
+   .splash-pattern-item is white-space: nowrap with no width/overflow
+   constraint of its own, each item spills out past its own grid column
+   and directly overlaps its neighbors, which is what actually produces
+   the dense "stacked on one another" look per request, not just tighter
+   whitespace between separate labels. row-gap is small for the same
+   reason, so rows crowd close vertically too. Nothing here animates
+   (unlike the old drifting cloud layer) -- per request this is just a
+   fixed tiled background texture, not a moving flourish. */
+.splash-pattern {
   position: absolute;
-  inset: 0;
-  animation: splashCloudsDrift 12s ease-in-out infinite;
+  left: 50%;
+  top: 50%;
+  width: 160%;
+  height: 160%;
+  transform: translate(-50%, -50%) rotate(-18deg);
+  display: grid;
+  grid-template-columns: repeat(16, 1fr);
+  align-content: center;
+  justify-items: center;
+  row-gap: min(6px, 0.4vw);
   pointer-events: none;
 }
 
-@keyframes splashCloudsDrift {
-  0%,
-  100% {
-    transform: translateX(0);
-  }
-  50% {
-    transform: translateX(1.2%);
-  }
-}
-
-.splash-cloud {
-  position: absolute;
-  background: rgba(255, 255, 255, 0.55);
-  border-radius: 50% 50% 45% 45% / 60% 60% 40% 40%;
-}
-
-.splash-cloud-1 {
-  left: 4%;
-  top: 12%;
-  width: 16%;
-  height: 12%;
-}
-
-.splash-cloud-2 {
-  right: 6%;
-  top: 20%;
-  width: 12%;
-  height: 9%;
-}
-
-.splash-cloud-3 {
-  left: 10%;
-  bottom: 14%;
-  width: 10%;
-  height: 8%;
-}
-
-/* Mascot -- one-shot entrance (bounce/settle in), not a continuous loop --
-   see the big comment in SplashScreen.js on why this is bounded rather
-   than always-on. */
-.splash-mascot {
-  position: absolute;
-  left: 50%;
-  top: 34%;
-  width: 22%;
-  height: auto;
-  transform: translate(-50%, -50%);
-  filter: drop-shadow(0 10px 14px rgba(0, 0, 0, 0.15));
-  animation: splashMascotIn 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) both;
-}
-
-@keyframes splashMascotIn {
-  0% {
-    opacity: 0;
-    transform: translate(-50%, -30%) scale(0.7);
-  }
-  100% {
-    opacity: 1;
-    transform: translate(-50%, -50%) scale(1);
-  }
-}
-
-/* Title lockup -- a big soft rounded card standing in for the "cloud cafe"
-   sign (same cream fill/green text/brown border language as
-   CloudCafeHome.png's own sign, without re-tracing that art's exact
-   scalloped outline). border-radius's uneven per-corner values are the
-   same "loosely cloud-shaped blob" trick as .splash-cloud above, just
-   bigger and with a border/shadow so it reads as the logo, not background
-   decoration. */
-.splash-title {
-  position: absolute;
-  left: 50%;
-  top: 58%;
-  transform: translate(-50%, -50%);
-  padding: min(18px, 1vw) min(48px, 2.6vw);
-  background: rgba(255, 255, 255, 0.92);
-  border: min(3px, 0.16vw) solid #8a7a6a;
-  border-radius: 50% 50% 45% 45% / 65% 65% 35% 35%;
-  color: #295105;
+/* Same solid dark green as the old .splash-title text (#295105) per
+   request -- this pattern is now the wordmark itself, not a faint
+   background texture behind a separate title, so it reads at full
+   opacity/full brand-text color instead of the old translucent white. */
+.splash-pattern-item {
   font-family: 'Pixelify Sans', cursive;
   font-weight: 700;
-  font-size: min(64px, 3.2vw);
-  letter-spacing: 0.02em;
+  font-size: min(30px, 1.6vw);
+  color: #295105;
   white-space: nowrap;
-  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.12);
-  animation: splashTitleIn 0.6s ease-out 0.15s both;
-}
-
-@keyframes splashTitleIn {
-  0% {
-    opacity: 0;
-    transform: translate(-50%, -40%) scale(0.92);
-  }
-  100% {
-    opacity: 1;
-    transform: translate(-50%, -50%) scale(1);
-  }
+  letter-spacing: 0.02em;
 }
 
 /* The "Tap to Start" button that used to sit here was removed -- the
