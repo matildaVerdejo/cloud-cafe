@@ -2546,10 +2546,36 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
 
     const ballWidthPercent = MIX_BALL_WIDTH_FRAC * 100;
     const maxPosition = 100 - ballWidthPercent;
+    // PERF: left pinned to 0 once here, for the whole minigame -- the tick
+    // loop below used to write ballEl.style.left every single frame for the
+    // entire WHISK_MIX_DURATION_MS, which forces a synchronous Layout
+    // (reflow) on every frame since `left` is a layout-affecting property.
+    // On the TV hardware the perf-fix log was captured on, this lines up
+    // with the AmzKeyEventLogging "remote_perf key event latency" entries
+    // (500ms-1.3s to process a single D-pad press) and the platform's own
+    // FLUIDITY_CRITICAL dropped-frame warnings recorded while this exact
+    // minigame is the thing running -- both are consistent with the main
+    // thread being pinned in reflow this whole time. The tick loop now
+    // writes only `transform: translate(...)` every frame instead (see
+    // below), which is compositor-only and never touches layout; `left`
+    // itself is set exactly once, right here, and never touched again.
     // Starts centered in the bar (not the zone specifically, though the
     // zone happens to be centered too) so the player gets a beat before
     // the drift meaningfully pushes it off-center.
     mixPositionRef.current = 50 - ballWidthPercent / 2;
+    // left pinned to 0 once here, and transform set to match the starting
+    // mixPositionRef.current immediately (same formula the tick loop below
+    // uses every frame) -- both in this same synchronous block, so there's
+    // no in-between frame where left is 0 but transform hasn't caught up
+    // yet (which would flash the ball to the bar's left edge for a frame).
+    // The JSX's own initial `left` below existed for exactly this
+    // no-flash reason before this effect ever got a chance to run; this
+    // keeps that guarantee while moving the ongoing per-frame writes onto
+    // transform instead of left.
+    if (mixBallRef.current) {
+      mixBallRef.current.style.left = '0';
+      mixBallRef.current.style.transform = `translate(${(mixPositionRef.current / ballWidthPercent) * 100}%, -50%)`;
+    }
     mixVelocityRef.current = 0;
     messUpCountRef.current = 0;
     spillsRef.current = [];
@@ -2635,7 +2661,19 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
 
       const ballEl = mixBallRef.current;
       if (ballEl) {
-        ballEl.style.left = `${mixPositionRef.current}%`;
+        // PERF: transform, not left -- see the one-time `left = '0'` setup
+        // above for the full reasoning. `translate()`'s percentage is
+        // relative to the ELEMENT's own box, not the parent bar's, so
+        // mixPositionRef.current (already in percent-of-parent, same space
+        // `left` used to consume directly) is rescaled by 100/ballWidthPercent
+        // to land in percent-of-ball-width instead -- the two are
+        // equivalent in percent-of-parent-pixels terms, just expressed in
+        // different denominators. The static `translateY(-50%)` .mix-ball
+        // already had in CSS has to be folded into this same string --
+        // setting the `transform` property from JS entirely replaces
+        // whatever CSS declared for it rather than adding to it.
+        const ballTranslateXPercent = (mixPositionRef.current / ballWidthPercent) * 100;
+        ballEl.style.transform = `translate(${ballTranslateXPercent}%, -50%)`;
         const ballCenter = mixPositionRef.current + ballWidthPercent / 2;
         const inZone = ballCenter >= zoneLeftPercent && ballCenter <= zoneRightPercent;
         ballEl.classList.toggle('in-zone', inZone);

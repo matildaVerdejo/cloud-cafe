@@ -2502,12 +2502,28 @@ const ToppingsStation = ({
     if (leverStage !== 'active') return undefined;
     const startedAt = performance.now();
     let frameId;
+    const markerWidthPercent = LEVER_MARKER_WIDTH_FRAC * 100;
+    // PERF: left pinned to 0 once, transform set to match immediately --
+    // same fix/reasoning as MatchaMaking's mixBallRef and this file's own
+    // syrupBallRef above: the tick loop below used to write
+    // leverMarkerRef.current.style.left every frame for as long as this
+    // catch minigame stays active, forcing a synchronous Layout each time.
+    // transform is compositor-only; left is set exactly once, right here.
+    if (leverMarkerRef.current) {
+      leverMarkerRef.current.style.left = '0';
+      const initialLeftPct = leverPositionRef.current - markerWidthPercent / 2;
+      leverMarkerRef.current.style.transform = `translate(${(initialLeftPct / markerWidthPercent) * 100}%, -50%)`;
+    }
     const tick = () => {
       const elapsedMs = performance.now() - startedAt;
       const centerPct = 50 + LEVER_AMPLITUDE_PCT * Math.sin((elapsedMs / leverPeriodMs) * 2 * Math.PI);
       leverPositionRef.current = centerPct;
       if (leverMarkerRef.current) {
-        leverMarkerRef.current.style.left = `${centerPct - (LEVER_MARKER_WIDTH_FRAC * 100) / 2}%`;
+        // PERF: transform, not left -- see the one-time left='0' setup
+        // above. Same percent-of-parent -> percent-of-own-width rescale
+        // as MatchaMaking's/syrupBallRef's tick loops.
+        const leftPct = centerPct - markerWidthPercent / 2;
+        leverMarkerRef.current.style.transform = `translate(${(leftPct / markerWidthPercent) * 100}%, -50%)`;
       }
       frameId = requestAnimationFrame(tick);
     };
@@ -2776,6 +2792,18 @@ const ToppingsStation = ({
     // Starts centered in the bar, same "a beat before the drift matters"
     // reasoning as MatchaMaking's own mixPositionRef reset.
     syrupBallPositionRef.current = 50 - ballWidthPercent / 2;
+    // PERF: left pinned to 0 once, transform set to match immediately --
+    // same fix and same reasoning as MatchaMaking's own mixBallRef (see
+    // that effect's big comment): the tick loop below used to write
+    // ballEl.style.left every frame for the whole pour, which forces a
+    // synchronous Layout on every frame. transform is compositor-only;
+    // left is set exactly once, right here, and the transform is set in
+    // this same synchronous block so there's no in-between frame where the
+    // ball would flash to the bar's left edge.
+    if (syrupBallRef.current) {
+      syrupBallRef.current.style.left = '0';
+      syrupBallRef.current.style.transform = `translate(${(syrupBallPositionRef.current / ballWidthPercent) * 100}%, -50%)`;
+    }
     syrupBallVelocityRef.current = 0;
     syrupMessUpCountRef.current = 0;
     syrupSpillsRef.current = [];
@@ -2836,7 +2864,11 @@ const ToppingsStation = ({
 
       const ballEl = syrupBallRef.current;
       if (ballEl) {
-        ballEl.style.left = `${syrupBallPositionRef.current}%`;
+        // PERF: transform, not left -- see the one-time left='0' setup
+        // above. Same percent-of-parent -> percent-of-own-width rescale
+        // MatchaMaking's mixBallRef tick uses.
+        const ballTranslateXPercent = (syrupBallPositionRef.current / ballWidthPercent) * 100;
+        ballEl.style.transform = `translate(${ballTranslateXPercent}%, -50%)`;
         const ballCenter = syrupBallPositionRef.current + ballWidthPercent / 2;
         const inZone = ballCenter >= zoneLeftPercent && ballCenter <= zoneRightPercent;
         ballEl.classList.toggle('in-zone', inZone);
