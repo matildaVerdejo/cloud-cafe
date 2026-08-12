@@ -46,27 +46,57 @@ export function setSfxVolume(v) {
 // the app: the device log showed 33 distinct "Creating new AWV Browser
 // message manager for player_id" entries (one per button click/pour/voice
 // line) in under 4 minutes, immediately followed by the app's own process
-// dropping out of the log entirely -- i.e. it died. Capping the number of
-// native players any one clip can ever create to POOL_SIZE, round-robin
-// reused via .currentTime = 0 + .play() again, fixes that at the root
-// instead of hoping GC keeps up. POOL_SIZE (4) just needs to comfortably
-// exceed how many times the *same* clip could ever legitimately overlap
-// itself (rapid repeat button clicks) -- callers get back the exact Audio
-// instance that will actually play, so pausing it later (playVoiceLine/
-// playLiquidPouring/playMatchaWhisking's own callers) still works exactly
-// as before; only the never-reclaimed `new Audio()` growth is gone.
+// dropping out of the log entirely -- i.e. it died.
+//
+// IMPORTANT, learned the hard way from a second device log after the fix
+// below: eagerly building all POOL_SIZE elements the instant a clip is
+// FIRST used (the original version of this function --
+// `Array.from({length: POOL_SIZE}, () => new Audio(src))`) still creates
+// POOL_SIZE native WebMediaPlayers at once, because just constructing
+// `new Audio(src)` with a src already makes Chromium start loading/
+// demuxing that resource immediately, well before .play() is ever called --
+// so simply touching a clip for the first time cost 4 native players, not
+// 1. With ~10 distinct one-shot clips in a single order (clicks, pours,
+// whisking, score stingers, etc.) that's still 40-ish players, and a
+// follow-up on-device log showed the exact same "N distinct player_id
+// registrations, then the process drops out of the log" crash signature
+// again (38 that time). getPooledAudio below now grows each pool LAZILY
+// instead: only ever construct a new Audio() when every element already in
+// that clip's pool is genuinely still mid-playback (a real overlap, e.g. a
+// rapid repeat button mash) -- so the common case (a clip that's never
+// played twice at once) costs exactly ONE native player for its entire
+// lifetime, and POOL_SIZE (4) is now just a ceiling for the rare
+// legitimately-overlapping case, not something eagerly paid upfront. Callers
+// still get back the exact Audio instance that will actually play, so
+// pausing it later (playVoiceLine/playLiquidPouring/playMatchaWhisking's own
+// callers) still works exactly as before.
 const POOL_SIZE = 4;
 const audioPools = new Map(); // src -> { elements: HTMLAudioElement[], next: number }
 
 function getPooledAudio(src) {
   let pool = audioPools.get(src);
   if (!pool) {
-    pool = { elements: Array.from({ length: POOL_SIZE }, () => new Audio(src)), next: 0 };
+    pool = { elements: [new Audio(src)], next: 0 };
     audioPools.set(src, pool);
+    return pool.elements[0];
   }
-  const audio = pool.elements[pool.next];
-  pool.next = (pool.next + 1) % POOL_SIZE;
-  return audio;
+  // Reuse whichever pooled element is idle (finished, or never started)
+  // rather than growing the pool at all -- this is the overwhelmingly
+  // common case for a one-shot clip that isn't currently overlapping itself.
+  const idle = pool.elements.find((el) => el.paused || el.ended);
+  if (idle) return idle;
+  // Every existing element is genuinely still playing (a real overlap) --
+  // only now does this clip earn a second/third/fourth native player,
+  // capped at POOL_SIZE.
+  if (pool.elements.length < POOL_SIZE) {
+    const el = new Audio(src);
+    pool.elements.push(el);
+    return el;
+  }
+  // Pool maxed out and every slot is genuinely busy -- fall back to the
+  // same round-robin steal-the-oldest behavior as before.
+  pool.next = (pool.next + 1) % pool.elements.length;
+  return pool.elements[pool.next];
 }
 
 // .catch(() => {}) swallows the same autoplay-block possibility every
