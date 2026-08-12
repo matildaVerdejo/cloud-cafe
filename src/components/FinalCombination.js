@@ -29,6 +29,14 @@ import {
 // now shows.
 const CUSTOMER_CHARACTER_NAME = { annie: 'annie', otto: 'otto', kitty: 'kitty', teddy: 'teddy', coco: 'coco' };
 
+// How long the celebration burst (see showCelebration/CelebrationOverlay
+// below) stays mounted before auto-hiding itself. CelebrationOverlay runs a
+// genuinely unbounded (animation-iteration-count: infinite) particle
+// animation, so this is what keeps it a bounded few-second burst instead of
+// running for as long as the player happens to linger on this screen -- see
+// showCelebration's own auto-hide effect for the full reasoning.
+const CELEBRATION_BURST_MS = 4000;
+
 // One "reaction sticker" per character per score tier -- fail -> angry,
 // mid -> annoyed, good -> happy, same three tiers computeOverallScore
 // (gameloop/scoring.js) already buckets the round's total into for
@@ -174,6 +182,26 @@ const FinalCombination = ({
     const timeoutId = setTimeout(() => setShowCelebration(true), SCORE_REVEAL_TOTAL_MS);
     return () => clearTimeout(timeoutId);
   }, [scoreTier]);
+  // Auto-hides (unmounts) the celebration burst after CELEBRATION_BURST_MS
+  // instead of leaving it up for as long as the player stays on this screen.
+  // CelebrationOverlay's own 106 particles each run an infinite CSS
+  // animation (animation-iteration-count: infinite, per-element filter/
+  // box-shadow) -- fine for a few seconds, but left mounted indefinitely
+  // (which is what used to happen: nothing ever flipped showCelebration
+  // back off except starting a whole new round) it keeps compositing every
+  // frame for as long as the player lingers reading their score, which on
+  // weaker CTV hardware compounds with everything else on this screen and
+  // was almost certainly what a TV-only ANR/crash report traced back to
+  // (sustained ~90%+ CPU for the entire time the score screen stayed up,
+  // ending in a forced kill) -- see the fix's own investigation notes.
+  // Bounding this to a short burst keeps the celebratory payoff while
+  // freeing the main thread back up well within Android's input-dispatch
+  // timeout, however long the player actually stays on this screen after.
+  useEffect(() => {
+    if (!showCelebration) return undefined;
+    const timeoutId = setTimeout(() => setShowCelebration(false), CELEBRATION_BURST_MS);
+    return () => clearTimeout(timeoutId);
+  }, [showCelebration]);
   // Reaction sticker doesn't mount until STICKER_REVEAL_DELAY_MS (imported
   // from ScoreCard.js) -- that's timed to land right after the score
   // card's own total pill finishes changing color (see that constant's own
@@ -415,16 +443,33 @@ const FinalCombination = ({
             failing total, annoyed for a middling one, happy for a good one.
             Purely decorative (aria-hidden, no interaction), propped on the
             counter to the left of the drink -- see .serving-reaction-
-            sticker in FinalCombination.css for its own positioning. Doesn't
-            mount until showSticker flips true (see that state's own
+            sticker-wrap in FinalCombination.css for its own positioning.
+            Doesn't mount until showSticker flips true (see that state's own
             comment above) -- appears with a "slam" entrance right after the
-            score card's own total pill finishes changing color. */}
+            score card's own total pill finishes changing color.
+
+            Two stacked <img>s, not one -- the white "sticker" outline used
+            to be a single chain of thirteen filter: drop-shadow() layers on
+            one image (twelve sharp ones tracing a ring around the alpha
+            silhouette, plus a blurred one for the resting shadow). That's
+            genuinely correct-looking but is one of the most expensive things
+            you can ask a GPU-constrained embedded WebView to recompute every
+            frame, and this element is actively transform-animating (the
+            slam bounce) the whole time it's doing so -- on the actual TV
+            hardware this ran on, it reliably froze the render thread hard
+            enough to trip an ANR (input dispatch timing out, eventually a
+            forced kill), matching a report of the reaction sound firing
+            (the plain JS timeout that reveals this) but the sticker itself
+            never actually painting. Replaced with a cheap approximation:
+            a plain white silhouette copy (filter: brightness(0) invert(1)
+            -- a flat per-pixel remap, no blur/neighbor sampling at all)
+            sized slightly larger and stacked behind the real art, so it
+            peeks out as a rough outline. The real sticker on top keeps only
+            the one soft resting-shadow drop-shadow, not the twelve sharp
+            ones. Both share servingReactionStickerSlam via the wrapping div
+            below so they still slam in together as one visual unit. */}
         {showSticker && reactionSticker && (
-          <img
-            src={reactionSticker}
-            alt=""
-            aria-hidden="true"
-            draggable={false}
+          <div
             // First-order-only walkthrough, first beat ONLY -- see
             // showScoreSpotlight above. Per request the sticker stays clear
             // of the pink tint while the player's first learning to read
@@ -433,8 +478,11 @@ const FinalCombination = ({
             // card/next-order button instead), so this doesn't also check
             // showNextOrderSpotlight the way the drink/score-card classes
             // below do.
-            className={`serving-reaction-sticker${showScoreSpotlight ? ' final-spotlight-exempt' : ''}`}
-          />
+            className={`serving-reaction-sticker-wrap${showScoreSpotlight ? ' final-spotlight-exempt' : ''}`}
+          >
+            <img src={reactionSticker} alt="" aria-hidden="true" draggable={false} className="serving-reaction-sticker-outline" />
+            <img src={reactionSticker} alt="" aria-hidden="true" draggable={false} className="serving-reaction-sticker" />
+          </div>
         )}
 
         {/* The finished drink, carried over from Toppings Station and set

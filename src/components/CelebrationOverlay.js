@@ -7,7 +7,15 @@ import './CelebrationOverlay.css';
 // app already leans on, rather than jumping to generic primary-color
 // confetti colors that would feel out of place here.
 const STAR_COLORS = ['#ffcf4d', '#ff6f91', '#5bd68c', '#57b8ea', '#c58cf2'];
-const STAR_COUNT = 46;
+// Trimmed down from an original 46 -- per-element filter: drop-shadow (see
+// .celebration-star in CelebrationOverlay.css) is expensive to composite,
+// and this many of them animating simultaneously, on top of everything
+// else already going on on this screen, was almost certainly the dominant
+// cost behind a TV-only ANR/crash report right around the score reveal.
+// FinalCombination.js's own CELEBRATION_BURST_MS now also bounds how long
+// this runs at all, but a lighter particle count keeps even that bounded
+// window cheap on weaker CTV hardware.
+const STAR_COUNT = 24;
 
 // Small, fast-twinkling white/gold flecks layered in alongside the bigger
 // stars -- the actual "glitter" texture requested, distinct from the star
@@ -15,7 +23,12 @@ const STAR_COUNT = 46;
 // 8-point star, so the two layers read as two different kinds of sparkle
 // rather than just one shape at two sizes.
 const GLITTER_COLORS = ['#fff6d8', '#ffe89c', '#ffffff'];
-const GLITTER_COUNT = 60;
+// Trimmed down from an original 60, same performance reasoning as
+// STAR_COUNT above -- glitter's own box-shadow glow (see
+// .celebration-glitter in CelebrationOverlay.css) is cheaper per-element
+// than the stars' drop-shadow filter, but 60 of them animating at once was
+// still adding real cost on top of everything else.
+const GLITTER_COUNT = 32;
 
 // Rolled once per mount (see the empty useMemo dependency arrays in
 // CelebrationOverlay below) -- every particle gets a random position/size/

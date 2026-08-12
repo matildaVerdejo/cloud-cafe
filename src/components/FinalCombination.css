@@ -71,28 +71,54 @@
    every sticker's own base sitting on the same counter line regardless of
    its individual aspect ratio, same "anchor the edge that touches a
    surface, not the center" idea BOTTLE_BOTTOM uses in MilkSelection.js. */
-.serving-reaction-sticker {
+/* Positioning + the "slam" entrance animation both live on this wrapper now
+   (see FinalCombination.js's own big comment on the reaction sticker for
+   why it's two stacked <img>s instead of one) -- the two children below
+   just fill it and inherit the same transform via this one animation, so
+   they still move as a single unit. */
+.serving-reaction-sticker-wrap {
   position: absolute;
   left: 10%;
   top: 22%;
   width: 17%;
   height: 30%;
+  pointer-events: none;
+  animation: servingReactionStickerSlam 0.6s both;
+  animation-timing-function: cubic-bezier(0.36, 1.65, 0.6, 1);
+}
+
+.serving-reaction-sticker-outline,
+.serving-reaction-sticker {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
   object-fit: contain;
   object-position: bottom;
   pointer-events: none;
-  /* Thick white "sticker" outline -- twelve zero-blur drop-shadows spaced
-     evenly around a circle (3px radius) trace a solid white ring around
-     the art's own alpha silhouette, the standard CSS trick for this since
-     there's no actual border to draw around an irregularly-shaped PNG. The
-     13th, blurred drop-shadow at the end is the same soft "resting on the
-     counter" shadow this always had, layered on top of the outline. */
-  filter: drop-shadow(3px 0 0 #fff) drop-shadow(2.6px 1.5px 0 #fff) drop-shadow(1.5px 2.6px 0 #fff)
-    drop-shadow(0 3px 0 #fff) drop-shadow(-1.5px 2.6px 0 #fff) drop-shadow(-2.6px 1.5px 0 #fff)
-    drop-shadow(-3px 0 0 #fff) drop-shadow(-2.6px -1.5px 0 #fff) drop-shadow(-1.5px -2.6px 0 #fff)
-    drop-shadow(0 -3px 0 #fff) drop-shadow(1.5px -2.6px 0 #fff) drop-shadow(2.6px -1.5px 0 #fff)
-    drop-shadow(0 4px 8px rgba(0, 0, 0, 0.25));
-  animation: servingReactionStickerSlam 0.6s both;
-  animation-timing-function: cubic-bezier(0.36, 1.65, 0.6, 1);
+}
+
+/* The white "outline" layer -- a plain silhouette copy of the same art,
+   sized a touch larger and stacked behind the real image (z-index below)
+   so it peeks out around the edges as a rough outline. filter:
+   brightness(0) invert(1) is a flat per-pixel color remap (no blur, no
+   neighbor sampling), which is what makes this cheap to recompute during
+   the slam animation above -- unlike the twelve chained drop-shadow layers
+   this replaces, this one genuinely doesn't cost anything close to as much
+   per frame. */
+.serving-reaction-sticker-outline {
+  filter: brightness(0) invert(1);
+  transform: scale(1.06);
+  z-index: 0;
+}
+
+/* The real art on top -- keeps just the one soft "resting on the counter"
+   shadow (still a drop-shadow, since only that filter hugs the alpha
+   silhouette the way a box-shadow can't, but just this one layer instead
+   of the thirteen the old single-image version chained). */
+.serving-reaction-sticker {
+  filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.25));
+  z-index: 1;
 }
 
 /* A bouncy "slammed onto the counter" entrance -- drops in oversized from
@@ -218,7 +244,7 @@
    documents reusing them in the first place) and the Start-next-order
    button -- see each beat's own exempt-list comment in FinalCombination.js
    for which of these apply to which beat. */
-.serving-reaction-sticker.final-spotlight-exempt,
+.serving-reaction-sticker-wrap.final-spotlight-exempt,
 .final-drink-cup.final-spotlight-exempt,
 .ice-cube.final-spotlight-exempt,
 .cup-milk-fill.final-spotlight-exempt,
