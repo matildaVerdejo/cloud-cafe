@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import './CustomerOrdering.css';
 import { useFlatFocusNav } from '../gameloop/useFlatFocusNav';
 import { getActionFromKeyEvent } from '../gameloop/pal';
@@ -372,6 +372,48 @@ function sliceSegments(segments, n) {
   }
   return out;
 }
+
+// Owns the actual per-character typewriter ticking (see the big PERF
+// comment on the typingDone state further down for why this was pulled out
+// of CustomerOrdering itself). React.memo'd so it only re-renders on its
+// own visibleChars ticks or when segments/text genuinely change identity --
+// not whenever CustomerOrdering's own state changes for an unrelated
+// reason (order-form field edits, dropdown open/close, etc.), which used
+// to also re-run this same interval's render work for free every time.
+const TypewriterSpeech = React.memo(function TypewriterSpeech({ segments, text, onDoneChange }) {
+  const [visibleChars, setVisibleChars] = useState(0);
+
+  useEffect(() => {
+    setVisibleChars(0);
+    onDoneChange(false);
+    const TYPE_INTERVAL_MS = 35;
+    const intervalId = setInterval(() => {
+      setVisibleChars((prev) => {
+        if (prev >= text.length) {
+          clearInterval(intervalId);
+          return prev;
+        }
+        const next = prev + 1;
+        if (next >= text.length) onDoneChange(true);
+        return next;
+      });
+    }, TYPE_INTERVAL_MS);
+    return () => clearInterval(intervalId);
+    // onDoneChange is CustomerOrdering's handleTypewriterDoneChange, wrapped
+    // in useCallback with an empty dep array there, so it's stable across
+    // renders and safe to include here without re-triggering this effect.
+  }, [text, onDoneChange]);
+
+  return sliceSegments(segments, visibleChars).map((seg, i) =>
+    seg.highlight ? (
+      <span key={i} className="ordering-speech-highlight">
+        {seg.text}
+      </span>
+    ) : (
+      <React.Fragment key={i}>{seg.text}</React.Fragment>
+    )
+  );
+});
 
 // A compact single-select control -- a toggle button showing the current
 // selection (or a placeholder), which reveals a row of the other options
@@ -850,21 +892,26 @@ const CustomerOrdering = ({
   // spokenOrder above -- only ever changes on remount/new customer) --
   // typing happens concurrently with the read-acknowledgment gate below,
   // not gated behind it.
-  const [visibleChars, setVisibleChars] = useState(0);
-  useEffect(() => {
-    setVisibleChars(0);
-    const TYPE_INTERVAL_MS = 35;
-    const intervalId = setInterval(() => {
-      setVisibleChars((prev) => {
-        if (prev >= speechText.length) {
-          clearInterval(intervalId);
-          return prev;
-        }
-        return prev + 1;
-      });
-    }, TYPE_INTERVAL_MS);
-    return () => clearInterval(intervalId);
-  }, [speechText]);
+  //
+  // PERF: the actual per-character ticking (setVisibleChars every
+  // TYPE_INTERVAL_MS) now lives inside <TypewriterSpeech> below instead of
+  // here. This component's JSX is enormous (the spotlight overlay, the
+  // order-builder modal, every station image/halo on this screen), so a
+  // ~35ms setState here used to force React to re-render and reconcile
+  // *all* of that, roughly 25-30 times/sec, for however many seconds the
+  // bubble took to finish typing -- on the TV hardware the crash-fix log
+  // was captured on, this is what showed up as sustained "Skipped N
+  // frames!" Choreographer warnings on this screen (compounding with
+  // whatever else the walkthrough spotlight/halos were already animating).
+  // TypewriterSpeech is a separately memoized leaf that owns its own
+  // visibleChars state, so those same ~35ms ticks now only re-render the
+  // one <p> of bubble text -- everything else on this screen keeps
+  // rendering at whatever rate its own state actually changes, not the
+  // typewriter's. typingDone is still tracked here (via the onDoneChange
+  // callback below) since the read-phase/voice-line effects further down
+  // depend on it.
+  const [typingDone, setTypingDone] = useState(false);
+  const handleTypewriterDoneChange = useCallback((done) => setTypingDone(done), []);
 
   // First-order-only walkthrough, "read the order" phase -- drives the
   // callout (arrow + label) and the spotlight's own character/bubble
@@ -873,7 +920,6 @@ const CustomerOrdering = ({
   // switches off 2 seconds after the typewriter above actually finishes --
   // not the instant it finishes, so there's a real beat to read the order
   // before this phase ends and the "button" phase below takes over.
-  const typingDone = visibleChars >= speechText.length;
   const [showReadPhase, setShowReadPhase] = useState(customerNumber === 1);
   useEffect(() => {
     if (customerNumber !== 1 || !typingDone) return undefined;
@@ -1215,15 +1261,7 @@ const CustomerOrdering = ({
               "click Enter to continue" prompt to clear first. */}
           <div className="ordering-speech-bubble">
             <p className="ordering-speech-bubble-text">
-              {sliceSegments(speechSegments, visibleChars).map((seg, i) =>
-                seg.highlight ? (
-                  <span key={i} className="ordering-speech-highlight">
-                    {seg.text}
-                  </span>
-                ) : (
-                  <React.Fragment key={i}>{seg.text}</React.Fragment>
-                )
-              )}
+              <TypewriterSpeech segments={speechSegments} text={speechText} onDoneChange={handleTypewriterDoneChange} />
             </p>
             <svg
               className="ordering-speech-bubble-tail"
