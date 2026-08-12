@@ -1,7 +1,31 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import './SettingsPanel.css';
 import { playButtonClick, playButtonClickOff } from '../gameloop/sfx';
 import { getActionFromKeyEvent } from '../gameloop/pal';
+import { useFlatFocusNav } from '../gameloop/useFlatFocusNav';
+
+// Third settings-popover section, alongside Music/Sound volume above --
+// credits for third-party assets used in the game, surfaced through their
+// own "attributions" button + medium centered dialog (see showAttributions
+// below) rather than crammed into the popover itself, since license text
+// needs real room to breathe. One entry per asset; each renders as its own
+// header + a few plain lines of credit/license/source text. Kept as data
+// here (not hardcoded JSX) so adding a future third-party asset is just
+// another object in this array, not a markup change.
+const ATTRIBUTIONS = [
+  {
+    header: 'Background Music',
+    lines: [
+      '“Young Jazzman’s Grin” — Anima & Animus',
+      'Licensed under CC0 (No Rights Reserved).',
+      'Source: https://archive.org/details/jamendo-455478',
+    ],
+  },
+  {
+    header: 'Customer Voices',
+    lines: ['animalese.js by Acedio — MIT License', 'Source: https://github.com/Acedio/animalese.js'],
+  },
+];
 
 // One label + -/+ stepper + bar/percent readout row -- both Music and
 // Sound below are the exact same layout, just pointed at different props,
@@ -93,6 +117,30 @@ const SettingsPanel = ({
   const musicPlusRef = useRef(null);
   const soundMinusRef = useRef(null);
   const soundPlusRef = useRef(null);
+  const attributionsButtonRef = useRef(null);
+
+  // Attributions dialog -- local to this component (not lifted to App.js
+  // the way showSettings/showExitConfirm are) since nothing outside this
+  // widget needs to know about it; the shared keydown effect below handles
+  // its own Back-to-close directly instead, same "one widget, one effect"
+  // shape the rest of this component already uses for its own nav graph.
+  const [showAttributions, setShowAttributions] = useState(false);
+  // Scopes the dialog's own (single-button) focus the same way App.js's
+  // exitDialogRef scopes the exit-confirm dialog -- safe to call
+  // unconditionally; when the dialog isn't rendered, dialogRef.current is
+  // null and the hook's handler just returns early (see that ref's own
+  // comment in App.js).
+  const attributionsDialogRef = useRef(null);
+  useFlatFocusNav(attributionsDialogRef);
+  const attributionsCloseRef = useRef(null);
+  // Moves focus onto the dialog's own close button the instant it opens --
+  // same "auto-focus the thing that just appeared" idea as every other
+  // freshly-shown overlay in this project.
+  useEffect(() => {
+    if (showAttributions) {
+      attributionsCloseRef.current?.focus();
+    }
+  }, [showAttributions]);
 
   // Exact button-to-button keyboard graph for this widget, per request --
   // deliberately its own fixed path rather than the generic spatial
@@ -113,6 +161,26 @@ const SettingsPanel = ({
     const handleKeyDown = (e) => {
       const action = getActionFromKeyEvent(e);
       if (!action) return;
+
+      // Attributions dialog gets first say, same "the topmost overlay
+      // handles Back before anything underneath it gets a chance"
+      // convention App.js's own showExitConfirm/showSettings checks use.
+      // stopImmediatePropagation keeps this same keydown event from also
+      // reaching App.js's own Back handler (attached in its own, separate
+      // window-level listener) -- without it, closing this dialog on Back
+      // would also pop the "exit cloud cafe?" confirm dialog open right
+      // behind it, since that handler has no idea this one exists.
+      if (showAttributions) {
+        if (action === 'Back') {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          playButtonClickOff();
+          setShowAttributions(false);
+          attributionsButtonRef.current?.focus();
+        }
+        return;
+      }
+
       const active = document.activeElement;
 
       if (active === gearRef.current) {
@@ -155,6 +223,9 @@ const SettingsPanel = ({
         } else if (action === 'Up') {
           e.preventDefault();
           musicMinusRef.current?.focus();
+        } else if (action === 'Down') {
+          e.preventDefault();
+          attributionsButtonRef.current?.focus();
         }
         return;
       }
@@ -166,12 +237,28 @@ const SettingsPanel = ({
         } else if (action === 'Up') {
           e.preventDefault();
           musicMinusRef.current?.focus();
+        } else if (action === 'Down') {
+          e.preventDefault();
+          attributionsButtonRef.current?.focus();
+        }
+        return;
+      }
+
+      // Third section, below the two volume rows -- Down from EITHER sound
+      // button lands here (see both branches just above), Up from here
+      // always goes back to sound minus, same "always the same fixed
+      // button, not whichever happens to sit closest" reasoning every other
+      // leg of this graph already uses.
+      if (active === attributionsButtonRef.current) {
+        if (action === 'Up') {
+          e.preventDefault();
+          soundMinusRef.current?.focus();
         }
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [open]);
+  }, [open, showAttributions]);
 
   return (
     <div className="settings-panel-anchor" ref={containerRef}>
@@ -235,6 +322,65 @@ const SettingsPanel = ({
             minusRef={soundMinusRef}
             plusRef={soundPlusRef}
           />
+          {/* Third settings-popover section -- see ATTRIBUTIONS/
+              showAttributions above. Reuses .settings-volume-section purely
+              for its adjacent-sibling spacing rule (see that class's own
+              comment in SettingsPanel.css) even though this section has no
+              volume row of its own. */}
+          <div className="settings-volume-section">
+            <button
+              ref={attributionsButtonRef}
+              type="button"
+              className="settings-attributions-button"
+              data-focusable
+              onClick={() => {
+                playButtonClick();
+                setShowAttributions(true);
+              }}
+            >
+              attributions
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Third-party credits -- see ATTRIBUTIONS above. A medium dialog
+          centered over the whole screen (same fixed-backdrop shape as
+          App.js's own .gl-exit-confirm-backdrop/-dialog, just sized for a
+          few short paragraphs of credit text instead of one line + two
+          buttons) rather than another popover, since license text needs
+          real room. Rendered here (inside .settings-panel-anchor) rather
+          than lifted up into App.js the way the exit-confirm dialog is --
+          nothing outside this component needs to know it's open, see
+          showAttributions's own comment above. */}
+      {showAttributions && (
+        <div className="settings-attributions-backdrop">
+          <div className="settings-attributions-dialog" ref={attributionsDialogRef}>
+            <h2 className="settings-attributions-title">attributions</h2>
+            {ATTRIBUTIONS.map((credit) => (
+              <div className="settings-attributions-credit" key={credit.header}>
+                <p className="settings-attributions-credit-header">{credit.header}</p>
+                {credit.lines.map((line) => (
+                  <p className="settings-attributions-credit-line" key={line}>
+                    {line}
+                  </p>
+                ))}
+              </div>
+            ))}
+            <button
+              ref={attributionsCloseRef}
+              type="button"
+              className="settings-attributions-close-button"
+              data-focusable
+              onClick={() => {
+                playButtonClickOff();
+                setShowAttributions(false);
+                attributionsButtonRef.current?.focus();
+              }}
+            >
+              close
+            </button>
+          </div>
         </div>
       )}
     </div>

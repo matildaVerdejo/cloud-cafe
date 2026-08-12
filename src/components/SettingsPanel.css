@@ -105,9 +105,161 @@
    lives here (margin-top on every section after the first) rather than on
    .settings-popover itself (e.g. a flex `gap`) so this still reads fine if
    a third section gets added later without touching the popover's own
-   rule. */
+   rule. The third section (the attributions button, see SettingsPanel.js)
+   reuses this same .settings-volume-section wrapper class purely for this
+   spacing rule -- it has no volume row of its own, but sits right after
+   the Sound row, so it needs the exact same gap. */
 .settings-volume-section + .settings-volume-section {
   margin-top: min(14px, 0.8vw);
+}
+
+/* Third settings-popover section -- opens the attributions dialog below
+   (see showAttributions/ATTRIBUTIONS in SettingsPanel.js). A full-width
+   rectangular pill rather than the circular +/- steppers above (nothing to
+   step here, just one action), but the same fill/border/text-color
+   language as .settings-volume-button so it still reads as part of the
+   same popover. */
+.settings-attributions-button {
+  width: 100%;
+  padding: min(10px, 0.6vw) 0;
+  border-radius: min(999px, 2vw);
+  background: rgba(232, 248, 224, 0.95);
+  border: 2px solid #8a7a6a;
+  color: #295105;
+  font-family: 'Pixelify Sans', cursive;
+  font-weight: 700;
+  font-size: min(16px, 0.85vw);
+  text-align: center;
+  cursor: pointer;
+  transition: transform 0.15s ease;
+}
+
+.settings-attributions-button:hover {
+  transform: scale(1.03);
+}
+
+.settings-attributions-button:active {
+  transform: scale(0.97);
+}
+
+/* Third-party credits dialog -- a "medium", centered, fixed-position modal
+   per request, same shape as App.js's own .gl-exit-confirm-backdrop/
+   -dialog (full-screen semi-transparent backdrop + a centered card) just
+   sized for a few short paragraphs of credit/license text instead of one
+   line + two buttons, and kept local to this component rather than in
+   App.css since nothing outside SettingsPanel.js ever triggers it -- see
+   showAttributions's own comment in SettingsPanel.js. position: fixed
+   (not absolute) is what lets this cover the whole screen even though it's
+   rendered inside .settings-panel-anchor's own small corner box -- none of
+   its ancestors (up through .page-container) set a transform of their own,
+   so nothing creates a smaller containing block to trap it. z-index
+   matches .gl-exit-confirm-backdrop's own 10000 -- comfortably above
+   .settings-panel-anchor's own 50, and the two are never expected to be
+   open at the same time in practice (Back closes this dialog first, see
+   SettingsPanel.js's own keydown effect, before it could ever reach far
+   enough to also trigger App.js's exit-confirm). */
+.settings-attributions-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+}
+
+.settings-attributions-dialog {
+  box-sizing: border-box;
+  width: min(640px, 46vw);
+  max-height: 74vh;
+  overflow-y: auto;
+  /* Same fill/text-color pairing as .settings-attributions-button (the
+     button that opens this dialog), per request, rather than the plain
+     cream/dark-green .gl-exit-confirm-dialog look this used to borrow. */
+  background: rgba(232, 248, 224, 0.95);
+  border: 3px solid #295105;
+  border-radius: 14px;
+  padding: min(32px, 2vw) min(40px, 2.4vw);
+  color: #295105;
+  font-family: 'Pixelify Sans', cursive;
+  text-align: center;
+  /* Same "scales with the viewport instead of a fixed px size" reasoning
+     as .gl-exit-confirm-dialog's own font-size in App.css. */
+  animation: settingsAttributionsIn 0.18s ease-out both;
+}
+
+@keyframes settingsAttributionsIn {
+  0% {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.settings-attributions-title {
+  margin: 0 0 min(22px, 1.3vw);
+  font-size: min(28px, 1.4vw);
+  font-weight: 700;
+  color: #295105;
+}
+
+/* One block per ATTRIBUTIONS entry (see SettingsPanel.js) -- header +
+   however many plain credit/license/source lines that entry has. */
+.settings-attributions-credit {
+  margin-bottom: min(22px, 1.3vw);
+  text-align: left;
+}
+
+.settings-attributions-credit:last-of-type {
+  margin-bottom: 0;
+}
+
+.settings-attributions-credit-header {
+  margin: 0 0 min(8px, 0.5vw);
+  font-size: min(19px, 1vw);
+  font-weight: 700;
+  color: #295105;
+}
+
+.settings-attributions-credit-line {
+  margin: 0;
+  font-size: min(15px, 0.8vw);
+  line-height: 1.5;
+  color: #295105;
+}
+
+.settings-attributions-credit-line + .settings-attributions-credit-line {
+  margin-top: min(4px, 0.25vw);
+}
+
+.settings-attributions-close-button {
+  margin-top: min(22px, 1.3vw);
+  padding: min(10px, 0.55vw) min(28px, 1.6vw);
+  font-size: min(18px, 0.9vw);
+  font-family: 'Pixelify Sans', cursive;
+  font-weight: 700;
+  border: 2px solid #295105;
+  border-radius: 10px;
+  background: #ffffff;
+  color: #1e2e10;
+  cursor: pointer;
+  transition: box-shadow 0.15s ease, transform 0.15s ease;
+}
+
+.settings-attributions-close-button:hover {
+  transform: scale(1.04);
+}
+
+.settings-attributions-close-button:active {
+  transform: scale(0.96);
+}
+
+.settings-attributions-close-button:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 4px rgba(41, 81, 5, 0.35), 0 0 16px 5px rgba(41, 81, 5, 0.25);
 }
 
 .settings-popover-label {
