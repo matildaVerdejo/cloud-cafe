@@ -2022,7 +2022,21 @@
    `key={pourCount}` on the element in MatchaMaking.js is what guarantees
    "fresh mount" here: it forces a new DOM node each pour instead of
    restyling the same one from last time. animation-duration is set inline
-   (see MatchaMaking.js) to BIG_SPOON_POUR_MS. */
+   (see MatchaMaking.js) to BIG_SPOON_POUR_MS.
+
+   transition: left 0.2s ease, top 0.2s ease -- added so this mound glides
+   along with the bowl during the Make Drink carry (see beginBowlCarry in
+   MatchaMaking.js) instead of snapping straight to the destination the
+   instant bowlPos updates, while the bowl image itself (and
+   .bowl-whisked-liquid, which already had this same transition) ease over
+   that same 0.2s. Without it, the mound/pool used to arrive at the drop
+   zone a full render ahead of the bowl and the whisked-liquid overlay
+   still gliding in behind it, reading as the bowl's layers dragging apart
+   instead of moving as one whole bowl. Matches
+   .station-item-wrap's own `transition: transform 0.2s ease` duration/
+   easing exactly so all three keep pace with each other. Harmless
+   alongside the growFromCenter animation above since that only ever
+   touches `transform`, never left/top. */
 .bowl-powder {
   position: absolute;
   border-radius: 50%;
@@ -2031,6 +2045,7 @@
   animation-name: growFromCenter;
   animation-timing-function: ease-out;
   animation-fill-mode: forwards;
+  transition: left 0.2s ease, top 0.2s ease;
 }
 
 /* Water poured in from the kettle (see bowlWater/waterPourCount in
@@ -2044,7 +2059,12 @@
    than WATER_COLOR (the falling-stream color) specifically so the mound
    still shows through underneath, reading as water sitting over the
    powder rather than a solid pool hiding it. animation-duration is set
-   inline to KETTLE_POUR_MS. */
+   inline to KETTLE_POUR_MS.
+
+   transition: left 0.2s ease, top 0.2s ease -- same "glide along with the
+   bowl during the carry instead of snapping" fix as .bowl-powder above,
+   for the same reason (see that rule's own comment for the full
+   explanation). */
 .bowl-water {
   position: absolute;
   border-radius: 50%;
@@ -2053,6 +2073,7 @@
   animation-name: growFromCenter;
   animation-timing-function: ease-out;
   animation-fill-mode: forwards;
+  transition: left 0.2s ease, top 0.2s ease;
 }
 
 @keyframes growFromCenter {
@@ -2124,19 +2145,91 @@
   z-index: 27;
 }
 
-/* Once the bowl arrives at the Make Drink zone (bowlStage 'vanishing' in
-   MatchaMaking.js), it -- and this whisked-liquid overlay still painted on
-   it, same class applied to both -- shrinks and fades out over
-   BOWL_VANISH_MS before unmounting entirely (bowlStage 'sent'). The whisk
-   is deliberately left out of this -- it stays behind on the counter
-   rather than disappearing along with the bowl. Layered on top of
-   whichever other classes are already applying (.settling's pointer-
-   events: none, etc.) rather than replacing them. Declared after
-   .bowl-whisked-liquid specifically so it wins that element's own
-   `animation` (growFromCenter) on the equal-specificity/later-in-file
-   tiebreak -- see the comment up near .whisk-hint for why. */
+/* NOTE: no longer used by the bowl/.bowl-whisked-liquid on THIS screen --
+   see .bowl-slide-off/@keyframes bowlSlideOff further down for what the
+   bowl's own Make Drink exit uses now instead (a slide-off-right, applied
+   to the shared .station-item-wrap rather than to the bowl <img> and
+   .bowl-whisked-liquid individually). Still declared/used here because
+   MilkSelection.js's own cup-send-off sequence (the cup image plus its
+   .cup-milk-fill/.cup-matcha-fill overlays) reuses this exact class --
+   shrinks and fades those in place over 0.35s -- so it can't be repurposed
+   or removed without breaking that screen. Layered on top of whichever
+   other classes are already applying (.settling's pointer-events: none,
+   etc.) rather than replacing them. Declared after .bowl-whisked-liquid
+   specifically so it wins that element's own `animation` (growFromCenter)
+   on the equal-specificity/later-in-file tiebreak, for whichever of
+   MilkSelection's own elements still reuse .bowl-whisked-liquid's styling
+   too -- see the comment up near .whisk-hint for why. */
 .bowl-vanishing {
   animation: bowlVanish 0.35s ease-in forwards;
+}
+
+/* The bowl (and the whisked-matcha image riding along inside its wrapper --
+   see the isBowl branch in MOVABLE_ITEMS.map() in MatchaMaking.js) shrinks
+   down the instant it arrives at the Make Drink zone (bowlStage
+   'hovering'), and stays shrunk through the slide-off that follows
+   (bowlStage 'vanishing' also gets this class -- see the `arrived` flag in
+   MatchaMaking.js) rather than snapping back to full size right as it
+   starts sliding away. transition (not animation) here, since this is a
+   plain one-time size change with no keyframe choreography needed --
+   .bowl-slide-off's own @keyframes bowlSlideOff below then picks up
+   FROM this same scale(0.45) explicitly, for a seamless handoff between the
+   two once the slide's own animation takes over the transform property. */
+.bowl-arrived {
+  transition: transform 0.3s ease;
+  transform: scale(0.45);
+  /* No z-index declared here (deliberately) -- `transform: none` (this
+     wrapper's normal state) does NOT establish a stacking context, but any
+     transform OTHER than none does, so the instant this class's scale()
+     above takes effect, .station-item-wrap starts a brand new local
+     stacking context of its own, and needs an explicit z-index to compete
+     against .matcha-spotlight-overlay (25)/.make-drink-zone (5, or 26
+     while its own exempt class is up) at the page level rather than
+     falling back to z-index: auto (effectively 0), which loses to both.
+     That z-index now lives as a plain inline style on this same wrapper
+     (see the isBowl && settling check in MOVABLE_ITEMS.map(), further up
+     in MatchaMaking.js) instead of here, since it needs to cover MORE than
+     just this class's own 'hovering'/'vanishing' span -- the bowl also
+     needs to clear .make-drink-zone while still gliding in during
+     'carrying', before it's shrunk at all. One inline value handles the
+     bowl's entire trip through/around the drop-zone instead of splitting
+     the same concern across an inline style AND a CSS class here, which
+     would just be two sources of truth for the same number. */
+}
+
+/* The bowl's own Make Drink exit on THIS screen (MatchaMaking, not
+   MilkSelection's cup-send-off above) -- once the bowl's hover at the zone
+   is over (bowlStage 'vanishing' in MatchaMaking.js), it slides off to the
+   right (staying at the same scale(0.45) .bowl-arrived above already
+   shrunk it to) and fades out over BOWL_VANISH_MS before unmounting
+   entirely (bowlStage 'sent'), reading as the finished, already-shrunk
+   drink being carried off toward the next station rather than just
+   evaporating in place. Applied to the bowl's .station-item-wrap itself
+   (see the isBowl branch in MOVABLE_ITEMS.map() in MatchaMaking.js), not
+   to the bowl <img>/.bowl-whisked-liquid individually -- both of those
+   live inside that same wrapper now, so animating the wrapper's transform/
+   opacity carries them off together as one rigid unit for free, same
+   reasoning as the FLIP glide itself using a wrapper rather than the
+   rotatable <img> directly (see useFlipGlide.js). translateX is a
+   percentage of the wrapper's own (unscaled) width (that's how
+   transform: translateX(%) resolves, independent of the scale() in the
+   same list), not the container's -- 220% clears the visible station
+   comfortably regardless of screen size. The whisk is deliberately left
+   out of all this -- it stays behind on the counter rather than sliding
+   off with the bowl. */
+.bowl-slide-off {
+  animation: bowlSlideOff 0.45s ease-in forwards;
+}
+
+@keyframes bowlSlideOff {
+  0% {
+    opacity: 1;
+    transform: translateX(0) scale(0.45);
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(220%) scale(0.45);
+  }
 }
 
 /* Once the carried-over bowl actually pours its matcha into the cup on
@@ -2454,6 +2547,24 @@
   box-shadow: inset 0 1px 2px rgba(255, 255, 255, 0.35), inset 0 -1px 2px rgba(0, 0, 0, 0.2);
   pointer-events: none;
   z-index: 5;
+}
+
+/* Bug fix: the plain .matcha-spotlight-exempt class alone (z-index: 26,
+   declared way up near the top of this file) was never actually winning
+   against .make-drink-zone's own z-index: 5 above -- both are single-class
+   rules of equal specificity, and CSS's tiebreak for that goes to
+   whichever rule comes LATER in the stylesheet, which is .make-drink-zone
+   itself here. So while showBowlCarrySpotlight was up (i.e. for this
+   marker's whole "select the bowl..." callout beat -- see
+   MatchaMaking.js), the marker's exempt class was silently doing nothing
+   and the pink tint (z-index: 25) painted right over it the entire time,
+   even though it's supposed to stay visible through that beat. Same bug
+   class, same fix shape, as .order-receipt-widget.matcha-spotlight-exempt
+   near the top of this file and .bowl-whisked-liquid.matcha-spotlight-
+   exempt above -- a higher-specificity override declared after the base
+   rule it needs to beat. */
+.make-drink-zone.matcha-spotlight-exempt {
+  z-index: 26;
 }
 
 /* Thick block arrow pointing right, filling most of the marker's own

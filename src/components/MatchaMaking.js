@@ -977,16 +977,25 @@ const MAKE_DRINK_ZONE = { left: 87, top: 66, width: 10, height: 18 };
 // Once whisking's done and the player sends the bowl off (see bowlStage/
 // beginBowlCarry in the component below), it glides into the Make Drink
 // zone above rather than the screen advancing immediately -- this is how
-// long that glide takes before the bowl starts fading/shrinking away
-// (BOWL_VANISH_MS), comfortably longer than .station-item.movable's own
-// 0.2s left/top transition so it always finishes the glide first, same
+// long that glide takes before the bowl settles in and starts hovering
+// there (BOWL_HOVER_MS), comfortably longer than .station-item.movable's
+// own 0.2s left/top transition so it always finishes the glide first, same
 // reasoning as KETTLE_MOVE_MS/WHISK_MOVE_MS. The whisk stays behind on the
 // counter rather than going along for this -- only the bowl itself moves.
 const BOWL_CARRY_MOVE_MS = 350;
-// How long the shrink/fade-out itself takes (see .bowl-vanishing in
-// MatchaMaking.css) once the bowl's arrived at the Make Drink zone, before
-// it actually unmounts.
-const BOWL_VANISH_MS = 350;
+// How long the bowl just sits still at the Make Drink zone, fully arrived
+// and shrunk down (see .bowl-arrived below), before it slides off (see
+// BOWL_VANISH_MS/.bowl-slide-off below) -- gives the "drink's ready" beat a
+// moment to read before the bowl leaves, rather than immediately
+// continuing on and off in one unbroken motion.
+const BOWL_HOVER_MS = 1000;
+// How long the slide-off itself takes (see .bowl-slide-off/@keyframes
+// bowlSlideOff in MatchaMaking.css) once the hover above is over, before
+// the bowl actually unmounts. Slides off to the right (staying at the
+// shrunk-down size from the hover) rather than shrinking/fading in place
+// -- reads as the finished, already-shrunk bowl being carried off toward
+// the next station instead of just evaporating.
+const BOWL_VANISH_MS = 450;
 
 // PERF: this used to read the fill's current live scaleX mid-transition
 // via window.getComputedStyle(el).transform (a synchronous forced
@@ -1946,9 +1955,13 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
   //   'carrying'  -- confirmed (dropped on the Make Drink label, or
   //                  Enter/Space) -- gliding to the zone's own center. Still
   //                  fully visible, no longer draggable.
-  //   'vanishing' -- arrived; shrinking/fading away (see .bowl-vanishing in
-  //                  MatchaMaking.css).
-  //   'sent'      -- fade's finished; the bowl stops rendering entirely
+  //   'hovering'  -- arrived; shrinks down (see .bowl-arrived in
+  //                  MatchaMaking.css) and sits still at the zone for
+  //                  BOWL_HOVER_MS before it heads off (a beat to let
+  //                  "drink's ready" register before it leaves).
+  //   'vanishing' -- sliding off to the right (staying shrunk) and fading
+  //                  out (see .bowl-slide-off in MatchaMaking.css).
+  //   'sent'      -- slide's finished; the bowl stops rendering entirely
   //                  (see the MOVABLE_ITEMS.map JSX below).
   const [bowlStage, setBowlStage] = useState('idle');
   // Keeps bowlStageRef (declared early, alongside preSettingsFocusRef -- see
@@ -1990,7 +2003,11 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
 
   useEffect(() => {
     if (bowlStage === 'carrying') {
-      const t = setTimeout(() => setBowlStage('vanishing'), BOWL_CARRY_MOVE_MS);
+      const t = setTimeout(() => setBowlStage('hovering'), BOWL_CARRY_MOVE_MS);
+      return () => clearTimeout(t);
+    }
+    if (bowlStage === 'hovering') {
+      const t = setTimeout(() => setBowlStage('vanishing'), BOWL_HOVER_MS);
       return () => clearTimeout(t);
     }
     if (bowlStage === 'vanishing') {
@@ -2544,15 +2561,15 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
   const bowlWaterTop =
     bowlPos.top + BOWL_WATER_OFFSET.topFrac * bowlItem.height - (bowlWaterHeight - bowlPowderHeight) / 2;
 
-  // The bowl's actual inner-rim ellipse (see BOWL_INNER_RIM_CENTER/
-  // BOWL_INNER_RIM_WIDTH_FRAC/BOWL_INNER_RIM_HEIGHT_FRAC above) -- only used
-  // to size/position the finished whisked-matcha image so it fills the
-  // bowl's real visible interior rather than bowl-water's smaller,
-  // more-circular box.
-  const bowlInnerRimLeft = bowlPos.left + BOWL_INNER_RIM_CENTER.leftFrac * bowlItem.width;
-  const bowlInnerRimTop = bowlPos.top + BOWL_INNER_RIM_CENTER.topFrac * bowlItem.height;
-  const bowlInnerRimWidth = BOWL_INNER_RIM_WIDTH_FRAC * bowlItem.width;
-  const bowlInnerRimHeight = BOWL_INNER_RIM_HEIGHT_FRAC * bowlItem.height;
+  // The bowl's actual inner-rim ellipse (BOWL_INNER_RIM_CENTER/
+  // BOWL_INNER_RIM_WIDTH_FRAC/BOWL_INNER_RIM_HEIGHT_FRAC above) sizes/
+  // positions the finished whisked-matcha image so it fills the bowl's
+  // real visible interior rather than bowl-water's smaller, more-circular
+  // box. That image is now rendered/positioned inside MOVABLE_ITEMS.map()
+  // below, as plain percentages of the bowl's own .station-item-wrap
+  // (so it rides that wrapper's FLIP transform rather than being
+  // recomputed from bowlPos here) -- no bowlPos-derived left/top/width/
+  // height needed at this scope anymore.
 
   // Anchored to the kettle's actual spout opening (KETTLE_POUR_SPOUT_TOP_
   // FRAC), not KETTLE_SPOUT_OFFSET's raised steam-anchor point -- see the
@@ -3323,13 +3340,23 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
             (isKettle && kettleStage !== 'idle') ||
             (isWhisk && whiskStage !== 'idle') ||
             (isBowl && bowlStage !== 'idle');
-          // The bowl shrinks/fades away on its own once it's arrived at the
-          // Make Drink zone (bowlStage 'vanishing') -- not yet during
-          // 'carrying', which should still read as a plain glide, same
-          // "settle first, then react" shape as .pouring/.mixing below
+          // The bowl slides off to the right and fades away on its own
+          // once its hover at the Make Drink zone is over (bowlStage
+          // 'vanishing') -- not during 'carrying' (still gliding in) or
+          // 'hovering' (arrived, just sitting there for BOWL_HOVER_MS),
+          // same "settle first, then react" shape as .pouring/.mixing below
           // only applying once their own glide-in is over. The whisk isn't
           // included here -- see the comment above.
           const leaving = isBowl && bowlStage === 'vanishing';
+          // Shrinks the bowl (see .bowl-arrived in MatchaMaking.css) the
+          // instant it's arrived at the Make Drink zone -- spans 'hovering'
+          // AND 'vanishing' (not just 'hovering') so the slide-off keeps
+          // that same shrunk size instead of snapping back up to full size
+          // right as it starts sliding away; .bowl-slide-off's own
+          // keyframes pick up from this same scale for a seamless handoff
+          // between the two (see that rule's own comment in
+          // MatchaMaking.css).
+          const arrived = isBowl && (bowlStage === 'hovering' || bowlStage === 'vanishing');
           const pouring = isKettle && (kettleStage === 'moving' || kettleStage === 'pouring');
           // Stirring wobble (see .mixing/@keyframes whiskStir in
           // MatchaMaking.css) only plays once the whisk's actually settled
@@ -3359,16 +3386,61 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
             // itself is untouched below (still the focusable/filtered/
             // rotatable element) other than filling this wrapper via CSS
             // instead of carrying its own left/top/width/height.
+            //
+            // bowl-arrived (isBowl && arrived) shrinks the bowl down the
+            // instant it reaches the Make Drink zone, and bowl-slide-off
+            // (isBowl && leaving) then plays the "slide off to the right
+            // while fading" exit (@keyframes bowlSlideOff in
+            // MatchaMaking.css) once the hover's over -- both applied to
+            // THIS wrapper, not to the bowl <img>/.bowl-whisked-liquid
+            // individually. Both of those now live inside this same
+            // wrapper (see the isBowl branch below), so animating the
+            // wrapper's own transform/opacity carries them off together as
+            // one rigid unit for free, same "one shared parent transform"
+            // reasoning as the FLIP glide itself. Deliberately NOT the
+            // shared .bowl-vanishing/@keyframes bowlVanish class other
+            // parts of the bowl used to use for this (and that
+            // MilkSelection.js's own cup-send-off sequence still reuses
+            // elsewhere) -- that one shrinks/fades in place, a different
+            // exit entirely, so this gets its own classes instead of
+            // repurposing (and breaking) that shared one.
             <div
               key={item.key}
               ref={(el) => registerFlip(item.key, el)}
-              className="station-item-wrap"
+              className={`station-item-wrap${isBowl && arrived ? ' bowl-arrived' : ''}${
+                isBowl && leaving ? ' bowl-slide-off' : ''
+              }`}
               style={{
                 left: `${pos.left}%`,
                 top: `${pos.top}%`,
                 width: `${item.width}%`,
                 height: `${item.height}%`,
                 ...(isWhisk ? { zIndex: showWhiskSpotlight || showMixSpotlight ? 27 : 2 } : {}),
+                // Bug fix: the bowl was landing BEHIND the "Make Drink"
+                // drop-zone marker (.make-drink-zone, z-index 5 normally /
+                // 26 while its own .matcha-spotlight-exempt is up -- see
+                // MatchaMaking.css) for its whole trip there and back --
+                // gliding in during 'carrying', sitting shrunk during
+                // 'hovering', sliding off during 'vanishing'. This wrapper
+                // never carried its own z-index outside of `settling`
+                // (auto/0 the rest of the time), so the marker's explicit
+                // z-index always painted over it, and even once .bowl-
+                // arrived's own z-index (see MatchaMaking.css) kicked in
+                // for 'hovering'/'vanishing', it only matched the marker's
+                // own exempt tier (26) rather than beating it outright --
+                // an exact tie that CSS then breaks by DOM order, which
+                // favors the marker (rendered later in this JSX). 27 clears
+                // the marker's every tier (5 and 26) outright, no tie
+                // possible. Scoped to `settling` (bowlStage !== 'idle') --
+                // not applied while idle, matching the whisk's own
+                // resting-in-the-bowl z-index of 2 above, which still needs
+                // to beat a plain, non-elevated bowl right up until the
+                // carry actually starts (the whisk itself stays put on the
+                // counter once the bowl leaves -- see the isBowl 'sent'
+                // check above -- so the two are never both on-screen and
+                // overlapping at the same time this elevated z-index is
+                // active, nothing to break there).
+                ...(isBowl && settling ? { zIndex: 27 } : {}),
               }}
             >
               <img
@@ -3394,8 +3466,6 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
                   // needs pointing out once" reasoning the Order/heater
                   // buttons already use.
                 }${mixing ? ' mixing' : ''}${isBowl && showBowlHint ? ' bowl-highlight' : ''}${
-                  leaving ? ' bowl-vanishing' : ''
-                }${
                   (isBowl &&
                     (showSpoonSpotlight ||
                       showKettlePourSpotlight ||
@@ -3454,6 +3524,69 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
                   isKettle ? handleKettleKeyDown : isWhisk ? handleWhiskKeyDown : isBowl ? handleBowlKeyDown : undefined
                 }
               />
+              {/* The finished whisked matcha, swapped in once whiskStage
+                  reaches 'done' -- one pre-made image per grade
+                  (WHISKED_LIQUID_IMAGES, keyed off bowlPowder.grade,
+                  captured from selectedTin back when the powder was first
+                  dumped -- see that setBowlPowder call above).
+
+                  MOVED IN HERE (nested inside this same .station-item-wrap,
+                  right alongside the bowl's own <img>) instead of being a
+                  separate top-level sibling positioned from bowlPos on
+                  every render -- that older setup gave it its own
+                  left/top transition (see .bowl-whisked-liquid in
+                  MatchaMaking.css) as an attempt to *approximate* the
+                  bowl's own glide during the Make Drink carry, but that's a
+                  different animation mechanism than the bowl's actual
+                  FLIP-based glide (see useFlipGlide.js) and the two only
+                  ever approximately lined up -- still visibly reading as
+                  two separately-dragged layers rather than one whole bowl.
+                  Nesting it inside the wrapper instead means it now moves
+                  by riding this wrapper's own `transform`, the exact same
+                  one the bowl <img> itself moves by -- not a lookalike
+                  transition of its own -- so the two are physically locked
+                  together, not just timed to match.
+
+                  Positioned with the same BOWL_INNER_RIM_CENTER/WIDTH_FRAC/
+                  HEIGHT_FRAC constants as before, but now as plain
+                  percentages of *this wrapper's own box* (which is already
+                  sized/positioned to the bowl's current bowlPos/bowlItem)
+                  instead of bowlInnerRimLeft/Top/Width/Height, which
+                  recomputed an absolute container-relative position from
+                  bowlPos on every render -- those wrapper-relative
+                  percentages are now static, so this element only ever
+                  "moves" because its parent wrapper does. left/top are
+                  still the ellipse's *center* point, same centering trick
+                  as .bowl-water/.bowl-powder (translate(-50%, -50%) -- see
+                  .bowl-whisked-liquid in MatchaMaking.css). Reuses
+                  growFromCenter for a quick fade/grow-in so it doesn't just
+                  harshly pop in the instant mixing ends. */}
+              {isBowl && whiskStage === 'done' && bowlPowder && bowlStage !== 'sent' && (
+                <img
+                  className={`bowl-whisked-liquid${
+                    // Bug fix: this image paints on top of the bowl but,
+                    // unlike the bowl itself (see this item's own
+                    // matcha-spotlight-exempt condition above), never
+                    // carried its own exemption -- so during
+                    // showBowlCarrySpotlight (the only spotlight beat that
+                    // can ever overlap whiskStage === 'done') the pink
+                    // overlay (z-index 25) painted right over the finished
+                    // frothed matcha even though the bowl underneath it
+                    // correctly showed through.
+                    showBowlCarrySpotlight ? ' matcha-spotlight-exempt' : ''
+                  }`}
+                  aria-hidden="true"
+                  draggable={false}
+                  src={WHISKED_LIQUID_IMAGES[bowlPowder.grade] ?? WHISKED_LIQUID_IMAGES['classic-grade']}
+                  alt=""
+                  style={{
+                    left: `${BOWL_INNER_RIM_CENTER.leftFrac * 100}%`,
+                    top: `${BOWL_INNER_RIM_CENTER.topFrac * 100}%`,
+                    width: `${BOWL_INNER_RIM_WIDTH_FRAC * 100}%`,
+                    height: `${BOWL_INNER_RIM_HEIGHT_FRAC * 100}%`,
+                  }}
+                />
+              )}
             </div>
           );
         })}
@@ -3676,8 +3809,21 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
             component (see App.js's currentPage-based conditional rendering,
             which unmounts/remounts the station between customers), so a
             multi-order session (5-7 customers) never carries any of this
-            state, keyed or not, from one customer's drink into the next. */}
-        {bowlPowder && bowlStage !== 'sent' && (
+            state, keyed or not, from one customer's drink into the next.
+
+            whiskStage !== 'done' -- added back per feedback: once the
+            whisked-liquid image takes over (see the isBowl branch in
+            MOVABLE_ITEMS.map() above), it fully covers this mound anyway
+            (same inner-rim area, painted on top), so there's nothing left
+            for the mound to visibly contribute -- and one fewer separately-
+            positioned layer left mounted during the Make Drink carry is
+            one fewer thing that could ever drift out of sync with the bowl
+            again. (This gate briefly existed once before and got pulled
+            for a stale-DOM-duplication bug -- that turned out to be caused
+            by this element's old `key={pourCount}` forcing a fresh mount
+            every pour, not by the gate itself; the key's already gone now,
+            see the paragraph above, so it's safe to re-add.) */}
+        {bowlPowder && bowlStage !== 'sent' && whiskStage !== 'done' && (
           <div
             className={`bowl-powder${
               showSpoonSpotlight ||
@@ -3747,47 +3893,14 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
             }}
           />
         )}
-        {/* The finished whisked matcha, swapped in once whiskStage reaches
-            'done' -- one pre-made image per grade (WHISKED_LIQUID_IMAGES,
-            keyed off bowlPowder.grade, which was captured from selectedTin
-            back when the powder was first dumped -- see that setBowlPowder
-            call above). Rendered on top of the plain-color bowl-powder/
-            bowl-water circles (doesn't replace them -- just paints over,
-            same "later in the JSX = higher paint order" convention as
-            everything else on the bowl). Sized/positioned to the bowl's
-            actual inner-rim ellipse (bowlInnerRimLeft/Top/Width/Height, see
-            BOWL_INNER_RIM_CENTER above) rather than bowl-water's own box, so
-            it fills the real visible interior instead of a smaller,
-            more-circular guess -- left/top are still the ellipse's *center*
-            point, same centering trick as .bowl-water/.bowl-powder
-            (translate(-50%, -50%) -- see .bowl-whisked-liquid in
-            MatchaMaking.css). Reuses growFromCenter for a quick fade/
-            grow-in so it doesn't just harshly pop in the instant mixing
-            ends. */}
-        {whiskStage === 'done' && bowlPowder && bowlStage !== 'sent' && (
-          <img
-            className={`bowl-whisked-liquid${bowlStage === 'vanishing' ? ' bowl-vanishing' : ''}${
-              // Bug fix: this image paints on top of the bowl but, unlike
-              // the bowl itself (see isBowl's own matcha-spotlight-exempt
-              // condition above), never carried its own exemption -- so
-              // during showBowlCarrySpotlight (the only spotlight beat that
-              // can ever overlap whiskStage === 'done') the pink overlay
-              // (z-index 25) painted right over the finished frothed matcha
-              // even though the bowl underneath it correctly showed through.
-              showBowlCarrySpotlight ? ' matcha-spotlight-exempt' : ''
-            }`}
-            aria-hidden="true"
-            draggable={false}
-            src={WHISKED_LIQUID_IMAGES[bowlPowder.grade] ?? WHISKED_LIQUID_IMAGES['classic-grade']}
-            alt=""
-            style={{
-              left: `${bowlInnerRimLeft}%`,
-              top: `${bowlInnerRimTop}%`,
-              width: `${bowlInnerRimWidth}%`,
-              height: `${bowlInnerRimHeight}%`,
-            }}
-          />
-        )}
+        {/* The finished whisked matcha used to render here as a separate
+            top-level sibling, positioned from bowlPos on every render --
+            it's now rendered inside the bowl's own .station-item-wrap, in
+            the MOVABLE_ITEMS.map() above, so it physically rides the same
+            FLIP transform as the bowl <img> itself during the Make Drink
+            carry instead of approximating it with its own left/top
+            transition. See the big comment on that JSX for the full
+            reasoning. */}
         {/* Balance minigame -- only up while whiskStage === 'mixing' (see
             that stage's physics effect above). The ball's left position and
             in-zone glow are both written directly to mixBallRef's DOM node
@@ -3903,14 +4016,20 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
           grade={bowlPowder?.grade}
           exempt={showMixSpotlight || showBowlCarrySpotlight}
         />
-        {/* "Make Drink" drop-zone -- appears once whisking is done. Stays up
-            through bowlStage 'carrying' now, not just 'idle' -- it's the
-            actual destination the bowl is gliding to, so per request it
-            should still be there (and visible through the walkthrough's
-            pink tint, see the exempt class below) the whole time the bowl
-            is being carried toward it, only disappearing once the bowl's
-            actually arrived and starts fading in place ('vanishing'), at
-            which point the marker's served its purpose. Not itself
+        {/* "Make Drink" drop-zone -- appears once whisking is done and, per
+            request, now just STAYS on screen from then on (through
+            'carrying'/'hovering'/'vanishing'/'sent', all the way to this
+            customer's own visit ending) rather than unmounting the instant
+            the bowl arrives. It doesn't need to disappear on its own --
+            showBowlCarrySpotlight below (which already ends at bowlStage
+            'sent', once the walkthrough's own next beat/label,
+            showStationAdvanceSpotlight, picks up) is what makes it lose
+            its .matcha-spotlight-exempt class at exactly that point, so
+            the pink tint (first order only) simply paints over it then,
+            same as it does everything else this walkthrough's moved past
+            -- covered, not removed. For orders 2+ (no tint ever up), it
+            just sits there quietly once the bowl's gone, which is harmless
+            since it's aria-hidden and non-interactive. Not itself
             focusable -- it's a drop target the *bowl* gets sent to via its
             own Enter press (handleBowlKeyDown), same "the marker just marks
             a zone, the movable item is what's actually selected" pattern
@@ -3920,7 +4039,7 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
             plain gray square with a thick arrow pointing at it -- no text,
             no animation (see .make-drink-zone's own comment in
             MatchaMaking.css). */}
-        {whiskStage === 'done' && (bowlStage === 'idle' || bowlStage === 'carrying') && (
+        {whiskStage === 'done' && (
           <div
             className={`make-drink-zone${showBowlCarrySpotlight ? ' matcha-spotlight-exempt' : ''}`}
             aria-hidden="true"
