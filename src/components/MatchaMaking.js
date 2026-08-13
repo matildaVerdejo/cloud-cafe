@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, forwardRef, useImperativeHandle } from 'react';
 // MatchaMaking.css is now imported once, eagerly, from App.js instead of
 // here -- it's reused (class names only, no import) by MilkSelection.js and
 // ToppingsStation.js too, and importing it from this file's own lazy chunk
@@ -850,6 +850,69 @@ const SPILL_SLOT_STEP = { leftFrac: 0.05, topFrac: 0.08 };
 const SPILL_GROWTH_STEP = 0.08;
 const SPILL_GROWTH_CAP = 1.5;
 
+// PERF: spills/spillGrowth used to be plain useState in the main
+// MatchaMaking component -- every mess-up during the whisk-balance
+// minigame (leaving the green zone, up to every MIX_SPILL_INTERVAL_MS)
+// called setSpills/setSpillGrowth there, which forced React to reconcile
+// this entire ~4000-line screen (every tin, the kettle, the temp gauge,
+// every label) on top of the ball-physics tick() already running that
+// same frame. That's exactly the highest-precision-timing moment in the
+// whole game, and profiling/log correlation (KEYCODE_DPAD_CENTER presses
+// landing right as a mess-up fires, matching the worst
+// remote_perf/Choreographer spikes) pointed at this as the dominant
+// remaining hot path after the earlier left/top-transition fixes.
+//
+// Isolating the puddle state in this tiny standalone component means a
+// mess-up now only re-renders these few <img> tags, not the whole screen
+// -- the parent's tick() loop drives it imperatively via the ref handle
+// below (addSpill/growSpill/reset) instead of calling setState on itself,
+// the same "physics loop writes via refs, not React state" pattern
+// mixPositionRef/mixBallRef already use for the ball's own position.
+const MixSpills = React.memo(
+  forwardRef(function MixSpills({ grade, exempt }, ref) {
+    const [spills, setSpills] = useState([]);
+    const [spillGrowth, setSpillGrowth] = useState(0);
+
+    useImperativeHandle(
+      ref,
+      () => ({
+        addSpill: (entry) => setSpills((prev) => [...prev, entry]),
+        growSpill: () => setSpillGrowth((g) => g + 1),
+        reset: () => {
+          setSpills([]);
+          setSpillGrowth(0);
+        },
+      }),
+      []
+    );
+
+    if (spills.length === 0) return null;
+
+    const spillImages = SPILL_IMAGES_BY_GRADE[grade] ?? SPILL_IMAGES_BY_GRADE['classic-grade'];
+    const spillGrowthScale = 1 + Math.min(spillGrowth * SPILL_GROWTH_STEP, SPILL_GROWTH_CAP - 1);
+
+    return spills.map((spill, i) => {
+      const dims = SPILL_DIMS[i];
+      return (
+        <img
+          key={i}
+          src={spillImages[i]}
+          alt=""
+          aria-hidden="true"
+          className={`bowl-spill-puddle${exempt ? ' matcha-spotlight-exempt' : ''}`}
+          style={{
+            left: `${spill.left}%`,
+            top: `${spill.top}%`,
+            width: `${dims.width}%`,
+            height: `${dims.height}%`,
+            transform: `translate(-50%, -50%) rotate(${SPILL_STAGE_ROTATIONS[i]}deg) scale(${spillGrowthScale})`,
+          }}
+        />
+      );
+    });
+  })
+);
+
 // How big the stirring swirl (.bowl-mix-swirl) renders relative to
 // bowl-water's own full size -- shrunk down from an initial 1:1 overlay
 // per feedback that it read as too large/covered too much of the pool.
@@ -925,15 +988,19 @@ const BOWL_CARRY_MOVE_MS = 350;
 // it actually unmounts.
 const BOWL_VANISH_MS = 350;
 
-// Reads the fill's current live scaleX mid-transition (e.g. computed
-// style's transform matrix reports whatever the browser has interpolated
-// to at this exact frame) -- this is what lets stopping the gauge freeze
-// it exactly where it visually is, rather than snapping to 0 or 1.
-function getCurrentScaleX(el) {
-  const transform = window.getComputedStyle(el).transform;
-  if (!transform || transform === 'none') return 0;
-  return new DOMMatrixReadOnly(transform).a;
-}
+// PERF: this used to read the fill's current live scaleX mid-transition
+// via window.getComputedStyle(el).transform (a synchronous forced
+// layout/style flush of the whole document) every time the player pressed
+// Enter to stop the heater gauge -- see stopBar's own comment, and
+// fillStartTimeRef's above it, for why that's now computed with plain
+// elapsed-time arithmetic instead. Left as a comment (not deleted outright)
+// since stopScoop below still uses the getComputedStyle approach for its
+// own slider -- that one's CSS keyframe animation is ease-in-out with an
+// alternating direction, not the plain linear transition this trick relies
+// on, so reproducing it with pure math would need to replicate that easing
+// curve exactly; given that read only fires once per scoop attempt (not
+// every frame), it was left alone rather than risk a subtly-wrong scoop
+// reading for a comparatively small, one-shot cost.
 
 const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order, onSendToMilk, onScored }) => {
   const containerRef = useRef(null);
@@ -1509,6 +1576,21 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
   const rafIdsRef = useRef([]);
   const barRef = useRef(null);
   const fillRef = useRef(null);
+  // PERF: performance.now() timestamp of the instant fillActive actually
+  // flips true (captured in the same rAF callback that sets it, right
+  // below) -- lets stopBar compute the fill's current position with plain
+  // arithmetic (elapsed / fillDurationMs) instead of a
+  // window.getComputedStyle read. getComputedStyle forces the browser to
+  // synchronously flush any pending style/layout work for the WHOLE
+  // document, not just this element, before it can answer -- doing that
+  // inside the Enter-keydown handler for the single highest-precision-
+  // timing press on this gauge added a real, avoidable stall right on the
+  // input-to-action critical path the TV logs flagged. Safe to do with
+  // plain math specifically because .heater-temp-bar-fill's own CSS
+  // comment confirms this transition is linear (not eased), so elapsed-
+  // time fractions already line up exactly with how far across the bar
+  // the fill visually is.
+  const fillStartTimeRef = useRef(0);
 
   useEffect(() => {
     zoneTimersRef.current.forEach(clearTimeout);
@@ -1559,6 +1641,7 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
           rafIdsRef.current = [
             requestAnimationFrame(() => {
               setFillActive(true);
+              fillStartTimeRef.current = performance.now();
               zoneTimersRef.current = [
                 setTimeout(() => setTempZone('target'), greenAtMs),
                 setTimeout(() => setTempZone('over'), redAtMs),
@@ -1600,7 +1683,13 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
     zoneTimersRef.current = [];
     const fill = fillRef.current;
     if (fill) {
-      const frozenScaleX = getCurrentScaleX(fill);
+      // PERF: computed with plain elapsed-time math instead of
+      // getCurrentScaleX's window.getComputedStyle read -- see
+      // fillStartTimeRef's own big comment above for why. Clamped to
+      // [0, 1] the same way the CSS transition itself clamps at scaleX(1)
+      // once fillDurationMs has fully elapsed.
+      const elapsedMs = performance.now() - fillStartTimeRef.current;
+      const frozenScaleX = Math.min(Math.max(elapsedMs / fillDurationMs, 0), 1);
       // transitionProperty (longhand), not the transition shorthand -- see
       // the comment above in the reset effect for why.
       fill.style.transitionProperty = 'none';
@@ -1784,14 +1873,20 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
   // visibly escalate in size/mess as the array grows. See the balance
   // physics effect further down for how entries get pushed and how
   // mess-ups beyond the cap are handled instead (spillGrowth below).
-  const [spills, setSpills] = useState([]);
-  // Mirrors the spills state array above, kept in perfect lockstep (see
-  // every setSpills call below, which always also updates this) -- exists
-  // purely so the tick() closure inside the physics effect can synchronously
-  // read "how many puddles are already on this side" (for the slot-stagger
-  // math) without waiting a render cycle for state to catch up, since
-  // several mess-ups can each want to push their own entry within the same
-  // animation frame's neighborhood.
+  //
+  // PERF: the actual spills/spillGrowth state now lives inside the
+  // isolated MixSpills component above (see its own big comment) instead
+  // of here -- mixSpillsRef is the imperative handle the tick() closure
+  // below uses to push a new puddle/grow the existing ones without
+  // forcing this whole ~4000-line screen to re-render on every mess-up.
+  const mixSpillsRef = useRef(null);
+  // Mirrors MixSpills' own internal spills array, kept in perfect lockstep
+  // (see every addSpill call below, which always also updates this) --
+  // exists purely so the tick() closure inside the physics effect can
+  // synchronously read "how many puddles are already on this side" (for
+  // the slot-stagger math) without waiting a render cycle for state to
+  // catch up, since several mess-ups can each want to push their own entry
+  // within the same animation frame's neighborhood.
   const spillsRef = useRef([]);
   // Always-current snapshot of the bowl's own live position/box, refreshed
   // every render via the effect right below (bowlPos/bowlItem themselves are
@@ -1802,15 +1897,11 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
   // been dragged since mixing began.
   const bowlPosRef = useRef({ left: 0, top: 0 });
   const bowlItemRef = useRef({ width: 0, height: 0 });
-  // How many mess-ups have happened *after* the spills array above already
-  // hit its cap -- scales every puddle already on screen up together (see
-  // SPILL_GROWTH_STEP/SPILL_GROWTH_CAP) rather than adding a 5th image that
-  // doesn't exist.
-  const [spillGrowth, setSpillGrowth] = useState(0);
   // Raw count of every qualifying mess-up this mixing session, tracked in a
   // ref (not state) purely so the tick() closure below can cheaply decide
-  // "is this the Nth mess-up" without depending on the spills state array
-  // itself (which would need to be threaded through the rAF closure).
+  // "is this the Nth mess-up" without depending on MixSpills' own internal
+  // array (which isn't reachable from here at all now that it's owned by
+  // that component).
   const messUpCountRef = useRef(0);
 
 
@@ -2218,10 +2309,15 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
   }, [scoopConfirmed]);
 
   // Freezes the slider exactly where it currently is -- same
-  // getComputedStyle-mid-animation trick as the heater's stopBar/
-  // getCurrentScaleX above, just reading the live `top` instead of a
-  // transform, since that's the property the keyframes animate here. Then
-  // translates that frozen position into a fill reading: the slider's
+  // getComputedStyle-mid-animation trick the heater's stopBar used to use
+  // (see the removed getCurrentScaleX's own comment above for why that one
+  // was swapped for plain elapsed-time math instead), just reading the
+  // live `top` instead of a transform, since that's the property the
+  // keyframes animate here -- and, unlike the heater's fill, this one's
+  // ease-in-out/alternating timing isn't a safe drop-in replacement for a
+  // math shortcut, so it's kept as a one-shot forced-layout read here
+  // rather than risk a subtly-wrong scoop reading. Then translates that
+  // frozen position into a fill reading: the slider's
   // `top` lives in the same top-percent space as SCOOP_BAR_MARKERS/
   // SCOOP_SPOON_LINES above (0% = top of the bar = "x 3" = most scoops,
   // 100% = bottom = "x 1" = fewest), so the green fill -- which grows
@@ -2514,10 +2610,6 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
   // shows up right above wherever the bowl currently is, not wherever it
   // happened to be when mixing started.
   const mixBarPos = getMixBarPos(bowlPos, bowlItem);
-  // Growth multiplier applied to every accumulated spill puddle once mess-ups
-  // exceed SPILL_IMAGE_COUNT -- see spillGrowth/SPILL_GROWTH_STEP/
-  // SPILL_GROWTH_CAP above. Recomputed every render like mixBarPos above.
-  const spillGrowthScale = 1 + Math.min(spillGrowth * SPILL_GROWTH_STEP, SPILL_GROWTH_CAP - 1);
 
   const beginWhiskMix = () => {
     if (whiskStage !== 'idle' || !bowlPowder || !bowlWater) return;
@@ -2587,8 +2679,7 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
     mixVelocityRef.current = 0;
     messUpCountRef.current = 0;
     spillsRef.current = [];
-    setSpills([]);
-    setSpillGrowth(0);
+    mixSpillsRef.current?.reset();
 
     const zoneLeftPercent = mixZoneLeftFrac * 100;
     const zoneRightPercent = zoneLeftPercent + mixZoneWidthFrac * 100;
@@ -2721,9 +2812,14 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
               top: currentBowlPos.top + topFrac * currentBowlItem.height,
             };
             spillsRef.current = [...spillsRef.current, entry];
-            setSpills(spillsRef.current);
+            // PERF: pushed via the MixSpills ref handle, not a setState
+            // call on this component -- see the big comment on MixSpills
+            // above for why (a mess-up used to force a full reconciliation
+            // of this entire screen, right in the middle of the highest-
+            // precision-timing minigame here).
+            mixSpillsRef.current?.addSpill(entry);
           } else {
-            setSpillGrowth((g) => g + 1);
+            mixSpillsRef.current?.growSpill();
           }
         }
       }
@@ -3784,54 +3880,29 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
             )}
           </>
         )}
-        {/* Spill puddles -- one per mess-up during whisking (see
-            spills/spillGrowth in the mixing physics effect above), shown in
-            the order they happened (stage-1 PNG first, up through stage-4)
-            on whichever side of the bowl the ball actually drifted toward,
+        {/* Spill puddles -- one per mess-up during whisking, shown in the
+            order they happened (stage-1 PNG first, up through stage-4) on
+            whichever side of the bowl the ball actually drifted toward,
             colored to match whichever tin was actually scooped
             (bowlPowder.grade -- same classic-grade fallback convention as
             WHISKED_LIQUID_IMAGES right below). Each stays on screen once it
             appears (they don't fade like the old droplet effect) so the
             mess visibly builds up -- and, per feedback, keeps sitting there
             even once the whisking challenge itself is over (whiskStage
-            moving on to 'done'), so there's no whiskStage gate here at all:
-            spills only ever gets populated during 'mixing' and only ever
-            reset at the start of a fresh mixing attempt (see that effect
-            above), so rendering whenever it's non-empty is sufficient on
-            its own. */}
-        {spills.length > 0 &&
-          (() => {
-            const spillImages =
-              SPILL_IMAGES_BY_GRADE[bowlPowder?.grade] ?? SPILL_IMAGES_BY_GRADE['classic-grade'];
-            return spills.map((spill, i) => {
-              // spill.left/spill.top are already the absolute, frozen
-              // container-percentage spot this puddle landed at (computed
-              // once, at creation time, in the physics effect's tick()
-              // above) -- deliberately NOT recomputed from the bowl's
-              // current position here, so dragging or carrying the bowl
-              // away later doesn't drag these along with it. They stay on
-              // the table.
-              const dims = SPILL_DIMS[i];
-              return (
-                <img
-                  key={i}
-                  src={spillImages[i]}
-                  alt=""
-                  aria-hidden="true"
-                  className={`bowl-spill-puddle${
-                    showMixSpotlight || showBowlCarrySpotlight ? ' matcha-spotlight-exempt' : ''
-                  }`}
-                  style={{
-                    left: `${spill.left}%`,
-                    top: `${spill.top}%`,
-                    width: `${dims.width}%`,
-                    height: `${dims.height}%`,
-                    transform: `translate(-50%, -50%) rotate(${SPILL_STAGE_ROTATIONS[i]}deg) scale(${spillGrowthScale})`,
-                  }}
-                />
-              );
-            });
-          })()}
+            moving on to 'done'), so there's no whiskStage gate here at all.
+            PERF: the actual spills/spillGrowth state -- and the mess-up
+            pushes that used to update it via setState right here on this
+            giant component -- now live inside the isolated MixSpills
+            component (see its own big comment); this just mounts it and
+            hands it the ref the physics tick() closure drives imperatively,
+            plus the two bits of parent state it still needs to render
+            correctly (which grade's puddle art, and whether to punch
+            through the pink walkthrough tint). */}
+        <MixSpills
+          ref={mixSpillsRef}
+          grade={bowlPowder?.grade}
+          exempt={showMixSpotlight || showBowlCarrySpotlight}
+        />
         {/* "Make Drink" drop-zone -- appears once whisking is done. Stays up
             through bowlStage 'carrying' now, not just 'idle' -- it's the
             actual destination the bowl is gliding to, so per request it
