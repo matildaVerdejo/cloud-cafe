@@ -182,8 +182,20 @@
    the same trick used on .glass-cup/.ice-cube) so the filter list's length
    matches :focus-visible below, which is what lets the glow transition in/
    out smoothly instead of popping. */
+/* PERF: left/top now live on a `.station-item-wrap` wrapper (shared,
+   already loaded globally via MatchaMaking.css -- see the big comment on
+   .station-item-wrap there and on gameloop/useFlipGlide.js) instead of
+   being animated directly here -- same left/top-forces-layout-every-frame
+   fix as .station-item.movable, applied to the milk bottles too since
+   they're this screen's own most-dragged item and had the identical
+   left/top transition. inset: 0/width/height: 100% makes the <img> fill
+   that wrapper exactly the way it used to fill its own explicit
+   left/top/width/height box. */
 .milk-bottle {
   position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
   object-fit: contain;
   cursor: grab;
   touch-action: none;
@@ -191,7 +203,7 @@
   user-select: none;
   filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.18)) drop-shadow(0 0 0 rgba(255, 255, 255, 0))
     drop-shadow(0 0 0 rgba(255, 255, 255, 0));
-  transition: left 0.2s ease, top 0.2s ease, filter 0.15s ease, transform 0.15s ease;
+  transition: filter 0.15s ease, transform 0.15s ease;
 }
 
 /* Same shape-hugging focus glow as .glass-cup/.ice-cube. Explicit

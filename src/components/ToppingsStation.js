@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import './ToppingsStation.css';
 import { useFlatFocusNav } from '../gameloop/useFlatFocusNav';
+import { useFlipGlide } from '../gameloop/useFlipGlide';
 import { getActionFromKeyEvent, shouldDebounceEnter } from '../gameloop/pal';
 import {
   playButtonClick,
@@ -1083,6 +1084,14 @@ const ToppingsStation = ({
   onScored,
 }) => {
   const containerRef = useRef(null);
+  // PERF: shared FLIP-based glide for every .station-item.movable below
+  // (syrup/foam/powder pairs, the carried-over drink) -- see the big
+  // comment on useFlipGlide.js for why this exists (left/top position now
+  // lives on a wrapper div, animated via transform instead, same fix as
+  // MatchaMaking.js). registerFlip itself is a plain ref-callback closure
+  // (not a hook), so calling it once per item inside each .map() below is
+  // safe.
+  const registerFlip = useFlipGlide();
 
   // Per-order difficulty scaling for this station's two timed mini-
   // challenges (syrup pour balance minigame, foam/powder/leaf/chip/blossom
@@ -3442,40 +3451,47 @@ const ToppingsStation = ({
           const basePos = syrupPositions[item.key];
           const pos = isPouring ? { left: basePos.left + pourOffset, top: basePos.top } : basePos;
           return (
-            <img
+            <div
               key={item.key}
-              src={item.src}
-              alt={`${item.alt}. Select it and press Enter to pour some in. While it's pouring, use Left/Right to aim the stream.`}
-              className={`station-item movable${isPouring ? ' settling' : ''}${
-                // Per request: both syrup bottles get the white focus halo
-                // the instant showSyrupSpotlight turns on, until the
-                // player's first arrow/Enter press (syrupSpotlightMoved --
-                // see its own comment above), at which point this drops
-                // away and the normal single-bottle :focus-visible halo
-                // (see .station-item.movable:focus-visible in
-                // MatchaMaking.css) takes back over on its own. Excluded
-                // while actually pouring (isPouring), same "don't halo the
-                // one mid-animation" reasoning as Milk Selection's own
-                // bottles excluding their own isPouring one.
-                showSyrupSpotlight && !syrupSpotlightMoved && !isPouring ? ' topping-focus-halo' : ''
-              }${
-                showSyrupSpotlight ? ' topping-spotlight-exempt' : ''
-              }`}
-              data-focusable
-              data-topping-key={item.key}
-              tabIndex={0}
-              draggable={false}
+              ref={(el) => registerFlip(item.key, el)}
+              className="station-item-wrap"
               style={{
                 left: `${pos.left}%`,
                 top: `${pos.top}%`,
                 width: `${item.width}%`,
                 height: `${item.height}%`,
-                ...(isPouring ? { transform: `rotate(${WHISK_FLIP_DEG}deg)` } : {}),
               }}
-              onKeyDown={handleSyrupKeyDown(item)}
-              onFocus={() => setFocusedTopping(item.key)}
-              onBlur={() => setFocusedTopping((prev) => (prev === item.key ? null : prev))}
-            />
+            >
+              <img
+                src={item.src}
+                alt={`${item.alt}. Select it and press Enter to pour some in. While it's pouring, use Left/Right to aim the stream.`}
+                className={`station-item movable${isPouring ? ' settling' : ''}${
+                  // Per request: both syrup bottles get the white focus halo
+                  // the instant showSyrupSpotlight turns on, until the
+                  // player's first arrow/Enter press (syrupSpotlightMoved --
+                  // see its own comment above), at which point this drops
+                  // away and the normal single-bottle :focus-visible halo
+                  // (see .station-item.movable:focus-visible in
+                  // MatchaMaking.css) takes back over on its own. Excluded
+                  // while actually pouring (isPouring), same "don't halo the
+                  // one mid-animation" reasoning as Milk Selection's own
+                  // bottles excluding their own isPouring one.
+                  showSyrupSpotlight && !syrupSpotlightMoved && !isPouring ? ' topping-focus-halo' : ''
+                }${
+                  showSyrupSpotlight ? ' topping-spotlight-exempt' : ''
+                }`}
+                data-focusable
+                data-topping-key={item.key}
+                tabIndex={0}
+                draggable={false}
+                style={{
+                  ...(isPouring ? { transform: `rotate(${WHISK_FLIP_DEG}deg)` } : {}),
+                }}
+                onKeyDown={handleSyrupKeyDown(item)}
+                onFocus={() => setFocusedTopping(item.key)}
+                onBlur={() => setFocusedTopping((prev) => (prev === item.key ? null : prev))}
+              />
+            </div>
           );
         })}
         {/* Matcha-cold-foam/reg-cold-foam/banana-foam -- select and press
@@ -3500,38 +3516,45 @@ const ToppingsStation = ({
             const basePos = foamPositions[item.key];
             const pos = isPouring ? { left: basePos.left + foamPourOffset, top: basePos.top } : basePos;
             return (
-              <img
+              <div
                 key={item.key}
-                src={item.src}
-                alt={`${item.alt}. Select it and press Enter to pour some in. While it's pouring, catch the lever right in the middle to land it clean.`}
-                className={`station-item movable${isPouring ? ' settling' : ''}${
-                  // Per request: both foam bottles get the white focus halo
-                  // the instant showFoamSpotlight turns on, until the
-                  // player's first arrow/Enter press (foamSpotlightMoved --
-                  // see its own comment above), at which point this drops
-                  // away and the normal single-bottle :focus-visible halo
-                  // takes back over on its own. Excluded while actually
-                  // pouring (isPouring), same "don't halo the one mid-
-                  // animation" reasoning as the syrup pair's own images.
-                  showFoamSpotlight && !foamSpotlightMoved && !isPouring ? ' topping-focus-halo' : ''
-                }${
-                  showFoamSpotlight ? ' topping-spotlight-exempt' : ''
-                }`}
-                data-focusable
-                data-topping-key={item.key}
-                tabIndex={0}
-                draggable={false}
+                ref={(el) => registerFlip(item.key, el)}
+                className="station-item-wrap"
                 style={{
                   left: `${pos.left}%`,
                   top: `${pos.top}%`,
                   width: `${item.width}%`,
                   height: `${item.height}%`,
-                  ...(isPouring ? { transform: `rotate(${WHISK_FLIP_DEG}deg)` } : {}),
                 }}
-                onKeyDown={handleFoamKeyDown(item)}
-                onFocus={() => setFocusedTopping(item.key)}
-                onBlur={() => setFocusedTopping((prev) => (prev === item.key ? null : prev))}
-              />
+              >
+                <img
+                  src={item.src}
+                  alt={`${item.alt}. Select it and press Enter to pour some in. While it's pouring, catch the lever right in the middle to land it clean.`}
+                  className={`station-item movable${isPouring ? ' settling' : ''}${
+                    // Per request: both foam bottles get the white focus halo
+                    // the instant showFoamSpotlight turns on, until the
+                    // player's first arrow/Enter press (foamSpotlightMoved --
+                    // see its own comment above), at which point this drops
+                    // away and the normal single-bottle :focus-visible halo
+                    // takes back over on its own. Excluded while actually
+                    // pouring (isPouring), same "don't halo the one mid-
+                    // animation" reasoning as the syrup pair's own images.
+                    showFoamSpotlight && !foamSpotlightMoved && !isPouring ? ' topping-focus-halo' : ''
+                  }${
+                    showFoamSpotlight ? ' topping-spotlight-exempt' : ''
+                  }`}
+                  data-focusable
+                  data-topping-key={item.key}
+                  tabIndex={0}
+                  draggable={false}
+                  style={{
+                    ...(isPouring ? { transform: `rotate(${WHISK_FLIP_DEG}deg)` } : {}),
+                  }}
+                  onKeyDown={handleFoamKeyDown(item)}
+                  onFocus={() => setFocusedTopping(item.key)}
+                  onBlur={() => setFocusedTopping((prev) => (prev === item.key ? null : prev))}
+                />
+              </div>
             );
           }
         )}
@@ -3552,38 +3575,45 @@ const ToppingsStation = ({
           const basePos = powderPositions[item.key];
           const pos = isPouring ? { left: basePos.left + powderPourOffset, top: basePos.top } : basePos;
           return (
-            <img
+            <div
               key={item.key}
-              src={item.src}
-              alt={`${item.alt}. Select it and press Enter to pour some in. While it's pouring, catch the lever right in the middle to land it clean.`}
-              className={`station-item movable${isPouring ? ' settling' : ''}${
-                // Per request: both powders get the white focus halo the
-                // instant showPowderSpotlight turns on, until the player's
-                // first arrow/Enter press (powderSpotlightMoved -- see its
-                // own comment above), at which point this drops away and
-                // the normal single-item :focus-visible halo takes back
-                // over on its own. Excluded while actually pouring
-                // (isPouring), same "don't halo the one mid-animation"
-                // reasoning as the syrup/foam pairs' own images.
-                showPowderSpotlight && !powderSpotlightMoved && !isPouring ? ' topping-focus-halo' : ''
-              }${
-                showPowderSpotlight ? ' topping-spotlight-exempt' : ''
-              }`}
-              data-focusable
-              data-topping-key={item.key}
-              tabIndex={0}
-              draggable={false}
+              ref={(el) => registerFlip(item.key, el)}
+              className="station-item-wrap"
               style={{
                 left: `${pos.left}%`,
                 top: `${pos.top}%`,
                 width: `${item.width}%`,
                 height: `${item.height}%`,
-                ...(isPouring ? { transform: `rotate(${WHISK_FLIP_DEG}deg)` } : {}),
               }}
-              onKeyDown={handlePowderKeyDown(item)}
-              onFocus={() => setFocusedTopping(item.key)}
-              onBlur={() => setFocusedTopping((prev) => (prev === item.key ? null : prev))}
-            />
+            >
+              <img
+                src={item.src}
+                alt={`${item.alt}. Select it and press Enter to pour some in. While it's pouring, catch the lever right in the middle to land it clean.`}
+                className={`station-item movable${isPouring ? ' settling' : ''}${
+                  // Per request: both powders get the white focus halo the
+                  // instant showPowderSpotlight turns on, until the player's
+                  // first arrow/Enter press (powderSpotlightMoved -- see its
+                  // own comment above), at which point this drops away and
+                  // the normal single-item :focus-visible halo takes back
+                  // over on its own. Excluded while actually pouring
+                  // (isPouring), same "don't halo the one mid-animation"
+                  // reasoning as the syrup/foam pairs' own images.
+                  showPowderSpotlight && !powderSpotlightMoved && !isPouring ? ' topping-focus-halo' : ''
+                }${
+                  showPowderSpotlight ? ' topping-spotlight-exempt' : ''
+                }`}
+                data-focusable
+                data-topping-key={item.key}
+                tabIndex={0}
+                draggable={false}
+                style={{
+                  ...(isPouring ? { transform: `rotate(${WHISK_FLIP_DEG}deg)` } : {}),
+                }}
+                onKeyDown={handlePowderKeyDown(item)}
+                onFocus={() => setFocusedTopping(item.key)}
+                onBlur={() => setFocusedTopping((prev) => (prev === item.key ? null : prev))}
+              />
+            </div>
           );
         })}
         {/* Pot row -- mint-leaves pot (order 2+), banana-chips pot (order
@@ -3725,29 +3755,42 @@ const ToppingsStation = ({
             starts. */}
         {incomingDrink && drinkSendStage !== 'sent' && (
           <>
-            <img
-              src={CUP_TYPES[incomingCupType].src}
-              alt={
-                canSendToFinal
-                  ? 'Finished drink. Select it and press Enter to send it to Serving.'
-                  : 'Finished drink.'
-              }
-              className={`station-item movable${
-                drinkSendStage === 'vanishing' ? ' bowl-vanishing' : ''
-              }${showSyrupSpotlight || showFoamSpotlight || showPowderSpotlight || showSendSpotlight ? ' topping-spotlight-exempt' : ''}`}
-              data-focusable
-              data-topping-key="cup"
-              tabIndex={0}
-              draggable={false}
+            <div
+              ref={(el) => registerFlip('incoming-drink-cup', el)}
+              className="station-item-wrap"
               style={{
                 left: `${incomingDrinkRenderPos.left}%`,
                 top: `${incomingDrinkRenderPos.top}%`,
                 width: `${incomingDrinkSize.width}%`,
                 height: `${incomingDrinkSize.height}%`,
-                ...(drinkSendStage !== 'idle' ? { pointerEvents: 'none' } : {}),
               }}
-              onKeyDown={handleDrinkKeyDown}
-            />
+            >
+              <img
+                src={CUP_TYPES[incomingCupType].src}
+                alt={
+                  canSendToFinal
+                    ? 'Finished drink. Select it and press Enter to send it to Serving.'
+                    : 'Finished drink.'
+                }
+                className={`station-item movable${
+                  drinkSendStage === 'vanishing' ? ' bowl-vanishing' : ''
+                }${showSyrupSpotlight || showFoamSpotlight || showPowderSpotlight || showSendSpotlight ? ' topping-spotlight-exempt' : ''}`}
+                data-focusable
+                data-topping-key="cup"
+                tabIndex={0}
+                draggable={false}
+                style={{
+                  // pointer-events: none must stay on the <img> itself
+                  // (not the wrapper) -- .station-item.movable's own CSS
+                  // sets pointer-events: auto explicitly, which is a
+                  // specified value and so does NOT inherit "none" from
+                  // an ancestor; putting it on the wrapper instead would
+                  // silently fail to block re-selection mid-transit.
+                  ...(drinkSendStage !== 'idle' ? { pointerEvents: 'none' } : {}),
+                }}
+                onKeyDown={handleDrinkKeyDown}
+              />
+            </div>
             {/* Ice cubes carried over from Milk Selection -- incomingDrink
                 only ever carried milk/matcha/cupType across before, so any
                 ice the player placed in the cup there was silently getting

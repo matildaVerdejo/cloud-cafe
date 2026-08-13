@@ -908,6 +908,25 @@
   animation: hintRingPulse 2s ease-in-out 0.3s infinite;
 }
 
+/* PERF: position (left/top/width/height/z-index) now lives on a
+   `.station-item-wrap` wrapper (see JS below for the elements that render
+   one) instead of on the item itself, and that wrapper's own position is
+   set ONCE per logical move rather than transitioned -- the actual glide
+   is played back on the wrapper's `transform` by gameloop/useFlipGlide.js
+   instead, since `transform` (unlike `left`/`top`) never forces layout and
+   lets the browser composite the move instead of repainting this element's
+   filter: drop-shadow at a new position every single frame of it. This
+   item itself just fills its wrapper now (inset: 0 below) and keeps doing
+   everything it always did (filter, cursor, drag/focus treatment, and each
+   item's OWN unrelated inline `transform: rotate(...)` for the kettle's
+   pour tilt / whisk's flip) exactly as before -- see useFlipGlide.js's own
+   comment for why the glide has to be a separate element from the one
+   already animating rotation. */
+.station-item-wrap {
+  position: absolute;
+  transition: transform 0.2s ease;
+}
+
 /* Movable items (kettle, bowl, whisk): draggable anywhere on the counter,
    D-pad-selectable. Re-enables pointer-events (overriding the base
    .station-item rule above) and adds the drag/focus treatment, following
@@ -916,6 +935,9 @@
    filter functions matches :focus-visible below, which is what lets the
    glow transition in/out smoothly instead of popping. */
 .station-item.movable {
+  inset: 0;
+  width: 100%;
+  height: 100%;
   pointer-events: auto;
   cursor: grab;
   touch-action: none;
@@ -923,7 +945,7 @@
   user-select: none;
   filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.18)) drop-shadow(0 0 0 rgba(255, 255, 255, 0))
     drop-shadow(0 0 0 rgba(255, 255, 255, 0));
-  transition: left 0.2s ease, top 0.2s ease, filter 0.15s ease, transform 0.15s ease;
+  transition: filter 0.15s ease, transform 0.15s ease;
 }
 
 /* Same shape-hugging white focus glow as .glass-cup/.ice-cube on Milk

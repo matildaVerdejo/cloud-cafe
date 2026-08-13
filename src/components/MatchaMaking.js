@@ -6,6 +6,7 @@ import React, { useEffect, useRef, useState } from 'react';
 // a webpack "Conflicting order" build failure under Vercel's CI=true. See
 // App.js's own import comment for the full explanation.
 import { useFlatFocusNav } from '../gameloop/useFlatFocusNav';
+import { useFlipGlide } from '../gameloop/useFlipGlide';
 import { getActionFromKeyEvent, shouldDebounceEnter } from '../gameloop/pal';
 import { playButtonClick, playLiquidPouring, playMatchaWhisking, playMatchaPowderPour } from '../gameloop/sfx';
 import ProgressBar from './ProgressBar';
@@ -936,6 +937,13 @@ function getCurrentScaleX(el) {
 
 const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order, onSendToMilk, onScored }) => {
   const containerRef = useRef(null);
+  // PERF: drives the kettle/bowl/whisk's move glide via transform instead
+  // of a left/top transition -- see useFlipGlide.js's own big comment for
+  // the full reasoning. registerFlip is a plain ref-callback closure (not
+  // a hook itself), so it's safe to call per-iteration inside the
+  // MOVABLE_ITEMS.map() below despite useFlipGlide() itself only being
+  // called once, right here, same as any other hook.
+  const registerFlip = useFlipGlide();
   // Hojicha tin unlocked order 3 onward (moved up from order 4, per
   // request), same "read once, unmounts between customers" reasoning as
   // CustomerOrdering.js's own baseOptions/toppingOptions -- this whole
@@ -3246,121 +3254,111 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
           // dropping the inline flip the moment mixing starts.
           const whiskFlipped = isWhisk && whiskStage !== 'idle';
           return (
-            <img
+            // PERF: position (left/top/width/height/z-index) lives on this
+            // wrapper now, set once per move rather than transitioned --
+            // gameloop/useFlipGlide.js (registerFlip below) plays the
+            // actual glide back via the wrapper's own `transform` instead.
+            // See that file's comment, and MatchaMaking.css's own comment
+            // on .station-item-wrap, for the full reasoning. The <img>
+            // itself is untouched below (still the focusable/filtered/
+            // rotatable element) other than filling this wrapper via CSS
+            // instead of carrying its own left/top/width/height.
+            <div
               key={item.key}
-              ref={isKettle ? kettleRef : isWhisk ? whiskRef : isBowl ? bowlRef : undefined}
-              src={item.src}
-              alt={
-                isWhisk
-                  ? `${item.alt}. Select it and press Enter to mix once the matcha and water are both in.`
-                  : isBowl && whiskStage === 'done'
-                  ? `${item.alt}. Select it and press Enter to send it to the Make Drink zone.`
-                  : isKettle
-                  ? `${item.alt}. Select it and press Enter to pour once the water's hot.`
-                  : item.alt
-              }
-              className={`station-item movable${settling ? ' settling' : ''}${
-                pouring ? ' pouring' : ''
-                // kettle-highlight/whisk-highlight (the flashing green
-                // halo, driven by showKettleHint/showWhiskHint) removed per
-                // request -- their own pink-callout replacements
-                // (.matcha-kettle-callout/.matcha-whisk-callout) do that
-                // job for the first order now; orders 2/3 just render
-                // these two plain with no highlight at all, same "only
-                // needs pointing out once" reasoning the Order/heater
-                // buttons already use.
-              }${mixing ? ' mixing' : ''}${isBowl && showBowlHint ? ' bowl-highlight' : ''}${
-                leaving ? ' bowl-vanishing' : ''
-              }${
-                (isBowl &&
-                  (showSpoonSpotlight ||
-                    showKettlePourSpotlight ||
-                    showWhiskSpotlight ||
-                    showMixSpotlight ||
-                    showBowlCarrySpotlight)) ||
-                (isKettle && (showKettleSpotlight || showKettlePourSpotlight)) ||
-                (isWhisk && (showWhiskSpotlight || showMixSpotlight))
-                  ? ' matcha-spotlight-exempt'
-                  : ''
-              }`}
-              data-focusable
-              tabIndex={0}
+              ref={(el) => registerFlip(item.key, el)}
+              className="station-item-wrap"
               style={{
                 left: `${pos.left}%`,
                 top: `${pos.top}%`,
                 width: `${item.width}%`,
                 height: `${item.height}%`,
-                // Rotation lives here (inline), not in a CSS class, so
-                // KETTLE_POUR_ROTATE_DEG stays the single source of truth
-                // for the angle. transformOrigin (pinned to the spout
-                // opening -- KETTLE_SPOUT_OFFSET.leftFrac/KETTLE_POUR_SPOUT_
-                // TOP_FRAC) is set here *unconditionally* for the kettle,
-                // not just while pouring -- .station-item.movable's own
-                // transition only covers `transform`, not `transform-
-                // origin`, so if the origin were only applied while
-                // `pouring` was true, the instant pouring ends it would
-                // snap back to the default center origin *before* the
-                // untilt (rotate(deg) -> none) transition finished easing
-                // back to 0 -- pivoting that last bit of the transition
-                // around the wrong point, which visibly swung the kettle
-                // over the bowl and made the water/matcha circles flash
-                // as if they'd disappeared and reappeared. Keeping the
-                // origin pinned at all times means only the rotation angle
-                // itself ever changes, so the untilt always eases smoothly
-                // around the same spout point, matching where the falling-
-                // water effect (kettlePourLeft/kettlePourTop) anchors too.
-                ...(isKettle
-                  ? {
-                      transformOrigin: `${KETTLE_SPOUT_OFFSET.leftFrac * 100}% ${
-                        KETTLE_POUR_SPOUT_TOP_FRAC * 100
-                      }%`,
-                    }
-                  : {}),
-                // Set unconditionally whenever this is the whisk (not just
-                // while flipped/mixing) -- see WHISK_STIR_ORIGIN_FRAC above
-                // for why the pivot needs to stay fixed across every stage
-                // rather than only applying alongside the rotation itself.
-                ...(isWhisk
-                  ? {
-                      transformOrigin: `${WHISK_STIR_ORIGIN_FRAC.leftFrac * 100}% ${
-                        WHISK_STIR_ORIGIN_FRAC.topFrac * 100
-                      }%`,
-                    }
-                  : {}),
-                ...(pouring ? { transform: `rotate(${KETTLE_POUR_ROTATE_DEG}deg)` } : {}),
-                ...(whiskFlipped && !mixing ? { transform: `rotate(${WHISK_FLIP_DEG}deg)` } : {}),
-                // bowl-powder/bowl-water render later in the JSX than this
-                // map, so without an explicit z-index the whisk (painted
-                // here, earlier) would sit underneath both once dropped into
-                // the bowl. z-index: 2 lifts it above them regardless of DOM
-                // order; bowl-mix-swirl's own z-index (3, see
-                // MatchaMaking.css) stays above this so the swirl effect is
-                // still visible over the whisk while mixing, per request.
-                // Bumped to 26 during showWhiskSpotlight specifically --
-                // this is an INLINE style, which always beats the
-                // .matcha-spotlight-exempt CSS class (className is also
-                // applied below, but inline styles win over any stylesheet
-                // rule regardless of specificity), so the plain class alone
-                // was silently not exempting the whisk at all during that
-                // phase -- it stayed at 2, well under the overlay's 25, and
-                // read as covered even though the className said otherwise.
-                // 27, not the shared exempt class's 26 -- bowl-powder/
-                // bowl-water also become exempt (26) during these same two
-                // phases, and since the whisk is earlier in DOM than both
-                // (rendered here, in the MOVABLE_ITEMS map, well before
-                // bowl-powder/bowl-water further down in the JSX), an equal
-                // z-index would let DOM order win and sink the whisk BELOW
-                // them -- exactly the "whisk hidden between the layers of
-                // mixing" bug this fixes. One point higher preserves the
-                // same bowl-water(26) < whisk(27) < bowl-mix-swirl(28) <
-                // bowl-spill-puddle(29) stack this element normally keeps
-                // via its own resting z-index: 2 below.
                 ...(isWhisk ? { zIndex: showWhiskSpotlight || showMixSpotlight ? 27 : 2 } : {}),
               }}
-              onKeyDown={
-                isKettle ? handleKettleKeyDown : isWhisk ? handleWhiskKeyDown : isBowl ? handleBowlKeyDown : undefined
-              }
-            />
+            >
+              <img
+                ref={isKettle ? kettleRef : isWhisk ? whiskRef : isBowl ? bowlRef : undefined}
+                src={item.src}
+                alt={
+                  isWhisk
+                    ? `${item.alt}. Select it and press Enter to mix once the matcha and water are both in.`
+                    : isBowl && whiskStage === 'done'
+                    ? `${item.alt}. Select it and press Enter to send it to the Make Drink zone.`
+                    : isKettle
+                    ? `${item.alt}. Select it and press Enter to pour once the water's hot.`
+                    : item.alt
+                }
+                className={`station-item movable${settling ? ' settling' : ''}${
+                  pouring ? ' pouring' : ''
+                  // kettle-highlight/whisk-highlight (the flashing green
+                  // halo, driven by showKettleHint/showWhiskHint) removed per
+                  // request -- their own pink-callout replacements
+                  // (.matcha-kettle-callout/.matcha-whisk-callout) do that
+                  // job for the first order now; orders 2/3 just render
+                  // these two plain with no highlight at all, same "only
+                  // needs pointing out once" reasoning the Order/heater
+                  // buttons already use.
+                }${mixing ? ' mixing' : ''}${isBowl && showBowlHint ? ' bowl-highlight' : ''}${
+                  leaving ? ' bowl-vanishing' : ''
+                }${
+                  (isBowl &&
+                    (showSpoonSpotlight ||
+                      showKettlePourSpotlight ||
+                      showWhiskSpotlight ||
+                      showMixSpotlight ||
+                      showBowlCarrySpotlight)) ||
+                  (isKettle && (showKettleSpotlight || showKettlePourSpotlight)) ||
+                  (isWhisk && (showWhiskSpotlight || showMixSpotlight))
+                    ? ' matcha-spotlight-exempt'
+                    : ''
+                }`}
+                data-focusable
+                tabIndex={0}
+                style={{
+                  // Rotation lives here (inline), not in a CSS class, so
+                  // KETTLE_POUR_ROTATE_DEG stays the single source of truth
+                  // for the angle. transformOrigin (pinned to the spout
+                  // opening -- KETTLE_SPOUT_OFFSET.leftFrac/KETTLE_POUR_SPOUT_
+                  // TOP_FRAC) is set here *unconditionally* for the kettle,
+                  // not just while pouring -- .station-item.movable's own
+                  // transition only covers `transform`, not `transform-
+                  // origin`, so if the origin were only applied while
+                  // `pouring` was true, the instant pouring ends it would
+                  // snap back to the default center origin *before* the
+                  // untilt (rotate(deg) -> none) transition finished easing
+                  // back to 0 -- pivoting that last bit of the transition
+                  // around the wrong point, which visibly swung the kettle
+                  // over the bowl and made the water/matcha circles flash
+                  // as if they'd disappeared and reappeared. Keeping the
+                  // origin pinned at all times means only the rotation angle
+                  // itself ever changes, so the untilt always eases smoothly
+                  // around the same spout point, matching where the falling-
+                  // water effect (kettlePourLeft/kettlePourTop) anchors too.
+                  ...(isKettle
+                    ? {
+                        transformOrigin: `${KETTLE_SPOUT_OFFSET.leftFrac * 100}% ${
+                          KETTLE_POUR_SPOUT_TOP_FRAC * 100
+                        }%`,
+                      }
+                    : {}),
+                  // Set unconditionally whenever this is the whisk (not just
+                  // while flipped/mixing) -- see WHISK_STIR_ORIGIN_FRAC above
+                  // for why the pivot needs to stay fixed across every stage
+                  // rather than only applying alongside the rotation itself.
+                  ...(isWhisk
+                    ? {
+                        transformOrigin: `${WHISK_STIR_ORIGIN_FRAC.leftFrac * 100}% ${
+                          WHISK_STIR_ORIGIN_FRAC.topFrac * 100
+                        }%`,
+                      }
+                    : {}),
+                  ...(pouring ? { transform: `rotate(${KETTLE_POUR_ROTATE_DEG}deg)` } : {}),
+                  ...(whiskFlipped && !mixing ? { transform: `rotate(${WHISK_FLIP_DEG}deg)` } : {}),
+                }}
+                onKeyDown={
+                  isKettle ? handleKettleKeyDown : isWhisk ? handleWhiskKeyDown : isBowl ? handleBowlKeyDown : undefined
+                }
+              />
+            </div>
           );
         })}
         {/* Suppressed for the first order specifically -- the new callout

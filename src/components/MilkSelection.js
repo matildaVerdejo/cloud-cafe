@@ -8,6 +8,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 // under Vercel's CI=true (see App.js's own import comment) -- fixed
 // proactively here before it manifests as the same failure.
 import { useFlatFocusNav } from '../gameloop/useFlatFocusNav';
+import { useFlipGlide } from '../gameloop/useFlipGlide';
 import { getActionFromKeyEvent, shouldDebounceEnter } from '../gameloop/pal';
 import { playButtonClick, playLiquidPouring, playIceCubeDrop } from '../gameloop/sfx';
 import ProgressBar from './ProgressBar';
@@ -773,6 +774,14 @@ const MilkSelection = ({
   onScored,
 }) => {
   const containerRef = useRef(null);
+  // PERF: shared FLIP-based glide for the carried-over bowl and the four
+  // milk bottles below (see the big comment on gameloop/useFlipGlide.js) --
+  // left/top now live on a wrapper div, animated via transform instead of
+  // being transitioned directly, same fix as MatchaMaking.js/
+  // ToppingsStation.js. registerFlip is a plain ref-callback closure (not a
+  // hook), so calling it once per item inside the bottles' .map() below is
+  // safe.
+  const registerFlip = useFlipGlide();
   // Traps every direction on the Order receipt button during this screen's
   // very first walkthrough beat (showOrderButtonLock, declared much further
   // down, alongside showOrderHint/showStationSpotlight) -- per request, the
@@ -2178,24 +2187,31 @@ const MilkSelection = ({
             of sync between the two screens. */}
         {incomingBowl && (
           <>
-            <img
-              src={incomingBowlItem.src}
-              alt="Bowl of whisked matcha. Select it and press Enter to pour it in once there's milk or water in the cup."
-              draggable={false}
-              data-focusable
-              tabIndex={0}
-              className={`station-item movable incoming-bowl${
-                pouringKey === 'bowl' ? ' settling' : ''
-              }${showBowlSpotlight ? ' milk-spotlight-exempt' : ''}`}
+            <div
+              ref={(el) => registerFlip('incoming-bowl', el)}
+              className="station-item-wrap"
               style={{
                 left: `${bowlPos.left}%`,
                 top: `${bowlPos.top}%`,
                 width: `${incomingBowlWidth}%`,
                 height: `${incomingBowlHeight}%`,
-                ...(pouringKey === 'bowl' ? { transform: `rotate(${BOTTLE_POUR_ROTATE_DEG}deg)` } : {}),
               }}
-              onKeyDown={handleBowlKeyDown}
-            />
+            >
+              <img
+                src={incomingBowlItem.src}
+                alt="Bowl of whisked matcha. Select it and press Enter to pour it in once there's milk or water in the cup."
+                draggable={false}
+                data-focusable
+                tabIndex={0}
+                className={`station-item movable incoming-bowl${
+                  pouringKey === 'bowl' ? ' settling' : ''
+                }${showBowlSpotlight ? ' milk-spotlight-exempt' : ''}`}
+                style={{
+                  ...(pouringKey === 'bowl' ? { transform: `rotate(${BOTTLE_POUR_ROTATE_DEG}deg)` } : {}),
+                }}
+                onKeyDown={handleBowlKeyDown}
+              />
+            </div>
             <img
               src={WHISKED_LIQUID_IMAGES[incomingBowl.grade] ?? WHISKED_LIQUID_IMAGES['classic-grade']}
               alt=""
@@ -2515,38 +2531,45 @@ const MilkSelection = ({
           const settling = isPouring;
           const pouring = isPouring;
           return (
-            <img
+            <div
               key={item.key}
-              src={item.src}
-              alt={`${item.alt}. Select it and press Enter to pour some in once the cup has ice in it.`}
-              className={`milk-bottle${settling ? ' settling' : ''}${
-                // Per request: every bottle gets the white focus halo the
-                // instant showBaseSpotlight turns on, until the player's
-                // first arrow/Enter press (baseSpotlightMoved -- see its own
-                // comment above), at which point this drops away and the
-                // normal single-bottle :focus-visible halo (see
-                // .milk-bottle:focus-visible in MilkSelection.css) takes
-                // back over on its own. Excluded while actually pouring
-                // (isPouring), same "don't halo the one mid-animation"
-                // reasoning as the ice cubes excluding placed ones.
-                showBaseSpotlight && !baseSpotlightMoved && !isPouring ? ' milk-bottle-focus-halo' : ''
-              }${
-                showBaseSpotlight ? ' milk-spotlight-exempt' : ''
-              }`}
-              data-focusable
-              tabIndex={0}
-              draggable={false}
+              ref={(el) => registerFlip(item.key, el)}
+              className="station-item-wrap"
               style={{
                 left: `${pos.left}%`,
                 top: `${pos.top}%`,
                 width: `${item.width}%`,
                 height: `${item.height}%`,
-                ...(pouring ? { transform: `rotate(${BOTTLE_POUR_ROTATE_DEG}deg)` } : {}),
               }}
-              onKeyDown={handleBottleKeyDown(item)}
-              onFocus={() => setFocusedBottle(item.key)}
-              onBlur={() => setFocusedBottle((prev) => (prev === item.key ? null : prev))}
-            />
+            >
+              <img
+                src={item.src}
+                alt={`${item.alt}. Select it and press Enter to pour some in once the cup has ice in it.`}
+                className={`milk-bottle${settling ? ' settling' : ''}${
+                  // Per request: every bottle gets the white focus halo the
+                  // instant showBaseSpotlight turns on, until the player's
+                  // first arrow/Enter press (baseSpotlightMoved -- see its own
+                  // comment above), at which point this drops away and the
+                  // normal single-bottle :focus-visible halo (see
+                  // .milk-bottle:focus-visible in MilkSelection.css) takes
+                  // back over on its own. Excluded while actually pouring
+                  // (isPouring), same "don't halo the one mid-animation"
+                  // reasoning as the ice cubes excluding placed ones.
+                  showBaseSpotlight && !baseSpotlightMoved && !isPouring ? ' milk-bottle-focus-halo' : ''
+                }${
+                  showBaseSpotlight ? ' milk-spotlight-exempt' : ''
+                }`}
+                data-focusable
+                tabIndex={0}
+                draggable={false}
+                style={{
+                  ...(pouring ? { transform: `rotate(${BOTTLE_POUR_ROTATE_DEG}deg)` } : {}),
+                }}
+                onKeyDown={handleBottleKeyDown(item)}
+                onFocus={() => setFocusedBottle(item.key)}
+                onBlur={() => setFocusedBottle((prev) => (prev === item.key ? null : prev))}
+              />
+            </div>
           );
         })}
         {/* Name label above whichever bottle currently has the white focus
