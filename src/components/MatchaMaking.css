@@ -1402,26 +1402,25 @@
     0 0 12px 4px rgba(255, 255, 255, 0.85);
 }
 
-/* Ninth highlight beat (see barRunning in MatchaMaking.js) -- flashes the
+/* Ninth highlight beat (see barRunning in MatchaMaking.js) -- lights up the
    instant the temp gauge appears, retiring the instant the player stops
-   it. White two-layer soft glow (was the same light-green
-   (rgb(130, 190, 110)) glow the scoop bar's own matching beat uses,
-   switched to white per request), with this bar's two resting inset layers
-   kept as constant so they don't vanish between flashes. */
+   it. PERF + per request: this used to blink (heaterTempBarHaloBlink,
+   animating box-shadow every frame for as long as the gauge was running --
+   the highest-precision-timing stretch on this whole screen) -- box-shadow
+   can't be handed off to the compositor the way opacity/transform can, and
+   this element sits inside an overflow:hidden ancestor so it couldn't take
+   the cheap opacity-only ::after-pseudo-element route every other
+   highlight on this screen already uses either (see haloGlowFade's own big
+   comment in App.css for that route, and why this one and .mix-bar-
+   highlight below were the two deliberately left as the exception). Report
+   was that the flashing itself made this and the matcha scoop gauge feel
+   worse to play regardless of the performance angle, so it's now just a
+   steady white glow instead -- same on-state box-shadow the blink used to
+   flash up to, just held constant, with this bar's own transition:
+   box-shadow above easing it in/out instead of a per-frame animation. */
 .heater-temp-bar.heater-temp-bar-highlight {
-  animation: heaterTempBarHaloBlink 1.1s ease-in-out infinite;
-}
-
-@keyframes heaterTempBarHaloBlink {
-  0%,
-  100% {
-    box-shadow: inset 0 1px 2px rgba(255, 255, 255, 0.35), inset 0 -1px 2px rgba(0, 0, 0, 0.2),
-      0 0 30px 12px rgba(255, 255, 255, 0.9), 0 0 65px 26px rgba(255, 255, 255, 0.55);
-  }
-  50% {
-    box-shadow: inset 0 1px 2px rgba(255, 255, 255, 0.35), inset 0 -1px 2px rgba(0, 0, 0, 0.2),
-      0 0 0 0 rgba(255, 255, 255, 0), 0 0 0 0 rgba(255, 255, 255, 0);
-  }
+  box-shadow: inset 0 1px 2px rgba(255, 255, 255, 0.35), inset 0 -1px 2px rgba(0, 0, 0, 0.2),
+    0 0 30px 12px rgba(255, 255, 255, 0.9), 0 0 65px 26px rgba(255, 255, 255, 0.55);
 }
 
 /* Hint label for the same beat -- left-aligned starting at the bar's own
@@ -1626,21 +1625,27 @@
     0 0 12px 4px rgba(255, 255, 255, 0.85);
 }
 
-/* Sixth highlight beat (see scoopRunning in MatchaMaking.js) -- flashes the
-   instant the measuring game opens, retiring the instant the player stops
-   the slider. Plain white two-layer soft glow (was the same light-green
-   (rgb(130, 190, 110)) glow every other beat uses, switched to white per
-   request so it doesn't compete/alternate with the bar's own green fill
-   color), with the bar's own two resting inset layers kept as constant so
-   they don't vanish between flashes. */
+/* Sixth highlight beat (see scoopRunning in MatchaMaking.js) -- lights up
+   the instant the measuring game opens, retiring the instant the player
+   stops the slider. Plain white two-layer soft glow (was the same
+   light-green (rgb(130, 190, 110)) glow every other beat uses, switched to
+   white per request so it doesn't compete/alternate with the bar's own
+   green fill color), with the bar's own two resting inset layers kept as
+   constant so they don't vanish. Per request, no longer blinks -- see the
+   ::after rule right below for the (now-static) glow itself. */
 .scoop-bar.scoop-bar-highlight {
 }
 
-/* Glow now lives on a ::after pseudo-element (.scoop-bar is already
-   position: absolute above, no extra positioning needed here) instead of
-   animating this rule's own box-shadow directly -- see haloGlowFade's own
-   big comment in App.css. The bar's own two resting inset bevel layers
-   (declared on .scoop-bar itself above) stay untouched and constant. */
+/* Glow lives on a ::after pseudo-element (.scoop-bar is already
+   position: absolute above, no extra positioning needed here) rather than
+   this rule's own box-shadow directly -- see haloGlowFade's own big
+   comment in App.css. The bar's own two resting inset bevel layers
+   (declared on .scoop-bar itself above) stay untouched and constant. Held
+   at a steady glow rather than animating haloGlowFade's opacity blink --
+   report was the flashing itself made this gauge harder to read/time
+   against, not just a performance concern (this one was already the cheap
+   compositor-only opacity route, unlike .heater-temp-bar-highlight/
+   .mix-bar-highlight above/below), so it's a plain static box-shadow now. */
 .scoop-bar.scoop-bar-highlight::after {
   content: '';
   position: absolute;
@@ -1648,7 +1653,6 @@
   border-radius: inherit;
   pointer-events: none;
   box-shadow: 0 0 30px 12px rgba(255, 255, 255, 0.9), 0 0 65px 26px rgba(255, 255, 255, 0.55);
-  animation: haloGlowFade 1.1s ease-in-out infinite;
 }
 
 /* Hint label for the same beat -- anchored from the right edge (not
@@ -2184,29 +2188,32 @@
   background: #b7b2ac;
   border: min(5px, 0.26vw) solid rgba(110, 105, 100, 0.7);
   box-shadow: inset 0 1px 2px rgba(255, 255, 255, 0.35), inset 0 -1px 2px rgba(0, 0, 0, 0.2);
+  /* PERF: lets the highlight rule below ease in/out via a plain state
+     change instead of a per-frame animation -- see that rule's own
+     comment. */
+  transition: box-shadow 0.15s ease;
 }
 
-/* Twelfth highlight beat (see the JSX comment in MatchaMaking.js) -- flashes
-   for the bar's whole time on screen rather than retiring on a keypress,
+/* Twelfth highlight beat (see the JSX comment in MatchaMaking.js) -- lights
+   up for the bar's whole time on screen rather than retiring on a keypress,
    since there's no single "confirm" action here (arrow keys are the
    ongoing gameplay itself). White two-layer soft glow (was the same
    light-green (rgb(130, 190, 110)) glow every other beat uses, switched to
    white per request), with the bar's own two resting inset layers kept as
-   constant so they don't vanish between flashes. */
+   constant. PERF + per request: this used to blink (mixBarHaloBlink,
+   animating box-shadow every frame for the whole 10-second whisk-balance
+   minigame -- the single highest-precision-timing stretch in the game,
+   running at the same time as the ball-physics tick() loop) -- same
+   "box-shadow can't be composited, and this bar sits inside an
+   overflow:hidden ancestor so it couldn't take the cheap ::after-opacity
+   route either" reasoning as .heater-temp-bar-highlight above (see that
+   rule's own comment, and haloGlowFade's in App.css, for the fuller
+   picture). Report was the flashing itself made this minigame harder to
+   play, not just slower, so it's now a steady glow -- the same on-state
+   box-shadow the blink used to flash up to, just held constant. */
 .mix-bar.mix-bar-highlight {
-  animation: mixBarHaloBlink 1.1s ease-in-out infinite;
-}
-
-@keyframes mixBarHaloBlink {
-  0%,
-  100% {
-    box-shadow: inset 0 1px 2px rgba(255, 255, 255, 0.35), inset 0 -1px 2px rgba(0, 0, 0, 0.2),
-      0 0 30px 12px rgba(255, 255, 255, 0.9), 0 0 65px 26px rgba(255, 255, 255, 0.55);
-  }
-  50% {
-    box-shadow: inset 0 1px 2px rgba(255, 255, 255, 0.35), inset 0 -1px 2px rgba(0, 0, 0, 0.2),
-      0 0 0 0 rgba(255, 255, 255, 0), 0 0 0 0 rgba(255, 255, 255, 0);
-  }
+  box-shadow: inset 0 1px 2px rgba(255, 255, 255, 0.35), inset 0 -1px 2px rgba(0, 0, 0, 0.2),
+    0 0 30px 12px rgba(255, 255, 255, 0.9), 0 0 65px 26px rgba(255, 255, 255, 0.55);
 }
 
 /* Hint label for the same beat -- centered above wherever the bar currently
