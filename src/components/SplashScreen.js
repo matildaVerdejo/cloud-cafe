@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import './SplashScreen.css';
 
 // How long the splash waits before auto-advancing on its own, for anyone

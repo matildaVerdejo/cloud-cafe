@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import './SettingsPanel.css';
 import { playButtonClick, playButtonClickOff } from '../gameloop/sfx';
 import { getActionFromKeyEvent } from '../gameloop/pal';

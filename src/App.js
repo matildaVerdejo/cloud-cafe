@@ -683,9 +683,36 @@ function App() {
     }
   };
 
+  // Bug fix: this used to just call sendClose() and stop there -- sendClose
+  // posts a 'close' message to window.parent (see bridge.js), which only
+  // does anything inside the real GameLoop launcher (or a mock host built
+  // to react to it, per isEmbedded's own comment there). Running standalone
+  // (`npm start` opened directly in a tab, or a plain Vercel preview with no
+  // launcher wrapping it) there's nothing on the other end to catch that
+  // message, so confirming Exit visibly did nothing at all. sendClose is
+  // still fired unconditionally below (harmless where there's no host
+  // listening, and still the right signal for the real embedded case), but
+  // per request this now ALSO takes care of the visible part itself --
+  // resets the same in-progress-session state startNewSession does below
+  // (leftover order/bowl/drink/scores from whatever customer was mid-round
+  // when Exit was pressed shouldn't still be sitting there if the player
+  // starts a new session from the menu) and lands back on 'main', same
+  // "fresh round" reset shape as startNewSession, just landing on the start
+  // screen instead of jumping straight into 'ordering'.
   const confirmExit = () => {
     setShowExitConfirm(false);
     sendClose();
+    maxStepIndexRef.current = -1;
+    setCustomerNumber(1);
+    setCurrentOrder(null);
+    setMatchaBowl(null);
+    setFinishedDrink(null);
+    setServedDrink(null);
+    setOrderTakingScore(null);
+    setMatchaScore(null);
+    setMixingScore(null);
+    setToppingsScore(null);
+    setCurrentPage('main');
   };
 
   const cancelExit = () => {

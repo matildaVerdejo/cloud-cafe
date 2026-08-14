@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import './MainPage.css';
 import { playButtonClick } from '../gameloop/sfx';
 import { getActionFromKeyEvent } from '../gameloop/pal';

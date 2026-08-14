@@ -314,15 +314,34 @@ function layoutPair(pair, height, top, gap, anchor) {
 // up in the corner. Two precomputed tiers (base / with-choco), same
 // "precompute every tier, pick one per customerNumber" pattern as the
 // syrup/foam rows below.
+//
+// POWDER_CHOCO_TIER_SCALE shrinks the with-choco tier (below) so its own
+// row keeps the same total footprint the base two-item tier already has,
+// rather than growing further left toward the carried-over drink -- same
+// "shrink to fit the same footprint" fix as MilkSelection's own
+// BOTTLE_YUZU_TIER_SCALE/BOTTLE_JASMINE_TIER_SCALE, and (per request) the
+// same fix now applied to every row on this screen below (SYRUP_*_TIER_
+// SCALE, FOAM_*_TIER_SCALE, POT_BLOSSOMS_TIER_SCALE) -- this station never
+// had it, so the syrup/foam/powder/pot rows kept growing unchecked as more
+// toppings unlocked order over order, eventually overlapping (and, for the
+// foam row specifically, reading as literally covered by) the drink itself.
+// Solved the same way as every scale below: POWDER_ITEMS_BASE's own raw
+// (unscaled) 2-item width divided by what POWDER_ITEMS_WITH_CHOCO's 3-item
+// row would measure at that same unscaled height/gap -- see layoutPair's
+// own comment for why width/height/gap scaling together keeps this a
+// smaller version of the same layout rather than a differently
+// proportioned one.
+const POWDER_CHOCO_TIER_SCALE = 0.6641;
 const POWDER_ITEMS_BASE = layoutPair(POWDER_PAIR, POWDER_HEIGHT, TOPPING_ROW_BOTTOM - POWDER_HEIGHT, TIGHT_PAIR_GAP, {
   type: 'right',
   x: 100 - EDGE_MARGIN,
 });
+const POWDER_HEIGHT_CHOCO_TIER = POWDER_HEIGHT * POWDER_CHOCO_TIER_SCALE;
 const POWDER_ITEMS_WITH_CHOCO = layoutPair(
   POWDER_PAIR_WITH_CHOCO,
-  POWDER_HEIGHT,
-  TOPPING_ROW_BOTTOM - POWDER_HEIGHT,
-  TIGHT_PAIR_GAP,
+  POWDER_HEIGHT_CHOCO_TIER,
+  TOPPING_ROW_BOTTOM - POWDER_HEIGHT_CHOCO_TIER,
+  TIGHT_PAIR_GAP * POWDER_CHOCO_TIER_SCALE,
   { type: 'right', x: 100 - EDGE_MARGIN }
 );
 // mint-syrup first, guava-syrup to its right, then honey-syrup (order 2+),
@@ -335,6 +354,34 @@ const POWDER_ITEMS_WITH_CHOCO = layoutPair(
 // Five precomputed tiers, same "precompute every tier, pick one per
 // customerNumber" pattern as MilkSelection's own BOTTLE_ITEMS_BASE/
 // _WITH_STRAWBERRY -- picked via syrupItems in the component below.
+//
+// The row grows unscaled through order 3's own 4-item tier (still clear of
+// the carried-over drink), then SYRUP_LAVENDER_TIER_SCALE/SYRUP_PEACH_
+// TIER_SCALE (below) hold orders 4/5's 5- and 6-item tiers to that exact
+// same 4-item footprint instead of letting them keep growing rightward into
+// it -- same "later tiers match the last safe tier's own footprint, not a
+// fresh recompute each time" shape as POWDER_CHOCO_TIER_SCALE above, and
+// MilkSelection's own jasmine tier matching its yuzu tier's footprint
+// rather than growing past it.
+const SYRUP_LAVENDER_TIER_SCALE = 0.7838;
+const SYRUP_PEACH_TIER_SCALE = 0.6444;
+// Bug fix: the two scaled tiers above used to pass SYRUP_TOP straight
+// through unchanged, same as every unscaled tier -- but layoutPair's `top`
+// is the box's own TOP edge, not its bottom, so shrinking height while
+// pinning the top in place moves the BOTTOM edge up along with it. Order 3
+// and earlier all share the exact same bottom edge (SYRUP_TOP +
+// TOPPING_HEIGHT, unscaled) since none of them scale -- reads as the row
+// resting on a fixed table/counter line. Once the lavender/peach tiers
+// started shrinking the height but kept anchoring from that same fixed
+// top, their own bottom edge crept upward with every step down in scale,
+// so by order 5 the row read as hovering above the counter instead of
+// sitting on it. SYRUP_BOTTOM captures where that shared bottom edge
+// actually is (order 3's own unscaled bottom), and the two scaled tiers
+// below now compute their own top from THAT instead of SYRUP_TOP, so they
+// shrink upward from a fixed bottom (same "bottom-anchored" shape
+// POWDER_ITEMS_WITH_CHOCO already uses via TOPPING_ROW_BOTTOM) rather than
+// downward from a fixed top.
+const SYRUP_BOTTOM = SYRUP_TOP + TOPPING_HEIGHT;
 const SYRUP_ITEMS_BASE = layoutPair(SYRUP_PAIR_BASE, TOPPING_HEIGHT, SYRUP_TOP, SYRUP_PAIR_GAP, {
   type: 'left',
   x: STACK_LEFT_MARGIN,
@@ -347,14 +394,22 @@ const SYRUP_ITEMS_WITH_MANGO = layoutPair(SYRUP_PAIR_WITH_MANGO, TOPPING_HEIGHT,
   type: 'left',
   x: STACK_LEFT_MARGIN,
 });
-const SYRUP_ITEMS_WITH_LAVENDER = layoutPair(SYRUP_PAIR_WITH_LAVENDER, TOPPING_HEIGHT, SYRUP_TOP, SYRUP_PAIR_GAP, {
-  type: 'left',
-  x: STACK_LEFT_MARGIN,
-});
-const SYRUP_ITEMS_WITH_PEACH = layoutPair(SYRUP_PAIR_WITH_PEACH, TOPPING_HEIGHT, SYRUP_TOP, SYRUP_PAIR_GAP, {
-  type: 'left',
-  x: STACK_LEFT_MARGIN,
-});
+const SYRUP_HEIGHT_LAVENDER_TIER = TOPPING_HEIGHT * SYRUP_LAVENDER_TIER_SCALE;
+const SYRUP_ITEMS_WITH_LAVENDER = layoutPair(
+  SYRUP_PAIR_WITH_LAVENDER,
+  SYRUP_HEIGHT_LAVENDER_TIER,
+  SYRUP_BOTTOM - SYRUP_HEIGHT_LAVENDER_TIER,
+  SYRUP_PAIR_GAP * SYRUP_LAVENDER_TIER_SCALE,
+  { type: 'left', x: STACK_LEFT_MARGIN }
+);
+const SYRUP_HEIGHT_PEACH_TIER = TOPPING_HEIGHT * SYRUP_PEACH_TIER_SCALE;
+const SYRUP_ITEMS_WITH_PEACH = layoutPair(
+  SYRUP_PAIR_WITH_PEACH,
+  SYRUP_HEIGHT_PEACH_TIER,
+  SYRUP_BOTTOM - SYRUP_HEIGHT_PEACH_TIER,
+  SYRUP_PAIR_GAP * SYRUP_PEACH_TIER_SCALE,
+  { type: 'left', x: STACK_LEFT_MARGIN }
+);
 // matcha-cold-foam first, reg-cold-foam to its right, then banana-foam
 // (order 2+), strawberry-foam (order 4+ -- nothing new joins this row at
 // order 3, that's mango-syrup/choco-powder's turn instead), blueberry-foam
@@ -363,6 +418,24 @@ const SYRUP_ITEMS_WITH_PEACH = layoutPair(SYRUP_PAIR_WITH_PEACH, TOPPING_HEIGHT,
 // the powder pair's visible right margin -- see STACK_LEFT_MARGIN's own
 // comment. Four precomputed tiers, same "precompute every tier" pattern as
 // the syrup row above -- picked via foamItems in the component below.
+//
+// Same "later tiers match the last safe tier's own footprint" fix as the
+// syrup row above -- unscaled through order 2/3's own 3-item tier, then
+// FOAM_STRAWBERRY_TIER_SCALE/FOAM_BLUEBERRY_TIER_SCALE hold orders 4/5's 4-
+// and 5-item tiers to that same footprint. This is the row that actually
+// prompted the fix: at its old unscaled size, order 5's 5-item tier
+// (blueberry-foam included) reached far enough right, directly below the
+// syrup row, that it sat almost entirely underneath the carried-over cup
+// -- see .cup-foam-fill/INCOMING_DRINK_SPOT for the cup's own box -- so
+// blueberry-foam itself was reading as covered/invisible behind the drink.
+const FOAM_STRAWBERRY_TIER_SCALE = 0.7459;
+const FOAM_BLUEBERRY_TIER_SCALE = 0.5948;
+// Same bottom-anchoring bug fix as SYRUP_BOTTOM above -- FOAM_TOP is a
+// fixed top edge, so the two scaled tiers below now shrink up from
+// FOAM_BOTTOM (order 3's own unscaled bottom edge) instead of down from
+// FOAM_TOP, keeping the row resting on the same line every unscaled tier
+// already sits on rather than drifting upward off it as it shrinks.
+const FOAM_BOTTOM = FOAM_TOP + TOPPING_HEIGHT;
 const FOAM_ITEMS_BASE = layoutPair(FOAM_PAIR_BASE, TOPPING_HEIGHT, FOAM_TOP, PAIR_GAP, {
   type: 'left',
   x: STACK_LEFT_MARGIN,
@@ -371,14 +444,22 @@ const FOAM_ITEMS_WITH_BANANA = layoutPair(FOAM_PAIR_WITH_BANANA, TOPPING_HEIGHT,
   type: 'left',
   x: STACK_LEFT_MARGIN,
 });
-const FOAM_ITEMS_WITH_STRAWBERRY = layoutPair(FOAM_PAIR_WITH_STRAWBERRY, TOPPING_HEIGHT, FOAM_TOP, PAIR_GAP, {
-  type: 'left',
-  x: STACK_LEFT_MARGIN,
-});
-const FOAM_ITEMS_WITH_BLUEBERRY = layoutPair(FOAM_PAIR_WITH_BLUEBERRY, TOPPING_HEIGHT, FOAM_TOP, PAIR_GAP, {
-  type: 'left',
-  x: STACK_LEFT_MARGIN,
-});
+const FOAM_HEIGHT_STRAWBERRY_TIER = TOPPING_HEIGHT * FOAM_STRAWBERRY_TIER_SCALE;
+const FOAM_ITEMS_WITH_STRAWBERRY = layoutPair(
+  FOAM_PAIR_WITH_STRAWBERRY,
+  FOAM_HEIGHT_STRAWBERRY_TIER,
+  FOAM_BOTTOM - FOAM_HEIGHT_STRAWBERRY_TIER,
+  PAIR_GAP * FOAM_STRAWBERRY_TIER_SCALE,
+  { type: 'left', x: STACK_LEFT_MARGIN }
+);
+const FOAM_HEIGHT_BLUEBERRY_TIER = TOPPING_HEIGHT * FOAM_BLUEBERRY_TIER_SCALE;
+const FOAM_ITEMS_WITH_BLUEBERRY = layoutPair(
+  FOAM_PAIR_WITH_BLUEBERRY,
+  FOAM_HEIGHT_BLUEBERRY_TIER,
+  FOAM_BOTTOM - FOAM_HEIGHT_BLUEBERRY_TIER,
+  PAIR_GAP * FOAM_BLUEBERRY_TIER_SCALE,
+  { type: 'left', x: STACK_LEFT_MARGIN }
+);
 
 // Display name per topping, shown as a label above whichever one currently
 // has focus (see focusedTopping/.topping-label below) -- same "selected" ==
@@ -1110,22 +1191,41 @@ const POT_GAP = 3; // vertical gap below the powder pair's own bottom edge (TOPP
 // cherry-blossoms-pot at order 5 -- growing this row right-to-left the same
 // way layoutPair's own right-anchor already grows the powder row when a new
 // item is appended.
+//
+// Same "later tiers match the last safe tier's own footprint" fix as the
+// syrup/foam rows above (see FOAM_STRAWBERRY_TIER_SCALE's own big comment
+// for the full "why this station needed it" writeup) -- unscaled through
+// order 4's own 2-item tier (banana-chips-pot joined, still clear of the
+// carried-over drink), then POT_BLOSSOMS_TIER_SCALE holds order 5's 3-item
+// tier (cherry-blossoms-pot added) to that same footprint instead of
+// growing further left into it -- at its old unscaled size this row's own
+// left edge reached well past the drink's own right edge by order 5.
+const POT_BLOSSOMS_TIER_SCALE = 0.6652;
+// Same bottom-anchoring bug fix as SYRUP_BOTTOM/FOAM_BOTTOM above -- this
+// row's top (TOPPING_ROW_BOTTOM + POT_GAP) is fixed, so the scaled
+// cherry-blossoms tier below now shrinks up from POT_BOTTOM (the base/
+// chips tier's own unscaled bottom edge, where the pots actually rest)
+// instead of down from that fixed top, keeping the row's base on the same
+// line every unscaled tier already sits on.
+const POT_TOP = TOPPING_ROW_BOTTOM + POT_GAP;
+const POT_BOTTOM = POT_TOP + POT_HEIGHT;
 const POT_PAIR_BASE = [MINT_LEAVES_POT_ITEM];
 const POT_PAIR_WITH_CHIPS = [...POT_PAIR_BASE, BANANA_CHIPS_POT_ITEM];
 const POT_PAIR_WITH_BLOSSOMS = [...POT_PAIR_WITH_CHIPS, CHERRY_BLOSSOMS_POT_ITEM];
-const POT_ITEMS_BASE = layoutPair(POT_PAIR_BASE, POT_HEIGHT, TOPPING_ROW_BOTTOM + POT_GAP, TIGHT_PAIR_GAP, {
+const POT_ITEMS_BASE = layoutPair(POT_PAIR_BASE, POT_HEIGHT, POT_TOP, TIGHT_PAIR_GAP, {
   type: 'right',
   x: 100 - EDGE_MARGIN,
 });
-const POT_ITEMS_WITH_CHIPS = layoutPair(POT_PAIR_WITH_CHIPS, POT_HEIGHT, TOPPING_ROW_BOTTOM + POT_GAP, TIGHT_PAIR_GAP, {
+const POT_ITEMS_WITH_CHIPS = layoutPair(POT_PAIR_WITH_CHIPS, POT_HEIGHT, POT_TOP, TIGHT_PAIR_GAP, {
   type: 'right',
   x: 100 - EDGE_MARGIN,
 });
+const POT_HEIGHT_BLOSSOMS_TIER = POT_HEIGHT * POT_BLOSSOMS_TIER_SCALE;
 const POT_ITEMS_WITH_BLOSSOMS = layoutPair(
   POT_PAIR_WITH_BLOSSOMS,
-  POT_HEIGHT,
-  TOPPING_ROW_BOTTOM + POT_GAP,
-  TIGHT_PAIR_GAP,
+  POT_HEIGHT_BLOSSOMS_TIER,
+  POT_BOTTOM - POT_HEIGHT_BLOSSOMS_TIER,
+  TIGHT_PAIR_GAP * POT_BLOSSOMS_TIER_SCALE,
   { type: 'right', x: 100 - EDGE_MARGIN }
 );
 
@@ -1376,16 +1476,23 @@ const ToppingsStation = ({
   // pourStage transition effects below (each has its own setTimeout that
   // hands the pour back to 'idle' after SYRUP_POUR_MS/FOAM_POUR_MS/
   // POWDER_POUR_MS) -- and the syrup balance minigame's own physics tick
-  // calls setPourOffset/setSyrupSpills/setSyrupSpillGrowth every animation
-  // frame while pouring, so the component was re-rendering ~60x/second
-  // during a syrup pour. Every one of those re-renders created a new
-  // toppingItems reference, which re-ran the transition effect (cleanup +
-  // restart, replaying the pour SFX too), clearing the pending setTimeout
-  // and rescheduling a brand-new one before it could ever fire -- so the
-  // pour never actually stopped. useMemo keyed on the three (already
-  // reference-stable, since each is just a ternary pick of module-level
-  // constant arrays) inputs keeps this array's identity stable across
-  // renders unless the unlocked set genuinely changes.
+  // used to call setPourOffset/setSyrupSpills/setSyrupSpillGrowth every
+  // animation frame while pouring, so the component was re-rendering
+  // ~60x/second during a syrup pour (pourOffset is now a ref, written
+  // straight to the DOM by the tick instead -- see pourOffsetRef's own big
+  // comment further down -- but syrupSpills/syrupSpillGrowth are still
+  // real state, updated whenever the pour goes sloppy). Every one of those
+  // re-renders created a new toppingItems reference, which re-ran the
+  // transition effect (cleanup + restart, replaying the pour SFX too),
+  // clearing the pending setTimeout and rescheduling a brand-new one before
+  // it could ever fire -- so the pour never actually stopped. useMemo keyed
+  // on the three (already reference-stable, since each is just a ternary
+  // pick of module-level constant arrays) inputs keeps this array's
+  // identity stable across renders unless the unlocked set genuinely
+  // changes -- kept as defense-in-depth even now that the dominant
+  // 60x/second re-render source is gone, since the occasional syrup-spill
+  // re-render (or any other unrelated state change) during a pour could
+  // still hit the same bug otherwise.
   const toppingItems = useMemo(
     () => [...powderItems, ...syrupItems, ...foamItems],
     [powderItems, syrupItems, foamItems]
@@ -2350,7 +2457,58 @@ const ToppingsStation = ({
   // directly. Still purely cosmetic for where the fill itself lands -- see
   // the big comment on getSyrupBoxFor above for why it doesn't move where
   // the syrup actually ends up.
-  const [pourOffset, setPourOffset] = useState(0);
+  //
+  // PERF: this used to be plain useState, set every animation frame of the
+  // syrup-pour balance minigame's tick() (~60x/second) -- same class of bug
+  // MatchaMaking's own MixSpills refactor fixed for its spill puddles (see
+  // that component's own big comment), except worse here: the pouring
+  // bottle's own wrapper is registered with useFlipGlide (registerFlip),
+  // whose useLayoutEffect runs a getBoundingClientRect + a forced
+  // synchronous reflow (node.offsetHeight) for every registered
+  // station-item-wrap on EVERY React commit -- so each of those 60
+  // renders/second wasn't just reconciling this ~5000-line screen, it was
+  // forcing a synchronous layout flush across every movable item on the
+  // whole station, every single frame, for the whole pour. Converting this
+  // to a ref means a tick no longer commits a render at all (useFlipGlide's
+  // effect only runs after a real commit, so it stays dormant during the
+  // pour, same as intended for its actual job: gliding the bottle's one
+  // real logical move at pour start/end, not continuous physics). The few
+  // elements that still need to visually track this every frame (the
+  // bottle's own wrapper, the falling stream, the focus-halo name label)
+  // are updated with direct DOM writes in the physics effect below instead
+  // -- see that effect's own syrupPourWrapRef/syrupPourStreamRef/
+  // syrupPourLabelRef. Every other (much rarer, non-hot-path) reader of
+  // this value still just reads pourOffsetRef.current inline during render,
+  // same as it read the old state value, so an incidental re-render from
+  // something unrelated always paints the *current* offset, not a stale
+  // one.
+  const pourOffsetRef = useRef(0);
+  // Direct DOM refs the physics tick() writes to imperatively instead of
+  // going through React state/re-render -- see pourOffsetRef's own big
+  // comment above. Only ever populated while the matching element is
+  // actually mounted/pouring; effect cleanup doesn't need to null them out
+  // since every reader guards on pourStage/pouringKey first, same as it
+  // already guarded on isPouring before this change.
+  const syrupPourWrapRef = useRef(null); // the pouring bottle's own .station-item-wrap node
+  const syrupPourStreamRef = useRef(null); // the falling-stream .spoon-pour node
+  const syrupPourLabelRef = useRef(null); // the focus-halo name label, while it's the pouring item
+  // Always-current snapshots of toppingItems/syrupPositions for the physics
+  // effect's own setup below to read -- same "ref declared here, synced
+  // every render via a no-deps effect" idiom MatchaMaking.js's own
+  // bowlPosRef/bowlItemRef use, and for the same reason: the physics
+  // effect only wants toppingItems/syrupPositions' values at the *instant*
+  // a pour starts (they're stable for the rest of that 'pouring' stage --
+  // nothing calls setSyrupPositions again until the pour ends), not a
+  // live subscription to either -- listing them as react-hooks/
+  // exhaustive-deps dependencies instead would re-run (and reset) the
+  // whole physics effect any time either changed for a reason unrelated to
+  // this specific pour (e.g. a different topping's position updating).
+  const toppingItemsRef = useRef(toppingItems);
+  const syrupPositionsRef = useRef(syrupPositions);
+  useEffect(() => {
+    toppingItemsRef.current = toppingItems;
+    syrupPositionsRef.current = syrupPositions;
+  });
   // The drink's own persistent "has syrup been poured in" state -- doesn't
   // reset on its own (only a fresh pour re-sets it), same "second pour just
   // restarts this rather than accumulating" caveat as Milk Selection's
@@ -3115,7 +3273,7 @@ const ToppingsStation = ({
     if (!canPourSyrup) return;
     const item = toppingItems.find((i) => i.key === key);
     setSyrupPositions((prev) => ({ ...prev, [key]: getSyrupHoverPos(item) }));
-    setPourOffset(0);
+    pourOffsetRef.current = 0;
     setPouringKey(key);
     setPourStage('moving');
   };
@@ -3142,7 +3300,7 @@ const ToppingsStation = ({
         setSyrupPositions((prev) => ({ ...prev, [pouringKey]: { left: home.left, top: home.top } }));
         setPourStage('idle');
         setPouringKey(null);
-        setPourOffset(0);
+        pourOffsetRef.current = 0;
         // Orders 2-5 only -- per request, once a pour/placement finishes,
         // focus goes back to the drink cup (never locked, always
         // reachable) rather than lingering on the now-locked syrup row or
@@ -3205,7 +3363,21 @@ const ToppingsStation = ({
     syrupSpillsRef.current = [];
     setSyrupSpills([]);
     setSyrupSpillGrowth(0);
-    setPourOffset(0);
+    pourOffsetRef.current = 0;
+
+    // Base (offset-free) left positions for the three elements the tick
+    // below moves imperatively every frame -- see pourOffsetRef's own big
+    // comment for why these are refs/DOM writes now, not React state. Both
+    // the pouring item's own resting position (syrupPositions[pouringKey])
+    // and its width are stable for the whole 'pouring' stage (nothing calls
+    // setSyrupPositions again until the pour actually ends -- see
+    // beginSyrupPour/the pour-end timeout above), so it's safe to snapshot
+    // them once here rather than re-deriving on every tick.
+    const pourItem = toppingItemsRef.current.find((i) => i.key === pouringKey);
+    const pourBasePos = syrupPositionsRef.current[pouringKey];
+    const wrapBaseLeft = pourBasePos.left;
+    const streamBaseLeft = pourBasePos.left + pourItem.width / 2;
+    const labelBaseLeft = pourBasePos.left + pourItem.width / 2;
 
     const zoneLeftPercent = syrupMixZoneLeftFrac * 100;
     const zoneRightPercent = zoneLeftPercent + syrupMixZoneWidthFrac * 100;
@@ -3277,7 +3449,23 @@ const ToppingsStation = ({
         // dragged-bottle render position) needed to change.
         const normalized = (ballCenter - 50) / 50;
         const offset = Math.max(-SYRUP_MOVE_RANGE, Math.min(SYRUP_MOVE_RANGE, normalized * SYRUP_MOVE_RANGE));
-        setPourOffset(offset);
+        pourOffsetRef.current = offset;
+        // PERF: direct DOM writes, not setState -- see pourOffsetRef's own
+        // big comment above. wrapEl in particular is registered with
+        // useFlipGlide (registerFlip); writing its style.left here rather
+        // than through a React re-render means that hook's per-commit
+        // forced-reflow effect never fires during the pour at all (it only
+        // runs after a real commit), same "stay off the hot path entirely"
+        // win the ball's own transform-only writes above already get.
+        if (syrupPourWrapRef.current) {
+          syrupPourWrapRef.current.style.left = `${wrapBaseLeft + offset}%`;
+        }
+        if (syrupPourStreamRef.current) {
+          syrupPourStreamRef.current.style.left = `${streamBaseLeft + offset}%`;
+        }
+        if (syrupPourLabelRef.current) {
+          syrupPourLabelRef.current.style.left = `${labelBaseLeft + offset}%`;
+        }
 
         // Sloppy pouring (ball outside the green zone) spills syrup out
         // onto the counter on whichever side it drifted toward --
@@ -3745,7 +3933,9 @@ const ToppingsStation = ({
   const pouringSyrupItem = pouringKey ? toppingItems.find((i) => i.key === pouringKey) : null;
   const pouringSyrupPos = pouringKey ? syrupPositions[pouringKey] : null;
   const syrupPourLeft =
-    pouringSyrupItem && pouringSyrupPos ? pouringSyrupPos.left + pouringSyrupItem.width / 2 + pourOffset : 0;
+    pouringSyrupItem && pouringSyrupPos
+      ? pouringSyrupPos.left + pouringSyrupItem.width / 2 + pourOffsetRef.current
+      : 0;
   const syrupPourTop = pouringSyrupItem && pouringSyrupPos ? pouringSyrupPos.top + pouringSyrupItem.height : 0;
   const syrupPourHeight = incomingSyrupBox ? Math.max(incomingSyrupBox.top - syrupPourTop, 1) : 0;
   const syrupPourColor = pouringKey ? SYRUP_STREAM_COLORS[pouringKey] : SYRUP_STREAM_COLORS['guava-syrup'];
@@ -3876,11 +4066,19 @@ const ToppingsStation = ({
           .map((item) => {
           const isPouring = pouringKey === item.key;
           const basePos = syrupPositions[item.key];
-          const pos = isPouring ? { left: basePos.left + pourOffset, top: basePos.top } : basePos;
+          const pos = isPouring ? { left: basePos.left + pourOffsetRef.current, top: basePos.top } : basePos;
           return (
             <div
               key={item.key}
-              ref={(el) => registerFlip(item.key, el)}
+              ref={(el) => {
+                registerFlip(item.key, el);
+                // PERF: also captured directly for the physics tick() to
+                // write style.left onto every frame while this is the
+                // pouring item -- see pourOffsetRef's own big comment
+                // above for why that bypasses React state/registerFlip's
+                // own forced-reflow effect entirely during the pour.
+                if (isPouring) syrupPourWrapRef.current = el;
+              }}
               className="station-item-wrap"
               style={{
                 left: `${pos.left}%`,
@@ -4135,9 +4333,10 @@ const ToppingsStation = ({
           const isSyrup = SYRUP_PAIR_WITH_PEACH.some((s) => s.key === item.key);
           const isFoam = FOAM_PAIR_WITH_BLUEBERRY.some((f) => f.key === item.key);
           const isBelow = isSyrup || isFoam;
+          const isPouringSyrupLabel = isSyrup && pouringKey === item.key;
           if (isSyrup) {
             const basePos = syrupPositions[item.key];
-            pos = pouringKey === item.key ? { left: basePos.left + pourOffset, top: basePos.top } : basePos;
+            pos = isPouringSyrupLabel ? { left: basePos.left + pourOffsetRef.current, top: basePos.top } : basePos;
           } else if (isFoam) {
             const basePos = foamPositions[item.key];
             pos = foamPouringKey === item.key ? { left: basePos.left + foamPourOffset, top: basePos.top } : basePos;
@@ -4148,6 +4347,13 @@ const ToppingsStation = ({
           return (
             <p
               key={item.key}
+              ref={(el) => {
+                // PERF: also captured directly for the physics tick() to
+                // write style.left onto every frame while this label is
+                // tracking the pouring syrup item -- see pourOffsetRef's
+                // own big comment above.
+                if (isPouringSyrupLabel) syrupPourLabelRef.current = el;
+              }}
               className={`topping-label${isBelow ? ' topping-label-below' : ''}`}
               aria-hidden="true"
               style={{
@@ -4553,6 +4759,7 @@ const ToppingsStation = ({
             hidden between the (exempt) bottle and the (exempt) cup. */}
         {pourStage === 'pouring' && pouringKey && (
           <div
+            ref={syrupPourStreamRef}
             className={`spoon-pour${showSyrupSpotlight ? ' topping-spotlight-exempt' : ''}`}
             style={{
               left: `${syrupPourLeft}%`,

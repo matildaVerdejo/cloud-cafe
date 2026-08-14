@@ -2732,6 +2732,40 @@ const MatchaMaking = ({ activeStep, customerNumber, isWalkthrough, onNavigate, o
   // flat 0.5, so the mound reads as an ellipse taller than it is wide.
   const bowlPowderWidth = BOWL_POWDER_SIZE_FRAC * bowlItem.width;
   const bowlPowderHeight = bowlPowderWidth * BOWL_MOUND_HEIGHT_FRAC;
+  // Wrapper-relative versions of the four values just above, for
+  // .bowl-powder's own JSX (now nested inside the bowl's .station-item-wrap
+  // in MOVABLE_ITEMS.map() below -- see the isBowl branch there, and the
+  // big comment on .bowl-whisked-liquid's own move into that same wrapper
+  // for the full "one shared parent transform" reasoning; bowl-powder/
+  // bowl-water/bowl-mix-swirl used to be separate top-level siblings
+  // recomputing this same bowlPos-derived math every render, drifting out
+  // of sync with the bowl the exact same way bowl-whisked-liquid used to).
+  // bowlPowderLeft/Top/Width/Height themselves are left untouched above --
+  // still needed in absolute container-% form for the falling-powder pour
+  // stream's own pourHeight (Math.max(bowlPowderTop - pourTop, 1) further
+  // down), which anchors to the spoon (a separate, NOT-wrapped item), not
+  // to the bowl.
+  //
+  // left/top: bowlPowderLeft/Top are `bowlPos.left/top + offsetFrac *
+  // bowlItem.width/height` -- since the wrapper itself is positioned at
+  // exactly bowlPos with size bowlItem.width/height, that offset term
+  // alone (as a plain percentage) IS the wrapper-relative position; no
+  // need to reference bowlPos at all once nested.
+  // width: same cancellation -- bowlPowderWidth is BOWL_POWDER_SIZE_FRAC *
+  // bowlItem.width, so as a percentage of the wrapper's own width (=
+  // bowlItem.width) that's just BOWL_POWDER_SIZE_FRAC.
+  // height: NOT a clean constant the way width is -- bowlPowderHeight was
+  // derived from bowlPowderWidth (a container-WIDTH-%-denominated value)
+  // but gets used as a CSS height (container-HEIGHT-%-denominated), and
+  // this container isn't square (1920x1080), so those two axes don't
+  // share a scale. Converting it to a percentage of the wrapper's own
+  // height (bowlItem.height) -- rather than trying to simplify to a closed
+  // -form constant -- keeps this exactly pixel-equivalent to the old
+  // absolute version regardless of that aspect mismatch.
+  const bowlPowderWrapLeftPct = BOWL_POWDER_OFFSET.leftFrac * 100;
+  const bowlPowderWrapTopPct = BOWL_POWDER_OFFSET.topFrac * 100;
+  const bowlPowderWrapWidthPct = BOWL_POWDER_SIZE_FRAC * 100;
+  const bowlPowderWrapHeightPct = (bowlPowderHeight / bowlItem.height) * 100;
 
   // ---- Kettle water-pour: begins the sequence (see kettleStage above),
   // advances it on timers, and computes the falling-water effect's anchor
@@ -2766,6 +2800,22 @@ const MatchaMaking = ({ activeStep, customerNumber, isWalkthrough, onNavigate, o
   // taller water pool's bottom sitting further down than the mound's.
   const bowlWaterTop =
     bowlPos.top + BOWL_WATER_OFFSET.topFrac * bowlItem.height - (bowlWaterHeight - bowlPowderHeight) / 2;
+  // Wrapper-relative versions for .bowl-water/.bowl-mix-swirl's own JSX,
+  // same reasoning/cancellation as bowlPowderWrapLeftPct/etc. above --
+  // bowlWaterLeft/Top/Width/Height themselves stay untouched, still needed
+  // in absolute form for the falling-water pour stream's own
+  // kettlePourHeight (further down), which anchors to the kettle (also not
+  // wrapped with the bowl). The top offset's own extra `- (bowlWaterHeight
+  // - bowlPowderHeight) / 2` term is in the same container-HEIGHT-%
+  // units as bowlPowderWrapHeightPct's own conversion, so it gets the same
+  // "divide by bowlItem.height" treatment rather than reusing the raw
+  // bowlWaterHeight/bowlPowderHeight (container-WIDTH-%-denominated)
+  // numbers directly.
+  const bowlWaterWrapLeftPct = BOWL_WATER_OFFSET.leftFrac * 100;
+  const bowlWaterWrapWidthPct = BOWL_WATER_SIZE_FRAC * 100;
+  const bowlWaterWrapHeightPct = (bowlWaterHeight / bowlItem.height) * 100;
+  const bowlWaterWrapTopPct =
+    BOWL_WATER_OFFSET.topFrac * 100 - ((bowlWaterHeight - bowlPowderHeight) / 2 / bowlItem.height) * 100;
 
   // The bowl's actual inner-rim ellipse (BOWL_INNER_RIM_CENTER/
   // BOWL_INNER_RIM_WIDTH_FRAC/BOWL_INNER_RIM_HEIGHT_FRAC above) sizes/
@@ -3850,6 +3900,79 @@ const MatchaMaking = ({ activeStep, customerNumber, isWalkthrough, onNavigate, o
                   }}
                 />
               )}
+              {/* bowl-powder/bowl-water/bowl-mix-swirl -- MOVED IN HERE
+                  (nested inside this same .station-item-wrap, right
+                  alongside the bowl <img> and .bowl-whisked-liquid above)
+                  instead of being separate top-level siblings positioned
+                  from bowlPos/bowlItem on every render -- same reasoning as
+                  .bowl-whisked-liquid's own move above: nesting means all
+                  four elements now ride this wrapper's own FLIP transform as
+                  one physically-locked unit during the Make Drink carry,
+                  instead of each independently recomputing an absolute
+                  container-relative position from the bowl's current
+                  bowlPos and only approximately tracking it. Positioned with
+                  the new bowlPowderWrap-/bowlWaterWrap-prefixed wrapper-
+                  relative percentage constants (defined alongside the original
+                  absolute bowlPowderLeft/Top/Width/Height and
+                  bowlWaterLeft/Top/Width/Height constants above, which stay
+                  in place unchanged -- they're still used by the falling
+                  water/powder pour-stream height calcs, which are anchored
+                  to the kettle/big-spoon, not the bowl, so those can't move
+                  into this wrapper). Every original condition/className is
+                  preserved as-is, just prefixed with isBowl so each only
+                  ever renders once (this JSX runs once per movable item). */}
+              {isBowl && bowlPowder && bowlStage !== 'sent' && whiskStage !== 'done' && (
+                <div
+                  className={`bowl-powder${
+                    showSpoonSpotlight ||
+                    showKettlePourSpotlight ||
+                    showWhiskSpotlight ||
+                    showMixSpotlight ||
+                    showBowlCarrySpotlight
+                      ? ' matcha-spotlight-exempt'
+                      : ''
+                  }`}
+                  aria-hidden="true"
+                  style={{
+                    left: `${bowlPowderWrapLeftPct}%`,
+                    top: `${bowlPowderWrapTopPct}%`,
+                    width: `${bowlPowderWrapWidthPct}%`,
+                    height: `${bowlPowderWrapHeightPct}%`,
+                    background: bowlPowder.color,
+                    animationDuration: `${BIG_SPOON_POUR_MS}ms`,
+                  }}
+                />
+              )}
+              {isBowl && bowlWater && whiskStage !== 'done' && (
+                <div
+                  className={`bowl-water${
+                    showKettlePourSpotlight || showWhiskSpotlight || showMixSpotlight
+                      ? ' matcha-spotlight-exempt'
+                      : ''
+                  }`}
+                  aria-hidden="true"
+                  style={{
+                    left: `${bowlWaterWrapLeftPct}%`,
+                    top: `${bowlWaterWrapTopPct}%`,
+                    width: `${bowlWaterWrapWidthPct}%`,
+                    height: `${bowlWaterWrapHeightPct}%`,
+                    background: BOWL_WATER_FILL_COLOR,
+                    animationDuration: `${KETTLE_POUR_MS}ms`,
+                  }}
+                />
+              )}
+              {isBowl && whiskStage === 'mixing' && (
+                <div
+                  className={`bowl-mix-swirl${showMixSpotlight ? ' matcha-spotlight-exempt' : ''}`}
+                  aria-hidden="true"
+                  style={{
+                    left: `${bowlWaterWrapLeftPct}%`,
+                    top: `${bowlWaterWrapTopPct}%`,
+                    width: `${bowlWaterWrapWidthPct * BOWL_MIX_SWIRL_SIZE_FRAC}%`,
+                    height: `${bowlWaterWrapHeightPct * BOWL_MIX_SWIRL_SIZE_FRAC}%`,
+                  }}
+                />
+              )}
             </div>
           );
         })}
@@ -4027,143 +4150,29 @@ const MatchaMaking = ({ activeStep, customerNumber, isWalkthrough, onNavigate, o
             <span className="kettle-steam-wisp kettle-steam-wisp-3" />
           </div>
         )}
-        {/* This used to also unmount once whiskStage reached 'done' (the
-            idea being .bowl-whisked-liquid, further down, replaces it
-            entirely), matching bowl-water's own whiskStage !== 'done' gate
-            right below. In practice that unmount wasn't reliably happening
-            for this mound specifically (confirmed still visible after
-            whisking) -- rather than keep chasing why, per feedback this now
-            just stays mounted (no whiskStage condition at all) for as long
-            as the bowl itself is still around to carry it -- see the
-            bowlStage !== 'sent' check below. Since left/top are already
-            recomputed from the bowl's own *current* bowlPos on every render
-            (same as bowlWater/bowl-whisked-liquid), it simply rides along
-            with the bowl for as long as it's visible, including through the
-            Make Drink carry -- it doesn't need its own tracking logic.
-
-            bowlStage !== 'sent' -- added after a follow-up report that the
-            mound was still sitting in the Make Drink corner on its own even
-            after the bowl (and .bowl-whisked-liquid, which already has this
-            same check) had fully faded away and stopped rendering -- with
-            nothing left to be "attached to" at that point, a lone mound
-            floating there read as its own orphaned leftover, not a bowl
-            still having matcha in it. Matches .bowl-whisked-liquid's own
-            gate exactly so the two always disappear together.
-
-            z-index: auto (unset) keeps it *behind* .bowl-whisked-liquid
-            (z-index: 1), same stacking as before, so the finished-drink
-            image still paints on top of it while both are visible.
-
-            No key here (there used to be one, key={pourCount}, to force a
-            fresh mount so the grow-in animation replayed on every pour) --
-            confirmed via a live DOM count while troubleshooting that
-            repeating the tin -> scoop -> dump flow more than once in a
-            single visit to this station left the OLD key={pourCount}
-            instances still mounted instead of being cleaned up, silently
-            piling up extra copies of this mound on the counter (only
-            visible here, not for bowl-water below, since water's own
-            whiskStage !== 'done' gate happened to hide all of its own
-            accumulated copies at once regardless of count). This is now a
-            single stable element -- it can only ever exist once, by
-            construction, at the cost of not replaying the grow-in animation
-            if the player redoes the dump within that same visit. This only
-            matters within one customer's own visit to this station, though
-            -- each new customer gets a fully fresh mount of this whole
-            component (see App.js's currentPage-based conditional rendering,
-            which unmounts/remounts the station between customers), so a
-            multi-order session (5-7 customers) never carries any of this
-            state, keyed or not, from one customer's drink into the next.
-
-            whiskStage !== 'done' -- added back per feedback: once the
-            whisked-liquid image takes over (see the isBowl branch in
-            MOVABLE_ITEMS.map() above), it fully covers this mound anyway
-            (same inner-rim area, painted on top), so there's nothing left
-            for the mound to visibly contribute -- and one fewer separately-
-            positioned layer left mounted during the Make Drink carry is
-            one fewer thing that could ever drift out of sync with the bowl
-            again. (This gate briefly existed once before and got pulled
-            for a stale-DOM-duplication bug -- that turned out to be caused
-            by this element's old `key={pourCount}` forcing a fresh mount
-            every pour, not by the gate itself; the key's already gone now,
-            see the paragraph above, so it's safe to re-add.) */}
-        {bowlPowder && bowlStage !== 'sent' && whiskStage !== 'done' && (
-          <div
-            className={`bowl-powder${
-              showSpoonSpotlight ||
-              showKettlePourSpotlight ||
-              showWhiskSpotlight ||
-              showMixSpotlight ||
-              showBowlCarrySpotlight
-                ? ' matcha-spotlight-exempt'
-                : ''
-            }`}
-            aria-hidden="true"
-            style={{
-              left: `${bowlPowderLeft}%`,
-              top: `${bowlPowderTop}%`,
-              width: `${bowlPowderWidth}%`,
-              height: `${bowlPowderHeight}%`,
-              background: bowlPowder.color,
-              animationDuration: `${BIG_SPOON_POUR_MS}ms`,
-            }}
-          />
-        )}
-        {/* Rendered *after* bowl-powder above (i.e. on top of it in paint
-            order), using the more-transparent BOWL_WATER_FILL_COLOR rather
-            than WATER_COLOR, so the matcha mound shows through underneath --
-            reads as water sitting over the powder rather than a solid pool
-            covering or hiding it. Same grow-from-nothing mechanic as
-            bowl-powder used to share (see that div's own comment above for
-            why this is no longer keyed either). whiskStage !== 'done' hides
-            this once whisking finishes, same as bowl-powder used to. */}
-        {bowlWater && whiskStage !== 'done' && (
-          <div
-            className={`bowl-water${
-              showKettlePourSpotlight || showWhiskSpotlight || showMixSpotlight
-                ? ' matcha-spotlight-exempt'
-                : ''
-            }`}
-            aria-hidden="true"
-            style={{
-              left: `${bowlWaterLeft}%`,
-              top: `${bowlWaterTop}%`,
-              width: `${bowlWaterWidth}%`,
-              height: `${bowlWaterHeight}%`,
-              background: BOWL_WATER_FILL_COLOR,
-              animationDuration: `${KETTLE_POUR_MS}ms`,
-            }}
-          />
-        )}
-        {/* Stirring effect -- a translucent swirl pattern rotating over the
-            mixture, only up while whiskStage === 'mixing'. Rendered after
-            bowl-water (i.e. on top of it in paint order) so it reads as
-            motion happening at the surface of the mixture rather than a
-            separate layer. Reuses bowlWater's own left/top/width/height so
-            it exactly overlays the pool underneath, following the bowl the
-            same way bowl-water/bowl-powder do if the bowl was dragged. Pure
-            CSS rotation (see @keyframes bowlMixSwirl in MatchaMaking.css) --
-            no state/refs needed since it only needs to exist, not respond to
-            the actual ball-balancing physics. */}
-        {whiskStage === 'mixing' && (
-          <div
-            className={`bowl-mix-swirl${showMixSpotlight ? ' matcha-spotlight-exempt' : ''}`}
-            aria-hidden="true"
-            style={{
-              left: `${bowlWaterLeft}%`,
-              top: `${bowlWaterTop}%`,
-              width: `${bowlWaterWidth * BOWL_MIX_SWIRL_SIZE_FRAC}%`,
-              height: `${bowlWaterHeight * BOWL_MIX_SWIRL_SIZE_FRAC}%`,
-            }}
-          />
-        )}
-        {/* The finished whisked matcha used to render here as a separate
-            top-level sibling, positioned from bowlPos on every render --
-            it's now rendered inside the bowl's own .station-item-wrap, in
-            the MOVABLE_ITEMS.map() above, so it physically rides the same
-            FLIP transform as the bowl <img> itself during the Make Drink
-            carry instead of approximating it with its own left/top
-            transition. See the big comment on that JSX for the full
-            reasoning. */}
+        {/* bowl-powder/bowl-water/bowl-mix-swirl, and the finished whisked
+            matcha (.bowl-whisked-liquid), used to all render here as
+            separate top-level siblings, each independently recomputing an
+            absolute container-relative position from the bowl's current
+            bowlPos/bowlItem on every render -- that approach only ever
+            approximately tracked the bowl's actual FLIP-based glide (see
+            useFlipGlide.js) during the Make Drink carry, visibly reading as
+            several separately-dragged layers rather than one whole bowl.
+            All four are now rendered inside the bowl's own
+            .station-item-wrap, in the MOVABLE_ITEMS.map() isBowl branch
+            above, as plain percentages of that wrapper's own box -- so they
+            physically ride the same single transform the bowl <img> itself
+            moves by, staying locked together by construction instead of by
+            timing. Every original condition/className/behavior (grow-in
+            animation, spotlight-exempt classes, mound-stays-mounted-longer-
+            than-water quirk, etc.) is preserved unchanged in that new
+            location -- see the big comment on that JSX for the full
+            per-element reasoning, and the bowlPowderWrap-/bowlWaterWrap-
+            prefixed constants above (alongside the still-needed absolute
+            bowlPowderLeft/Top/Width/Height and bowlWaterLeft/Top/Width/
+            Height, kept for the falling water/powder pour-stream height
+            calcs, which anchor to the kettle/big-spoon rather than the
+            bowl) for how the positioning itself was converted. */}
         {/* Balance minigame -- only up while whiskStage === 'mixing' (see
             that stage's physics effect above). The ball's left position and
             in-zone glow are both written directly to mixBallRef's DOM node

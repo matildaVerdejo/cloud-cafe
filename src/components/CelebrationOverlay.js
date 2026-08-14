@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import { useMemo } from 'react';
 import './CelebrationOverlay.css';
 
 // Bumped up from the original pastel set to something more saturated/showy

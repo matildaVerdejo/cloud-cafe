@@ -62,21 +62,29 @@
    .heater-temp-bar-highlight there too) -- per request the score sheet
    itself should flash white during its own beat, not just sit there
    statically. The card's own resting box-shadow (0 6px 16px
-   rgba(0,0,0,0.18)) is kept as the constant first layer, same "don't lose
-   the resting shadow between flashes" reasoning those two rules document. */
-.score-card.score-card-highlight {
-  animation: scoreCardHaloBlink 1.1s ease-in-out infinite;
-}
+   rgba(0,0,0,0.18)), declared on .score-card itself above, stays put as the
+   constant base layer -- untouched here, same "don't lose the resting
+   shadow between flashes" reasoning as everywhere else this pattern is
+   used.
 
-@keyframes scoreCardHaloBlink {
-  0%,
-  100% {
-    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.18), 0 0 30px 12px rgba(255, 255, 255, 0.9),
-      0 0 65px 26px rgba(255, 255, 255, 0.55);
-  }
-  50% {
-    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.18), 0 0 0 0 rgba(255, 255, 255, 0), 0 0 0 0 rgba(255, 255, 255, 0);
-  }
+   CTV perf: glow now lives on a ::after pseudo-element animating
+   opacity via the shared haloGlowFade keyframes (App.css), instead of this
+   rule directly animating its own box-shadow every frame -- see
+   haloGlowFade's own big comment in App.css for why (box-shadow blur is a
+   full repaint on every frame; this pseudo-element's shape is declared
+   statically below, and only its opacity animates, which is compositor-
+   only). .score-card is already position: absolute (a valid containing
+   block for this ::after) via its own base rule above, so no extra
+   position: relative wrapper is needed here the way .progress-step-dot's
+   version (ProgressBar.css) needs one. */
+.score-card.score-card-highlight::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  box-shadow: 0 0 30px 12px rgba(255, 255, 255, 0.9), 0 0 65px 26px rgba(255, 255, 255, 0.55);
+  animation: haloGlowFade 1.1s ease-in-out infinite;
 }
 
 /* "0N/0M" badge -- replaces the old plain-gray, centered "Order N of M" line

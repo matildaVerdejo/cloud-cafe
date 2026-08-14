@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 // MilkSelection.css is now imported once, eagerly, from App.js instead of
 // here -- it's reused (class names only, no import) by ToppingsStation.js
 // and FinalCombination.js too (both render the carried-over cup's
