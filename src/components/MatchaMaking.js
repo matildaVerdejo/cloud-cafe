@@ -2721,7 +2721,6 @@ const MatchaMaking = ({ activeStep, customerNumber, isWalkthrough, onNavigate, o
     bowlPosRef.current = bowlPos;
     bowlItemRef.current = bowlItem;
   });
-  const bowlPowderLeft = bowlPos.left + BOWL_POWDER_OFFSET.leftFrac * bowlItem.width;
   const bowlPowderTop = bowlPos.top + BOWL_POWDER_OFFSET.topFrac * bowlItem.height;
   // Full-grown target size -- always rendered at this size; the "grows
   // from nothing" effect is done with a CSS transform: scale() animation
@@ -2732,7 +2731,7 @@ const MatchaMaking = ({ activeStep, customerNumber, isWalkthrough, onNavigate, o
   // flat 0.5, so the mound reads as an ellipse taller than it is wide.
   const bowlPowderWidth = BOWL_POWDER_SIZE_FRAC * bowlItem.width;
   const bowlPowderHeight = bowlPowderWidth * BOWL_MOUND_HEIGHT_FRAC;
-  // Wrapper-relative versions of the four values just above, for
+  // Wrapper-relative versions of the three values just above, for
   // .bowl-powder's own JSX (now nested inside the bowl's .station-item-wrap
   // in MOVABLE_ITEMS.map() below -- see the isBowl branch there, and the
   // big comment on .bowl-whisked-liquid's own move into that same wrapper
@@ -2740,17 +2739,26 @@ const MatchaMaking = ({ activeStep, customerNumber, isWalkthrough, onNavigate, o
   // bowl-water/bowl-mix-swirl used to be separate top-level siblings
   // recomputing this same bowlPos-derived math every render, drifting out
   // of sync with the bowl the exact same way bowl-whisked-liquid used to).
-  // bowlPowderLeft/Top/Width/Height themselves are left untouched above --
-  // still needed in absolute container-% form for the falling-powder pour
+  // bowlPowderTop/Width/Height themselves are left untouched above -- still
+  // needed in absolute container-% form for the falling-powder pour
   // stream's own pourHeight (Math.max(bowlPowderTop - pourTop, 1) further
   // down), which anchors to the spoon (a separate, NOT-wrapped item), not
-  // to the bowl.
+  // to the bowl. (bowlPowderLeft, the absolute-left counterpart these two
+  // used to sit alongside, no longer exists at all -- once .bowl-powder's
+  // JSX moved into the wrapper, nothing outside this file's own
+  // wrapper-relative math below ever read it again, so keeping the
+  // now-dead declaration around just to mirror Top/Width/Height was itself
+  // cruft; deleted rather than left as an unused-var CI failure waiting to
+  // happen.)
   //
-  // left/top: bowlPowderLeft/Top are `bowlPos.left/top + offsetFrac *
-  // bowlItem.width/height` -- since the wrapper itself is positioned at
-  // exactly bowlPos with size bowlItem.width/height, that offset term
-  // alone (as a plain percentage) IS the wrapper-relative position; no
-  // need to reference bowlPos at all once nested.
+  // top: bowlPowderTop is `bowlPos.top + offsetFrac * bowlItem.height` --
+  // since the wrapper itself is positioned at exactly bowlPos with size
+  // bowlItem.width/height, that offset term alone (as a plain percentage)
+  // IS the wrapper-relative position; no need to reference bowlPos at all
+  // once nested. (left works the same way -- see BOWL_POWDER_OFFSET.
+  // leftFrac's direct reuse in bowlPowderWrapLeftPct below -- it just no
+  // longer has an absolute-form sibling to explain itself alongside, per
+  // the note above.)
   // width: same cancellation -- bowlPowderWidth is BOWL_POWDER_SIZE_FRAC *
   // bowlItem.width, so as a percentage of the wrapper's own width (=
   // bowlItem.width) that's just BOWL_POWDER_SIZE_FRAC.
@@ -2789,7 +2797,6 @@ const MatchaMaking = ({ activeStep, customerNumber, isWalkthrough, onNavigate, o
     setKettleStage('moving');
   };
 
-  const bowlWaterLeft = bowlPos.left + BOWL_WATER_OFFSET.leftFrac * bowlItem.width;
   const bowlWaterWidth = BOWL_WATER_SIZE_FRAC * bowlItem.width;
   const bowlWaterHeight = bowlWaterWidth * BOWL_WATER_HEIGHT_FRAC;
   // Starts from the same topFrac as the matcha mound (BOWL_WATER_OFFSET.
@@ -2802,11 +2809,16 @@ const MatchaMaking = ({ activeStep, customerNumber, isWalkthrough, onNavigate, o
     bowlPos.top + BOWL_WATER_OFFSET.topFrac * bowlItem.height - (bowlWaterHeight - bowlPowderHeight) / 2;
   // Wrapper-relative versions for .bowl-water/.bowl-mix-swirl's own JSX,
   // same reasoning/cancellation as bowlPowderWrapLeftPct/etc. above --
-  // bowlWaterLeft/Top/Width/Height themselves stay untouched, still needed
-  // in absolute form for the falling-water pour stream's own
-  // kettlePourHeight (further down), which anchors to the kettle (also not
-  // wrapped with the bowl). The top offset's own extra `- (bowlWaterHeight
-  // - bowlPowderHeight) / 2` term is in the same container-HEIGHT-%
+  // bowlWaterTop/Width/Height themselves stay untouched, still needed in
+  // absolute form for the falling-water pour stream's own kettlePourHeight
+  // (further down), which anchors to the kettle (also not wrapped with the
+  // bowl). (bowlWaterLeft, the absolute-left counterpart these three used
+  // to sit alongside, no longer exists -- same "nothing outside this
+  // file's own wrapper-relative math ever read it again once .bowl-water's
+  // JSX moved into the wrapper" reasoning as bowlPowderLeft's own removal
+  // above; deleted for the same reason.) The top offset's own extra
+  // `- (bowlWaterHeight - bowlPowderHeight) / 2` term is in the same
+  // container-HEIGHT-%
   // units as bowlPowderWrapHeightPct's own conversion, so it gets the same
   // "divide by bowlItem.height" treatment rather than reusing the raw
   // bowlWaterHeight/bowlPowderHeight (container-WIDTH-%-denominated)
