@@ -2186,7 +2186,11 @@ const ToppingsStation = ({
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
+    // isWalkthrough added per exhaustive-deps -- stable for this whole
+    // mount's lifetime (this component fully remounts each new order), so
+    // listing it here doesn't cause any extra re-runs, it just satisfies
+    // the lint rule honestly.
+  }, [isWalkthrough]);
 
   useFlatFocusNav(containerRef);
 
@@ -3157,7 +3161,7 @@ const ToppingsStation = ({
       };
     }
     return undefined;
-  }, [pourStage, pouringKey, toppingItems]);
+  }, [pourStage, pouringKey, toppingItems, isWalkthrough]);
 
   // ---- Syrup pour balance minigame physics -- runs for the whole
   // 'pouring' stage, same overall shape as MatchaMaking's own
@@ -3414,7 +3418,7 @@ const ToppingsStation = ({
       };
     }
     return undefined;
-  }, [foamPourStage, foamPouringKey, toppingItems]);
+  }, [foamPourStage, foamPouringKey, toppingItems, isWalkthrough]);
 
   const handleFoamKeyDown = (item) => (e) => {
     const action = getActionFromKeyEvent(e);
@@ -3493,7 +3497,7 @@ const ToppingsStation = ({
       };
     }
     return undefined;
-  }, [powderPourStage, powderPouringKey, toppingItems]);
+  }, [powderPourStage, powderPouringKey, toppingItems, isWalkthrough]);
 
   const handlePowderKeyDown = (item) => (e) => {
     const action = getActionFromKeyEvent(e);
@@ -3553,7 +3557,7 @@ const ToppingsStation = ({
       }
     }, LEAF_PLACE_MS);
     return () => clearTimeout(t);
-  }, [leafStage]);
+  }, [leafStage, isWalkthrough]);
 
   // ---- Banana-chips/cherry-blossoms pots -- identical shape to the
   // mint-leaves pot immediately above, own copies (same "duplicate rather
@@ -3582,7 +3586,7 @@ const ToppingsStation = ({
       }
     }, LEAF_PLACE_MS);
     return () => clearTimeout(t);
-  }, [chipStage]);
+  }, [chipStage, isWalkthrough]);
 
   const beginBlossomPlace = () => {
     if (!canPlaceBlossom) return;
@@ -3607,7 +3611,7 @@ const ToppingsStation = ({
       }
     }, LEAF_PLACE_MS);
     return () => clearTimeout(t);
-  }, [blossomStage]);
+  }, [blossomStage, isWalkthrough]);
 
   // Single dispatcher for all three pots (mirroring how syrup/foam/powder's
   // own handle*KeyDown(item) factories take the item and act on its key) --

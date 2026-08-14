@@ -940,7 +940,7 @@ const CustomerOrdering = ({
     const READ_PHASE_LINGER_MS = 2000;
     const timeoutId = setTimeout(() => setShowReadPhase(false), READ_PHASE_LINGER_MS);
     return () => clearTimeout(timeoutId);
-  }, [customerNumber, typingDone]);
+  }, [isWalkthrough, typingDone]);
 
   // Character voice line -- plays once, right as the speech bubble starts
   // typing (this effect and the typewriter one above both fire on mount,

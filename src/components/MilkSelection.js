@@ -1441,7 +1441,12 @@ const MilkSelection = ({
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
+    // isWalkthrough added per exhaustive-deps -- stable for this whole
+    // mount's lifetime (this component fully remounts each new customer),
+    // so listing it here doesn't cause any extra re-runs, it just satisfies
+    // the lint rule honestly (same reasoning as this file's/other station
+    // files' other effects that list customerNumber for the same reason).
+  }, [isWalkthrough]);
 
   useFlatFocusNav(containerRef);
 

@@ -1893,7 +1893,7 @@ const MatchaMaking = ({ activeStep, customerNumber, isWalkthrough, onNavigate, o
     } else if (!isWalkthrough && !tempBarVisible) {
       bowlRef.current?.focus();
     }
-  }, [tempBarVisible, customerNumber]);
+  }, [tempBarVisible, isWalkthrough]);
 
   // ---- Kettle water-pour sequence: same "hover, then pour" shape as the
   // matcha spoon's dump sequence, but layered on top of the *shared*
@@ -2678,7 +2678,7 @@ const MatchaMaking = ({ activeStep, customerNumber, isWalkthrough, onNavigate, o
     } else if (!isWalkthrough && bigSpoonStage === 'done') {
       bowlRef.current?.focus();
     }
-  }, [bigSpoonStage, customerNumber]);
+  }, [bigSpoonStage, isWalkthrough]);
 
   // Enter picks it straight up and dumps it -- no drag/partial-placement
   // step (mouse/pointer input has been removed project-wide, see the
@@ -2827,11 +2827,11 @@ const MatchaMaking = ({ activeStep, customerNumber, isWalkthrough, onNavigate, o
       };
     }
     return undefined;
-    // customerNumber included per exhaustive-deps -- stable for this whole
+    // isWalkthrough included per exhaustive-deps -- stable for this whole
     // mount's lifetime, same "doesn't cause extra re-runs, just satisfies
     // the lint rule honestly" reasoning as greenAtMs/redAtMs elsewhere in
     // this file.
-  }, [kettleStage, customerNumber]);
+  }, [kettleStage, isWalkthrough]);
 
   // ---- Whisking: begins the sequence (see whiskStage above), advances it
   // on a timer for the glide-in, then hands off to the balance-minigame
