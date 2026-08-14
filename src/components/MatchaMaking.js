@@ -173,7 +173,7 @@ export const SCOOP_FILL_COLORS = {
   'cafe-grade': '#CADBAF',
   'classic-grade': '#A3B979',
   'ceremonial-grade': '#809B7A',
-  'hojicha-grade': '#B58A63',
+  'hojicha-grade': '#793b16',
 };
 
 // Three small spoon icons sitting just to the left of the bar, in the gap
