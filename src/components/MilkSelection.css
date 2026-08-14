@@ -75,9 +75,12 @@
    1392-wide art). Enter/Select on the focused cup toggles shelf <->
    table (or switches which cup is active, if it's an inactive one) as
    the D-pad equivalent of dragging (see handleCupKeyDown/
-   handleCupSwitchKeyDown in MilkSelection.js). left/top/width/height are
-   set inline per-render since they're state-driven, not fixed -- only the
-   static visual properties live here.
+   handleCupSwitchKeyDown in MilkSelection.js).
+
+   left/top/width/height (and the transition that animates them) now live
+   on .cup-wrap below instead of here -- see that rule's own comment for
+   why. This rule just fills that wrapper (inset: 0 below) and keeps every
+   other visual property (filter, cursor, focus glow) it always had.
 
    object-fit: contain (rather than the default stretch-to-fill) is what
    keeps the plastic cup/mug from being squished -- neither one's own
@@ -89,6 +92,9 @@
    box, so there's nothing for contain to letterbox. */
 .glass-cup {
   position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
   object-fit: contain;
   cursor: grab;
   touch-action: none;
@@ -100,8 +106,32 @@
      transition below animate the glow in/out smoothly instead of popping. */
   filter: drop-shadow(0 6px 8px rgba(0, 0, 0, 0.25)) drop-shadow(0 0 0 rgba(255, 255, 255, 0))
     drop-shadow(0 0 0 rgba(255, 255, 255, 0));
-  transition: left 0.25s ease, top 0.25s ease, width 0.25s ease, height 0.25s ease,
-    filter 0.15s ease, transform 0.15s ease;
+  transition: filter 0.15s ease, transform 0.15s ease;
+}
+
+/* Wrapper carrying the cup's own left/top/width/height (state-driven, set
+   inline per-render -- see cupRenderPos/cupRenderSize/shelfSpot/shelfSize
+   in MilkSelection.js) and the transition that animates them between
+   shelf/table/Send-Drink-zone spots -- moved here from .glass-cup itself so
+   the milk fill/matcha fill/any placed ice cubes (nested inside this same
+   wrapper for the active cup -- see the isActive branch of the cup-type
+   map in MilkSelection.js) can ride along as one rigid unit instead of
+   each separately trying to track the cup's own position/motion. Plain
+   left/top transitions here (not MatchaMaking's FLIP-via-transform
+   technique -- see gameloop/useFlipGlide.js) since the cup only ever moves
+   between a handful of fixed named spots via a state toggle, never
+   freely dragged frame-by-frame the way MatchaMaking's own movable items
+   are, so the perf concern FLIP exists for doesn't apply here.
+
+   bowl-arrived/bowl-slide-off (reused directly from MatchaMaking.css,
+   already loaded globally) apply ON TOP of this wrapper for the Send Drink
+   sequence specifically -- see the isActive branch in MilkSelection.js for
+   when/why -- and only ever touch `transform`/`opacity`, never left/top/
+   width/height, so they compose cleanly alongside this rule's own
+   transition rather than fighting it. */
+.cup-wrap {
+  position: absolute;
+  transition: left 0.25s ease, top 0.25s ease, width 0.25s ease, height 0.25s ease;
 }
 
 /* Focus glow that hugs the cup's actual silhouette instead of a rectangle.
@@ -357,6 +387,23 @@
    exempt in MatchaMaking.css, which needs the extra specificity to beat
    that widget's own hardcoded z-index: 5. */
 .milk-spotlight-exempt {
+  z-index: 26;
+}
+
+/* Bug fix: same class of bug as MatchaMaking.css's own
+   .make-drink-zone.matcha-spotlight-exempt override (see that rule's own
+   comment) -- .make-drink-zone (reused directly from MatchaMaking.css for
+   this screen's own "Send to Toppings" zone, see the JSX in
+   MilkSelection.js) carries its own hardcoded z-index: 5, and a plain
+   single-class .milk-spotlight-exempt rule alone isn't guaranteed to beat
+   that on the equal-specificity tiebreak -- the winner depends on CSS
+   import order across the component tree, which is exactly the kind of
+   cross-file fragility that bit the MatchaMaking version of this same
+   marker. This higher-specificity override sidesteps it entirely, so the
+   zone marker reliably stays visible above the pink tint for its whole
+   showSendSpotlight beat instead of silently never actually punching
+   through it. */
+.make-drink-zone.milk-spotlight-exempt {
   z-index: 26;
 }
 

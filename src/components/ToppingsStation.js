@@ -12,7 +12,15 @@ import {
 } from '../gameloop/sfx';
 import ProgressBar from './ProgressBar';
 import OrderReceiptButton from './OrderReceiptButton';
-import { getMilkBoxFor, getMatchaBoxFor, TABLE_SIZE, CUP_TYPES, getIceCupSlotPos, getIceCubeSize } from './MilkSelection';
+import {
+  getMilkBoxFor,
+  getMatchaBoxFor,
+  TABLE_SIZE,
+  CUP_TYPES,
+  getIceCupSlotPos,
+  getIceCubeSize,
+  toCupRelative,
+} from './MilkSelection';
 import { WHISK_FLIP_DEG } from './MatchaMaking';
 import { scoreToppings } from '../gameloop/scoring';
 import { getDifficultyStep, scaleDown, scaleUp } from '../gameloop/difficulty';
@@ -83,7 +91,8 @@ const INCOMING_DRINK_LEFT_OFFSET_FRAC = { mug: 0.05 };
 const SEND_TO_FINAL_ZONE = { left: 89.7, top: 85, width: 7.3, height: 13 };
 
 const DRINK_SEND_MOVE_MS = 350; // time to glide to the zone -- same value as Milk Selection's own CUP_SEND_MOVE_MS
-const DRINK_SEND_VANISH_MS = 350; // same value as Milk Selection's own CUP_SEND_VANISH_MS
+const DRINK_SEND_HOVER_MS = 1000; // same value as Milk Selection's own CUP_SEND_HOVER_MS
+const DRINK_SEND_VANISH_MS = 450; // same value as Milk Selection's own CUP_SEND_VANISH_MS
 
 // Background swapped from the old baked-in-items ToppingsStation.png to
 // MatchaBaseStation.png (the same empty-counter art the Matcha Making
@@ -1881,8 +1890,8 @@ const ToppingsStation = ({
   useFlatFocusNav(containerRef);
 
   // ---- Sending the finished drink on to Serving ---------------------------
-  // Same "carry to a corner zone, then shrink/fade away" shape as Milk
-  // Selection's own cupSendStage/beginSendDrink (itself modeled on
+  // Same "carry to a corner zone, hover shrunk, then slide off" shape as
+  // Milk Selection's own cupSendStage/beginSendDrink (itself modeled on
   // MatchaMaking's bowlStage/beginBowlCarry) -- see SEND_TO_FINAL_ZONE above
   // for the zone box, and canSendToFinal/beginSendToFinal further down (they
   // have to come after pourStage/foamPourStage/powderPourStage exist).
@@ -1890,9 +1899,12 @@ const ToppingsStation = ({
   //                  draggable.
   //   'carrying'  -- confirmed (dropped on the zone, or Enter/Space once
   //                  canSendToFinal) -- gliding to the zone's own center.
-  //   'vanishing' -- arrived; shrinking/fading away (reuses MatchaMaking.
-  //                  css's .bowl-vanishing, already loaded globally).
-  //   'sent'      -- fade's finished; the drink (glass + every fill/fleck
+  //   'hovering'  -- arrived; shrinks down (.bowl-arrived, reused directly
+  //                  from MatchaMaking.css, already loaded globally) and
+  //                  sits still at the zone for DRINK_SEND_HOVER_MS.
+  //   'vanishing' -- sliding off to the right (staying shrunk) and fading
+  //                  out (.bowl-slide-off, same reuse as above).
+  //   'sent'      -- slide's finished; the drink (glass + every fill/fleck
   //                  layered onto it) stops rendering entirely, same as the
   //                  bowl/cup once their own stages reach 'sent' one screen
   //                  earlier.
@@ -3290,7 +3302,11 @@ const ToppingsStation = ({
 
   useEffect(() => {
     if (drinkSendStage === 'carrying') {
-      const t = setTimeout(() => setDrinkSendStage('vanishing'), DRINK_SEND_MOVE_MS);
+      const t = setTimeout(() => setDrinkSendStage('hovering'), DRINK_SEND_MOVE_MS);
+      return () => clearTimeout(t);
+    }
+    if (drinkSendStage === 'hovering') {
+      const t = setTimeout(() => setDrinkSendStage('vanishing'), DRINK_SEND_HOVER_MS);
       return () => clearTimeout(t);
     }
     if (drinkSendStage === 'vanishing') {
@@ -3753,16 +3769,48 @@ const ToppingsStation = ({
             transit, and everything here picks up .bowl-vanishing (reused
             from MatchaMaking.css, already loaded globally) once 'vanishing'
             starts. */}
-        {incomingDrink && drinkSendStage !== 'sent' && (
-          <>
+        {incomingDrink && drinkSendStage !== 'sent' && (() => {
+          // Same "merge into one wrapper" treatment the bowl (MatchaMaking)
+          // and the cup (Milk Selection) already got -- every overlay layer
+          // below (ice cubes, milk/matcha fills, foam, syrup, powder,
+          // garnishes) used to be positioned independently off
+          // incomingDrinkRenderPos/incomingDrinkSize as a sibling of the
+          // cup's own wrapper, which is exactly the "layers drag separately"
+          // bug: each one animates on its own CSS transition instead of
+          // moving as a single glued-together unit. Fixed the same way as
+          // both earlier stations -- everything nests INSIDE the cup's own
+          // .station-item-wrap now, positioned with toCupRelative (imported
+          // from MilkSelection, see the big comment on it there) so each
+          // layer's box is expressed as a percentage of the wrapper itself
+          // rather than of the whole stage. That means a single transform/
+          // position change on the wrapper (the .bowl-arrived shrink, the
+          // .bowl-slide-off glide-off) moves every layer together, in sync,
+          // for free -- no per-layer bowl-vanishing class needed anymore
+          // (removed below), same as both earlier fixes.
+          const sending = drinkSendStage !== 'idle';
+          const arrived = drinkSendStage === 'hovering' || drinkSendStage === 'vanishing';
+          const leaving = drinkSendStage === 'vanishing';
+          const exemptClass =
+            showSyrupSpotlight || showFoamSpotlight || showPowderSpotlight || showSendSpotlight
+              ? ' topping-spotlight-exempt'
+              : '';
+          return (
             <div
               ref={(el) => registerFlip('incoming-drink-cup', el)}
-              className="station-item-wrap"
+              className={`station-item-wrap${arrived ? ' bowl-arrived' : ''}${leaving ? ' bowl-slide-off' : ''}`}
               style={{
                 left: `${incomingDrinkRenderPos.left}%`,
                 top: `${incomingDrinkRenderPos.top}%`,
                 width: `${incomingDrinkSize.width}%`,
                 height: `${incomingDrinkSize.height}%`,
+                // Explicit z-index (inline, same "single source of truth"
+                // reasoning as the bowl's own fix in MatchaMaking.js) so the
+                // whole assembled drink unconditionally paints above the
+                // "Send to Serving" marker while it's mid-send -- without
+                // this it can tie the marker's own exempt z-index tier and
+                // lose the DOM-order tiebreak, landing behind the marker
+                // even while shrunk/sliding.
+                ...(sending ? { zIndex: 27 } : {}),
               }}
             >
               <img
@@ -3772,9 +3820,7 @@ const ToppingsStation = ({
                     ? 'Finished drink. Select it and press Enter to send it to Serving.'
                     : 'Finished drink.'
                 }
-                className={`station-item movable${
-                  drinkSendStage === 'vanishing' ? ' bowl-vanishing' : ''
-                }${showSyrupSpotlight || showFoamSpotlight || showPowderSpotlight || showSendSpotlight ? ' topping-spotlight-exempt' : ''}`}
+                className={`station-item movable${exemptClass}`}
                 data-focusable
                 data-topping-key="cup"
                 tabIndex={0}
@@ -3790,228 +3836,242 @@ const ToppingsStation = ({
                 }}
                 onKeyDown={handleDrinkKeyDown}
               />
+              {/* Ice cubes carried over from Milk Selection -- incomingDrink
+                  only ever carried milk/matcha/cupType across before, so any
+                  ice the player placed in the cup there was silently getting
+                  dropped the moment the drink reached this screen. Milk
+                  Selection's own beginSendDrink now also hands off an
+                  iceCubes count (see its own comment), and getIceCupSlotPos/
+                  getIceCubeSize are reused directly from there (both exported
+                  for exactly this) so the cubes land in the same seven fixed
+                  cup-relative spots they already use. Rendered before the
+                  milk fill below (same paint-order reasoning Milk
+                  Selection's own comment gives) so milk/matcha correctly
+                  paints over them once poured. Purely decorative here --
+                  unlike Milk Selection's own cubes, these aren't draggable/
+                  focusable; the player's ice decisions are already locked in
+                  by this screen. */}
+              {Array.from({ length: incomingDrink.iceCubes ?? 0 }).map((_, index) => {
+                const iceCubeSize = getIceCubeSize(incomingCupType);
+                const iceSlotPos = getIceCupSlotPos(
+                  index,
+                  incomingDrinkRenderPos,
+                  incomingDrinkSize,
+                  CUP_TYPES[incomingCupType].bodyFrac,
+                  CUP_TYPES[incomingCupType].iceYOffsetFrac,
+                  CUP_TYPES[incomingCupType].iceSpreadScale,
+                  iceCubeSize
+                );
+                const relBox = toCupRelative(
+                  { left: iceSlotPos.left, top: iceSlotPos.top, width: iceCubeSize.width, height: iceCubeSize.height },
+                  incomingDrinkRenderPos,
+                  incomingDrinkSize
+                );
+                return (
+                  <img
+                    key={index}
+                    src="./IceCube.png"
+                    alt=""
+                    aria-hidden="true"
+                    className={`ice-cube placed${exemptClass}`}
+                    style={{
+                      left: `${relBox.left}%`,
+                      top: `${relBox.top}%`,
+                      width: `${relBox.width}%`,
+                      height: `${relBox.height}%`,
+                      pointerEvents: 'none',
+                    }}
+                  />
+                );
+              })}
+              {incomingMilkBox && (() => {
+                const relBox = toCupRelative(incomingMilkBox, incomingDrinkRenderPos, incomingDrinkSize);
+                return (
+                  <div
+                    className={`cup-milk-fill ${incomingDrink.milk.type}${exemptClass}`}
+                    aria-hidden="true"
+                    style={{
+                      left: `${relBox.left}%`,
+                      top: `${relBox.top}%`,
+                      width: `${relBox.width}%`,
+                      height: `${relBox.height}%`,
+                    }}
+                  />
+                );
+              })()}
+              {incomingMatchaBox && (() => {
+                const relBox = toCupRelative(incomingMatchaBox, incomingDrinkRenderPos, incomingDrinkSize);
+                return (
+                  <div
+                    className={`cup-matcha-fill ${incomingDrink.matcha.grade}${exemptClass}`}
+                    aria-hidden="true"
+                    style={{
+                      left: `${relBox.left}%`,
+                      top: `${relBox.top}%`,
+                      width: `${relBox.width}%`,
+                      height: `${relBox.height}%`,
+                    }}
+                  />
+                );
+              })()}
+              {/* Cold foam, poured on TOP of whatever's already in the cup --
+                  its own shape (.cup-foam-fill in ToppingsStation.css), with
+                  rounded top corners rather than matcha's own pointed glass-
+                  taper meniscus (see the big comment above FOAM_HOVER_GAP in
+                  this file), and its own color modifier class that stays
+                  solid/opaque almost the whole way down instead of fading
+                  the way matcha's own modifier classes do -- foam is meant
+                  to read as its own distinct layer sitting on top, not as
+                  blending into whatever's underneath. Rendered after the
+                  matcha fill above so it paints over it. */}
+              {cupFoam && renderedFoamBox && (() => {
+                const relBox = toCupRelative(renderedFoamBox, incomingDrinkRenderPos, incomingDrinkSize);
+                return (
+                  <div
+                    className={`cup-foam-fill ${cupFoam.key}${exemptClass}`}
+                    aria-hidden="true"
+                    style={{
+                      left: `${relBox.left}%`,
+                      top: `${relBox.top}%`,
+                      width: `${relBox.width}%`,
+                      height: `${relBox.height}%`,
+                    }}
+                  />
+                );
+              })()}
+              {/* Foam's own flattened top-surface ellipse, straddling the
+                  body's own top edge (see getFoamCapBoxFor above) -- reads as
+                  the flat surface of the poured foam sitting right at (or
+                  just above) the drink's fill line, which is what actually
+                  sells "filled all the way up" rather than the body's own
+                  rounded-but-still-a-bit-angular top edge on its own.
+                  Rendered after the body so it paints over that top edge. */}
+              {cupFoam && renderedFoamCapBox && (() => {
+                const relBox = toCupRelative(renderedFoamCapBox, incomingDrinkRenderPos, incomingDrinkSize);
+                return (
+                  <div
+                    className={`cup-foam-cap ${cupFoam.key}${exemptClass}`}
+                    aria-hidden="true"
+                    style={{
+                      left: `${relBox.left}%`,
+                      top: `${relBox.top}%`,
+                      width: `${relBox.width}%`,
+                      height: `${relBox.height}%`,
+                    }}
+                  />
+                );
+              })()}
+              {/* Syrup poured on top of everything else, but visually sinks
+                  to the BOTTOM of the drink -- see the big comment on
+                  getSyrupBoxFor above. .cup-syrup-fill is defined locally in
+                  ToppingsStation.css (unlike the milk/matcha fills, this
+                  one's a toppings-specific concept, not a Milk Selection
+                  one). */}
+              {cupSyrup && incomingSyrupBox && (() => {
+                const relBox = toCupRelative(incomingSyrupBox, incomingDrinkRenderPos, incomingDrinkSize);
+                return (
+                  <div
+                    className={`cup-syrup-fill ${cupSyrup.key}${exemptClass}`}
+                    aria-hidden="true"
+                    style={{
+                      left: `${relBox.left}%`,
+                      top: `${relBox.top}%`,
+                      width: `${relBox.width}%`,
+                      height: `${relBox.height}%`,
+                    }}
+                  />
+                );
+              })()}
+              {/* Matcha-powder/guava-powder settles as a scatter of small
+                  flecks rather than a smooth fill -- see the big comment
+                  above POWDER_HOVER_GAP for why, and for why the landing
+                  shape/spot (powderFleckPositions) depends on whether foam's
+                  already in the cup. Rendered last (after syrup) so it sits
+                  over everything else already poured. */}
+              {cupPowder &&
+                powderFleckPositions.map((pos, index) => {
+                  const relBox = toCupRelative(
+                    { left: pos.left, top: pos.top, width: 0, height: 0 },
+                    incomingDrinkRenderPos,
+                    incomingDrinkSize
+                  );
+                  return (
+                    <span
+                      key={index}
+                      className={`cup-powder-fleck ${cupPowder.key}${exemptClass}`}
+                      aria-hidden="true"
+                      style={{ left: `${relBox.left}%`, top: `${relBox.top}%` }}
+                    />
+                  );
+                })}
+              {/* Mint-leaf garnish -- see incomingLeafBox/getLeafBoxFor above.
+                  Rendered last of all, on top of everything else already
+                  poured, same as a real leaf laid across the finished
+                  drink's own surface. An <img> (not a colored div like the
+                  fills above) since a leaf actually has real printed detail
+                  worth showing, not a flat color. */}
+              {incomingLeafBox && (() => {
+                const relBox = toCupRelative(incomingLeafBox, incomingDrinkRenderPos, incomingDrinkSize);
+                return (
+                  <img
+                    src="./MintLeaf.png"
+                    alt=""
+                    aria-hidden="true"
+                    draggable={false}
+                    className={`cup-leaf-garnish${exemptClass}`}
+                    style={{
+                      left: `${relBox.left}%`,
+                      top: `${relBox.top}%`,
+                      width: `${relBox.width}%`,
+                      height: `${relBox.height}%`,
+                    }}
+                  />
+                );
+              })()}
+              {/* Banana chip/cherry blossom garnishes -- same shape as the
+                  mint-leaf garnish just above (own single-piece PNG, not the
+                  whole-bowl pot art), reusing .cup-leaf-garnish directly
+                  since it's already just plain positioning/animation with no
+                  color of its own. */}
+              {incomingChipBox && (() => {
+                const relBox = toCupRelative(incomingChipBox, incomingDrinkRenderPos, incomingDrinkSize);
+                return (
+                  <img
+                    src="./BananaChip.png"
+                    alt=""
+                    aria-hidden="true"
+                    draggable={false}
+                    className={`cup-leaf-garnish${exemptClass}`}
+                    style={{
+                      left: `${relBox.left}%`,
+                      top: `${relBox.top}%`,
+                      width: `${relBox.width}%`,
+                      height: `${relBox.height}%`,
+                    }}
+                  />
+                );
+              })()}
+              {incomingBlossomBox && (() => {
+                const relBox = toCupRelative(incomingBlossomBox, incomingDrinkRenderPos, incomingDrinkSize);
+                return (
+                  <img
+                    src="./CherryBlossom.png"
+                    alt=""
+                    aria-hidden="true"
+                    draggable={false}
+                    className={`cup-leaf-garnish${exemptClass}`}
+                    style={{
+                      left: `${relBox.left}%`,
+                      top: `${relBox.top}%`,
+                      width: `${relBox.width}%`,
+                      height: `${relBox.height}%`,
+                    }}
+                  />
+                );
+              })()}
             </div>
-            {/* Ice cubes carried over from Milk Selection -- incomingDrink
-                only ever carried milk/matcha/cupType across before, so any
-                ice the player placed in the cup there was silently getting
-                dropped the moment the drink reached this screen. Milk
-                Selection's own beginSendDrink now also hands off an
-                iceCubes count (see its own comment), and getIceCupSlotPos/
-                getIceCubeSize are reused directly from there (both exported
-                for exactly this) so the cubes land in the same seven fixed
-                cup-relative spots they already use, positioned off
-                incomingDrinkRenderPos/incomingDrinkSize like every other
-                fill here so they glide/vanish with the rest of the drink
-                instead of staying behind. Rendered before the milk fill
-                below (same paint-order reasoning Milk Selection's own
-                comment gives) so milk/matcha correctly paints over them
-                once poured. Purely decorative here -- unlike Milk
-                Selection's own cubes, these aren't draggable/focusable;
-                the player's ice decisions are already locked in by this
-                screen. */}
-            {Array.from({ length: incomingDrink.iceCubes ?? 0 }).map((_, index) => {
-              const iceCubeSize = getIceCubeSize(incomingCupType);
-              const iceSlotPos = getIceCupSlotPos(
-                index,
-                incomingDrinkRenderPos,
-                incomingDrinkSize,
-                CUP_TYPES[incomingCupType].bodyFrac,
-                CUP_TYPES[incomingCupType].iceYOffsetFrac,
-                CUP_TYPES[incomingCupType].iceSpreadScale,
-                iceCubeSize
-              );
-              return (
-                <img
-                  key={index}
-                  src="./IceCube.png"
-                  alt=""
-                  aria-hidden="true"
-                  className={`ice-cube placed${drinkSendStage === 'vanishing' ? ' bowl-vanishing' : ''}${
-                    showSyrupSpotlight || showFoamSpotlight || showPowderSpotlight || showSendSpotlight ? ' topping-spotlight-exempt' : ''
-                  }`}
-                  style={{
-                    left: `${iceSlotPos.left}%`,
-                    top: `${iceSlotPos.top}%`,
-                    width: `${iceCubeSize.width}%`,
-                    height: `${iceCubeSize.height}%`,
-                    pointerEvents: 'none',
-                  }}
-                />
-              );
-            })}
-            {incomingMilkBox && (
-              <div
-                className={`cup-milk-fill ${incomingDrink.milk.type}${
-                  drinkSendStage === 'vanishing' ? ' bowl-vanishing' : ''
-                }${showSyrupSpotlight || showFoamSpotlight || showPowderSpotlight || showSendSpotlight ? ' topping-spotlight-exempt' : ''}`}
-                aria-hidden="true"
-                style={{
-                  left: `${incomingMilkBox.left}%`,
-                  top: `${incomingMilkBox.top}%`,
-                  width: `${incomingMilkBox.width}%`,
-                  height: `${incomingMilkBox.height}%`,
-                }}
-              />
-            )}
-            {incomingMatchaBox && (
-              <div
-                className={`cup-matcha-fill ${incomingDrink.matcha.grade}${
-                  drinkSendStage === 'vanishing' ? ' bowl-vanishing' : ''
-                }${showSyrupSpotlight || showFoamSpotlight || showPowderSpotlight || showSendSpotlight ? ' topping-spotlight-exempt' : ''}`}
-                aria-hidden="true"
-                style={{
-                  left: `${incomingMatchaBox.left}%`,
-                  top: `${incomingMatchaBox.top}%`,
-                  width: `${incomingMatchaBox.width}%`,
-                  height: `${incomingMatchaBox.height}%`,
-                }}
-              />
-            )}
-            {/* Cold foam, poured on TOP of whatever's already in the cup --
-                its own shape (.cup-foam-fill in ToppingsStation.css), with
-                rounded top corners rather than matcha's own pointed glass-
-                taper meniscus (see the big comment above FOAM_HOVER_GAP in
-                this file), and its own color modifier class that stays
-                solid/opaque almost the whole way down instead of fading
-                the way matcha's own modifier classes do -- foam is meant
-                to read as its own distinct layer sitting on top, not as
-                blending into whatever's underneath. Rendered after the
-                matcha fill above so it paints over it. */}
-            {cupFoam && renderedFoamBox && (
-              <div
-                className={`cup-foam-fill ${cupFoam.key}${drinkSendStage === 'vanishing' ? ' bowl-vanishing' : ''}${
-                  showSyrupSpotlight || showFoamSpotlight || showPowderSpotlight || showSendSpotlight ? ' topping-spotlight-exempt' : ''
-                }`}
-                aria-hidden="true"
-                style={{
-                  left: `${renderedFoamBox.left}%`,
-                  top: `${renderedFoamBox.top}%`,
-                  width: `${renderedFoamBox.width}%`,
-                  height: `${renderedFoamBox.height}%`,
-                }}
-              />
-            )}
-            {/* Foam's own flattened top-surface ellipse, straddling the
-                body's own top edge (see getFoamCapBoxFor above) -- reads as
-                the flat surface of the poured foam sitting right at (or
-                just above) the drink's fill line, which is what actually
-                sells "filled all the way up" rather than the body's own
-                rounded-but-still-a-bit-angular top edge on its own.
-                Rendered after the body so it paints over that top edge. */}
-            {cupFoam && renderedFoamCapBox && (
-              <div
-                className={`cup-foam-cap ${cupFoam.key}${drinkSendStage === 'vanishing' ? ' bowl-vanishing' : ''}${
-                  showSyrupSpotlight || showFoamSpotlight || showPowderSpotlight || showSendSpotlight ? ' topping-spotlight-exempt' : ''
-                }`}
-                aria-hidden="true"
-                style={{
-                  left: `${renderedFoamCapBox.left}%`,
-                  top: `${renderedFoamCapBox.top}%`,
-                  width: `${renderedFoamCapBox.width}%`,
-                  height: `${renderedFoamCapBox.height}%`,
-                }}
-              />
-            )}
-            {/* Syrup poured on top of everything else, but visually sinks to
-                the BOTTOM of the drink -- see the big comment on
-                getSyrupBoxFor above. .cup-syrup-fill is defined locally in
-                ToppingsStation.css (unlike the milk/matcha fills, this one's
-                a toppings-specific concept, not a Milk Selection one). */}
-            {cupSyrup && incomingSyrupBox && (
-              <div
-                className={`cup-syrup-fill ${cupSyrup.key}${drinkSendStage === 'vanishing' ? ' bowl-vanishing' : ''}${
-                  showSyrupSpotlight || showFoamSpotlight || showPowderSpotlight || showSendSpotlight ? ' topping-spotlight-exempt' : ''
-                }`}
-                aria-hidden="true"
-                style={{
-                  left: `${incomingSyrupBox.left}%`,
-                  top: `${incomingSyrupBox.top}%`,
-                  width: `${incomingSyrupBox.width}%`,
-                  height: `${incomingSyrupBox.height}%`,
-                }}
-              />
-            )}
-            {/* Matcha-powder/guava-powder settles as a scatter of small
-                flecks rather than a smooth fill -- see the big comment
-                above POWDER_HOVER_GAP for why, and for why the landing
-                shape/spot (powderFleckPositions) depends on whether foam's
-                already in the cup. Rendered last (after syrup) so it sits
-                over everything else already poured. */}
-            {cupPowder &&
-              powderFleckPositions.map((pos, index) => (
-                <span
-                  key={index}
-                  className={`cup-powder-fleck ${cupPowder.key}${
-                    drinkSendStage === 'vanishing' ? ' bowl-vanishing' : ''
-                  }${showSyrupSpotlight || showFoamSpotlight || showPowderSpotlight || showSendSpotlight ? ' topping-spotlight-exempt' : ''}`}
-                  aria-hidden="true"
-                  style={{ left: `${pos.left}%`, top: `${pos.top}%` }}
-                />
-              ))}
-            {/* Mint-leaf garnish -- see incomingLeafBox/getLeafBoxFor above.
-                Rendered last of all, on top of everything else already
-                poured, same as a real leaf laid across the finished drink's
-                own surface. An <img> (not a colored div like the fills
-                above) since a leaf actually has real printed detail worth
-                showing, not a flat color. */}
-            {incomingLeafBox && (
-              <img
-                src="./MintLeaf.png"
-                alt=""
-                aria-hidden="true"
-                draggable={false}
-                className={`cup-leaf-garnish${drinkSendStage === 'vanishing' ? ' bowl-vanishing' : ''}${
-                  showSyrupSpotlight || showFoamSpotlight || showPowderSpotlight || showSendSpotlight ? ' topping-spotlight-exempt' : ''
-                }`}
-                style={{
-                  left: `${incomingLeafBox.left}%`,
-                  top: `${incomingLeafBox.top}%`,
-                  width: `${incomingLeafBox.width}%`,
-                  height: `${incomingLeafBox.height}%`,
-                }}
-              />
-            )}
-            {/* Banana chip/cherry blossom garnishes -- same shape as the
-                mint-leaf garnish just above (own single-piece PNG, not the
-                whole-bowl pot art), reusing .cup-leaf-garnish directly since
-                it's already just plain positioning/animation with no color
-                of its own. */}
-            {incomingChipBox && (
-              <img
-                src="./BananaChip.png"
-                alt=""
-                aria-hidden="true"
-                draggable={false}
-                className={`cup-leaf-garnish${drinkSendStage === 'vanishing' ? ' bowl-vanishing' : ''}${
-                  showSyrupSpotlight || showFoamSpotlight || showPowderSpotlight || showSendSpotlight ? ' topping-spotlight-exempt' : ''
-                }`}
-                style={{
-                  left: `${incomingChipBox.left}%`,
-                  top: `${incomingChipBox.top}%`,
-                  width: `${incomingChipBox.width}%`,
-                  height: `${incomingChipBox.height}%`,
-                }}
-              />
-            )}
-            {incomingBlossomBox && (
-              <img
-                src="./CherryBlossom.png"
-                alt=""
-                aria-hidden="true"
-                draggable={false}
-                className={`cup-leaf-garnish${drinkSendStage === 'vanishing' ? ' bowl-vanishing' : ''}${
-                  showSyrupSpotlight || showFoamSpotlight || showPowderSpotlight || showSendSpotlight ? ' topping-spotlight-exempt' : ''
-                }`}
-                style={{
-                  left: `${incomingBlossomBox.left}%`,
-                  top: `${incomingBlossomBox.top}%`,
-                  width: `${incomingBlossomBox.width}%`,
-                  height: `${incomingBlossomBox.height}%`,
-                }}
-              />
-            )}
-          </>
-        )}
+          );
+        })()}
         {/* "Send to Serving" drop-zone -- see SEND_TO_FINAL_ZONE/
             canSendToFinal/beginSendToFinal above, same pattern as Milk
             Selection's own "Send to Toppings" zone (reusing its
@@ -4026,7 +4086,14 @@ const ToppingsStation = ({
             final beat exempts. Just a plain gray square with a thick arrow
             pointing at it -- no text, no animation (see .make-drink-zone's
             own comment in MatchaMaking.css). */}
-        {canSendToFinal && (
+        {!!incomingDrink &&
+          pourStage === 'idle' &&
+          foamPourStage === 'idle' &&
+          powderPourStage === 'idle' &&
+          leafStage === 'idle' &&
+          chipStage === 'idle' &&
+          blossomStage === 'idle' &&
+          drinkSendStage !== 'sent' && (
           <div
             className={`make-drink-zone${showSendSpotlight ? ' topping-spotlight-exempt' : ''}`}
             aria-hidden="true"

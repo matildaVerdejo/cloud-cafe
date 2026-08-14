@@ -477,12 +477,18 @@ const BOTTLE_POUR_MS = 900; // how long the tilt/pour holds before gliding back 
 // and scoreMixingDrink in gameloop/scoring.js (no longer passed a
 // spillCount) for the scoring side of this same removal.
 
-// How long the finished cup takes to glide into the Send Drink zone, and
-// how long its shrink/fade takes once it's arrived -- same values as
-// MatchaMaking's own BOWL_CARRY_MOVE_MS/BOWL_VANISH_MS, whose
-// .bowl-vanishing CSS animation (0.35s) this reuses directly.
+// How long the finished cup takes to glide into the Send Drink zone, how
+// long it then just sits there shrunk before heading off, and how long the
+// slide-off itself takes -- same values, and same "carry, hover-shrunk,
+// slide off to the right" shape, as MatchaMaking's own BOWL_CARRY_MOVE_MS/
+// BOWL_HOVER_MS/BOWL_VANISH_MS, whose .bowl-arrived/.bowl-slide-off CSS
+// (MatchaMaking.css, already loaded globally) this reuses directly rather
+// than duplicating -- same "reuse rather than risk drifting out of sync"
+// reasoning as this file's own reuse of .make-drink-zone/.bowl-vanishing/
+// .station-item-wrap elsewhere.
 const CUP_SEND_MOVE_MS = 350;
-const CUP_SEND_VANISH_MS = 350;
+const CUP_SEND_HOVER_MS = 1000;
+const CUP_SEND_VANISH_MS = 450;
 
 // Where the milk fill sits inside the cup once poured (see cupMilk/
 // beginPour below), as a fraction of the cup's own current box -- tracks the
@@ -546,6 +552,42 @@ export function getMilkBoxFor(cupPos, cupSize, bodyFrac = { left: 0, right: 1 })
     top: cupPos.top + CUP_MILK_BOX_FRAC.topFrac * cupSize.height,
     width: (CUP_MILK_BOX_FRAC.rightFrac - CUP_MILK_BOX_FRAC.leftFrac) * bodyWidth,
     height: (CUP_MILK_BOX_FRAC.bottomFrac - CUP_MILK_BOX_FRAC.topFrac) * cupSize.height,
+  };
+}
+
+// Converts an absolute box (left/top/width/height, all in container %, same
+// units getMilkBoxFor/getMatchaBoxFor/getIceCupSlotPos already return) into
+// a box expressed as a percentage of the cup's OWN current box (cupPos/
+// cupSize, also container %) instead -- i.e. what that same box's left/top/
+// width/height would need to be if it were rendered as a CHILD nested
+// inside a wrapper element that's already positioned/sized to cupPos/
+// cupSize, rather than as an independent top-level sibling.
+//
+// Used for the milk fill/matcha fill/placed ice cubes once they're nested
+// inside the active cup's own .cup-wrap (see the isActive branch of the
+// cup-type map further down) instead of being separately absolutely-
+// positioned elements recomputed from cupPos on every render -- nesting
+// them means they only ever move because their PARENT wrapper moves
+// (whether that's the plain left/top glide to the Send Drink zone, or the
+// shrink/slide-off once it's arrived there), the same "one shared parent
+// carries the whole group" fix MatchaMaking.js uses for its own bowl +
+// whisked-liquid image (see the isBowl branch in MOVABLE_ITEMS.map()
+// there) -- rather than each one separately trying to track/animate to
+// match the cup's own motion and risking drifting out of sync with it,
+// which is exactly the bug this whole thing is fixing.
+//
+// The math works out to a pure ratio with cupPos's own absolute position
+// canceling out entirely (a box's offset FROM the cup's own top-left
+// corner, divided by the cup's own size) -- so this doesn't care whether
+// the cup is currently on the shelf, the table, or mid-carry, only that
+// `box` and `cupPos`/`cupSize` were computed against the SAME live
+// cupPos/cupSize this render (which every call site below already does).
+export function toCupRelative(box, cupPos, cupSize) {
+  return {
+    left: ((box.left - cupPos.left) / cupSize.width) * 100,
+    top: ((box.top - cupPos.top) / cupSize.height) * 100,
+    width: (box.width / cupSize.width) * 100,
+    height: (box.height / cupSize.height) * 100,
   };
 }
 
@@ -1432,16 +1474,21 @@ const MilkSelection = ({
   const [focusedCupType, setFocusedCupType] = useState(null);
 
   // ---- Sending the finished cup on to Toppings (see SEND_DRINK_ZONE
-  // above) -- same "carry to a corner zone, then shrink/fade away" shape as
-  // MatchaMaking's own bowlStage/beginBowlCarry, just for the cup here.
+  // above) -- same "carry to a corner zone, hover shrunk, then slide off"
+  // shape as MatchaMaking's own bowlStage/beginBowlCarry, just for the cup
+  // (and everything riding along inside it -- milk fill, matcha fill, any
+  // placed ice cubes, all nested inside the active cup's own .cup-wrap, see
+  // the isActive branch of the cup-type map further down) here.
   //   'idle'      -- normal, cup behaves exactly as it always has (shelf <->
   //                  table drag/Enter-toggle).
   //   'carrying'  -- confirmed (dropped on the zone, or Enter/Space once
   //                  canSendDrink) -- gliding to the zone's own center.
-  //   'vanishing' -- arrived; shrinking/fading away (reuses MatchaMaking.
-  //                  css's .bowl-vanishing, already loaded globally, on the
-  //                  cup image, its fills, and any placed ice cubes).
-  //   'sent'      -- fade's finished; the cup (and everything in it) stops
+  //   'hovering'  -- arrived; shrinks down (.bowl-arrived, reused directly
+  //                  from MatchaMaking.css, already loaded globally) and
+  //                  sits still at the zone for CUP_SEND_HOVER_MS.
+  //   'vanishing' -- sliding off to the right (staying shrunk) and fading
+  //                  out (.bowl-slide-off, same reuse as above).
+  //   'sent'      -- slide's finished; the cup (and everything in it) stops
   //                  rendering entirely, same as the bowl once bowlStage
   //                  reaches 'sent' over on MatchaMaking.
   // Declared up here (rather than down near cupMilk/cupMatcha, where the
@@ -1611,6 +1658,16 @@ const MilkSelection = ({
     if (action !== 'Enter') return;
     if (shouldDebounceEnter(e)) return;
     if (cupSpot !== 'table') return;
+    // Guards against placing a cube once the cup's already mid-send --
+    // same "idle only" gate canPourMilk/canSendDrink already use. Without
+    // this, a newly-placed cube during 'carrying'/'hovering'/'vanishing'
+    // would render nested in the active cup's .cup-wrap (see the isActive
+    // branch of the cup-type map) straight away instead of playing its
+    // usual "flies from the ice box into the cup" landing transition
+    // first (that only plays while the cube renders as a top-level,
+    // absolutely-positioned element -- see the big comment on the nested
+    // ice cubes' own JSX for why), a harmless but avoidable visual glitch.
+    if (cupSendStage !== 'idle') return;
     e.preventDefault();
     // Same "first move collapses the halo down to just the focused one"
     // rule as the nav-graph effect's own ice-cube leg -- Enter counts as a
@@ -2111,7 +2168,11 @@ const MilkSelection = ({
 
   useEffect(() => {
     if (cupSendStage === 'carrying') {
-      const t = setTimeout(() => setCupSendStage('vanishing'), CUP_SEND_MOVE_MS);
+      const t = setTimeout(() => setCupSendStage('hovering'), CUP_SEND_MOVE_MS);
+      return () => clearTimeout(t);
+    }
+    if (cupSendStage === 'hovering') {
+      const t = setTimeout(() => setCupSendStage('vanishing'), CUP_SEND_HOVER_MS);
       return () => clearTimeout(t);
     }
     if (cupSendStage === 'vanishing') {
@@ -2288,62 +2349,272 @@ const MilkSelection = ({
             : canSendDrink
             ? `${cfg.alt} with the finished drink. Select it and press Enter to send it to Toppings.`
             : `${cfg.alt}. Select it and press Enter.`;
+          // Only ever true for the active cup, and only once it's actually
+          // heading to Toppings -- 'carrying'/'hovering'/'vanishing', not
+          // 'idle' (normal shelf/table cup, still fully interactive) or
+          // 'sent' (already returned null above).
+          const sending = isActive && cupSendStage !== 'idle';
+          // Shrinks the cup (see .bowl-arrived, reused directly from
+          // MatchaMaking.css) the instant it arrives at the Send Drink
+          // zone, and keeps it shrunk through the slide-off that follows --
+          // same `arrived`/`leaving` split, same reasoning, as isBowl's own
+          // flags in MatchaMaking.js's MOVABLE_ITEMS.map().
+          const arrived = isActive && (cupSendStage === 'hovering' || cupSendStage === 'vanishing');
+          const leavingCup = isActive && cupSendStage === 'vanishing';
           return (
-            <img
+            // Every cup (active or not) always gets this SAME wrapper+img
+            // shape, unconditionally -- switching which cup is active (see
+            // handleCupSwitchKeyDown) has to keep reusing the same DOM node
+            // for a given type's own <img> (see the big comment above on
+            // why key={type} matters for keyboard focus), so the shape
+            // can't differ between "idle" and "sending" or between active/
+            // inactive, only the props/children inside it can.
+            //
+            // The milk fill/matcha fill/any placed ice cubes are nested
+            // INSIDE this wrapper (below, active cup only) rather than
+            // rendered as separate top-level siblings positioned from
+            // cupRenderPos on every render -- that older setup gave each
+            // one its own left/top recompute (and, for the send sequence,
+            // its own copy of the shrink/fade treatment) that only ever
+            // approximated the cup's own motion, the same "separately-
+            // dragged layers" bug MatchaMaking.js's bowl + whisked-liquid
+            // image used to have (see the isBowl branch in that file's
+            // MOVABLE_ITEMS.map() for the full writeup) before they were
+            // merged into one wrapper there. Nesting these here means they
+            // only ever move because this wrapper moves, whether that's
+            // the plain left/top glide to the zone or the shrink/slide-off
+            // once it's arrived -- physically locked together, not just
+            // separately timed to match.
+            //
+            // bowl-arrived/bowl-slide-off (reused directly from
+            // MatchaMaking.css, already loaded globally -- same "reuse
+            // rather than duplicate and risk drifting out of sync"
+            // reasoning as this file's own .make-drink-zone/.bowl-vanishing/
+            // .station-item-wrap reuse elsewhere) live on THIS wrapper, not
+            // on the cup <img>/fills/ice cubes individually, for the same
+            // "one shared parent transform carries the whole group" reason.
+            //
+            // z-index: 27 while `sending` -- same bug/fix as MatchaMaking's
+            // own isBowl && settling: .bowl-arrived's scale() transform
+            // starts a new local stacking context on this wrapper the
+            // instant it applies, which needs an explicit z-index to still
+            // clear .make-drink-zone (z-index 5, or 26 while its own
+            // .milk-spotlight-exempt is up) at the page level -- and even
+            // before .bowl-arrived applies (still 'carrying'), the cup
+            // needs to already be clearing that zone marker as it glides
+            // in, not just once it's shrunk. 27 beats the marker's every
+            // tier outright, same value MatchaMaking uses for its own bowl.
+            <div
               key={type}
-              src={cfg.src}
-              alt={alt}
-              className={`glass-cup${
-                isActive && cupSendStage === 'vanishing' ? ' bowl-vanishing' : ''
-              }${
-                // Explicit, always-on version of the same white glow
-                // :focus-visible already gives every other selectable item
-                // (see .glass-cup:focus-visible in MilkSelection.css) --
-                // added per request/report that the auto-focused shelf cup
-                // wasn't showing it during this walkthrough beat.
-                // :focus-visible is a browser heuristic keyed on "was the
-                // last interaction keyboard-like," and the effect that
-                // auto-focuses the first cup the instant showCupSpotlight
-                // turns on can land right after a mouse-driven interaction
-                // on the previous screen, which some browsers don't count
-                // as keyboard-like -- so the ring silently never appeared
-                // until the player's first actual keypress. This class,
-                // tied to focusedCupType instead, isn't subject to that
-                // heuristic at all.
-                showCupSpotlight && focusedCupType === type ? ' milk-cup-focus-halo' : ''
-              }${
-                // showCupSpotlight exempts all three (still deciding which
-                // cup to use); showIceSpotlight/showBaseSpotlight/
-                // showBaseSettling/showBowlSpotlight/showBowlSettling/
-                // showSendSpotlight only ever need the ACTIVE one exempt
-                // (the cup itself, now that it's confirmed) -- the other
-                // two are back to being ordinary spares sitting on the
-                // shelf and should tint like everything else.
-                showCupSpotlight ||
-                (isActive &&
-                  (showIceSpotlight ||
-                    showBaseSpotlight ||
-                    showBaseSettling ||
-                    showBowlSpotlight ||
-                    showBowlSettling ||
-                    showSendSpotlight))
-                  ? ' milk-spotlight-exempt'
-                  : ''
-              }`}
-              data-focusable
-              tabIndex={0}
-              draggable={false}
+              className={`cup-wrap${arrived ? ' bowl-arrived' : ''}${leavingCup ? ' bowl-slide-off' : ''}`}
               style={{
                 left: `${pos.left}%`,
                 top: `${pos.top}%`,
                 width: `${size.width}%`,
                 height: `${size.height}%`,
-                ...(isActive && cupSendStage !== 'idle' ? { pointerEvents: 'none' } : {}),
+                ...(sending ? { zIndex: 27 } : {}),
               }}
-              onKeyDown={isActive ? handleCupKeyDown : handleCupSwitchKeyDown(type)}
-              onFocus={() => setFocusedCupType(type)}
-              onBlur={() => setFocusedCupType((prev) => (prev === type ? null : prev))}
-            />
+            >
+              <img
+                src={cfg.src}
+                alt={alt}
+                className={`glass-cup${
+                  // Explicit, always-on version of the same white glow
+                  // :focus-visible already gives every other selectable item
+                  // (see .glass-cup:focus-visible in MilkSelection.css) --
+                  // added per request/report that the auto-focused shelf cup
+                  // wasn't showing it during this walkthrough beat.
+                  // :focus-visible is a browser heuristic keyed on "was the
+                  // last interaction keyboard-like," and the effect that
+                  // auto-focuses the first cup the instant showCupSpotlight
+                  // turns on can land right after a mouse-driven interaction
+                  // on the previous screen, which some browsers don't count
+                  // as keyboard-like -- so the ring silently never appeared
+                  // until the player's first actual keypress. This class,
+                  // tied to focusedCupType instead, isn't subject to that
+                  // heuristic at all.
+                  showCupSpotlight && focusedCupType === type ? ' milk-cup-focus-halo' : ''
+                }${
+                  // showCupSpotlight exempts all three (still deciding which
+                  // cup to use); showIceSpotlight/showBaseSpotlight/
+                  // showBaseSettling/showBowlSpotlight/showBowlSettling/
+                  // showSendSpotlight only ever need the ACTIVE one exempt
+                  // (the cup itself, now that it's confirmed) -- the other
+                  // two are back to being ordinary spares sitting on the
+                  // shelf and should tint like everything else. Still needed
+                  // here (not just the wrapper's own z-index: 27 above) for
+                  // the beats that can happen while cupSendStage is still
+                  // 'idle' (showBowlSpotlight/showBowlSettling, during the
+                  // matcha pour -- the wrapper has no elevated z-index of
+                  // its own yet at that point).
+                  showCupSpotlight ||
+                  (isActive &&
+                    (showIceSpotlight ||
+                      showBaseSpotlight ||
+                      showBaseSettling ||
+                      showBowlSpotlight ||
+                      showBowlSettling ||
+                      showSendSpotlight))
+                    ? ' milk-spotlight-exempt'
+                    : ''
+                }`}
+                data-focusable
+                tabIndex={0}
+                draggable={false}
+                style={{
+                  ...(sending ? { pointerEvents: 'none' } : {}),
+                }}
+                onKeyDown={isActive ? handleCupKeyDown : handleCupSwitchKeyDown(type)}
+                onFocus={() => setFocusedCupType(type)}
+                onBlur={() => setFocusedCupType((prev) => (prev === type ? null : prev))}
+              />
+              {/* The milk fill itself -- see the big comment on
+                  CUP_MILK_BOX_FRAC/cupMilk above for why this is a plain
+                  colored shape rather than a swapped-in image. Rendered
+                  here (only for the active cup), after the <img> above, so
+                  DOM/paint order puts it on top of the cup art the same way
+                  it always painted on top of the ice cubes underneath --
+                  once there's enough milk in the cup the ice should read as
+                  submerged/half-hidden in the liquid rather than floating
+                  on top of it. pointer-events: none on .cup-milk-fill (see
+                  the CSS) means this doesn't block dragging a cube back out
+                  even while it's stacked on top visually. Only shown while
+                  the cup's actually on the table and hasn't fully vanished
+                  yet -- cupMilk itself doesn't get cleared when the cup
+                  goes back to the shelf, but there'd be nothing sensible to
+                  anchor the fill to up there (CUP_MILK_BOX_FRAC is only
+                  ever computed off the active cup's own table spot, via
+                  cupRenderPos/cupRenderSize). toCupRelative converts
+                  cupMilkBox's own absolute (container-%) box into a
+                  percentage of THIS wrapper's box instead, so it rides
+                  along automatically with wherever the wrapper currently
+                  is -- see that function's own big comment above for why.
+                  No bowl-arrived/bowl-slide-off of its own needed anymore
+                  (unlike before this was nested) -- the wrapper's own
+                  shrink/slide-off already carries this along as part of
+                  the same rigid unit. */}
+              {isActive && cupMilk && cupSpot === 'table' && cupSendStage !== 'sent' && (
+                <div
+                  className={`cup-milk-fill ${cupMilk.type}${
+                    showBowlSpotlight || showBowlSettling || showSendSpotlight ? ' milk-spotlight-exempt' : ''
+                  }`}
+                  aria-hidden="true"
+                  style={(() => {
+                    const rel = toCupRelative(cupMilkBox, cupRenderPos, cupRenderSize);
+                    return {
+                      left: `${rel.left}%`,
+                      top: `${rel.top}%`,
+                      width: `${rel.width}%`,
+                      height: `${rel.height}%`,
+                      // No --milk-fill-scale set here anymore -- the fill
+                      // always renders at its original fixed height
+                      // (cupMilkGrow's own default --milk-fill-scale of 1
+                      // in MilkSelection.css).
+                    };
+                  })()}
+                />
+              )}
+              {/* Matcha poured on top of the milk -- see the big comment on
+                  CUP_MATCHA_RAISE_FRAC/getMatchaBoxFor above for the box,
+                  and cupMatcha above for the state. Rendered right after
+                  the milk fill so it paints on top of it (same "on top of
+                  everything underneath" DOM-order reasoning as the milk
+                  fill itself), using the milk fill's own left/top/width so
+                  its taper lines up, just a shorter height. Same
+                  toCupRelative/wrapper-carries-the-shrink-and-slide
+                  reasoning as the milk fill above. */}
+              {isActive && cupMatcha && cupSpot === 'table' && cupSendStage !== 'sent' && (
+                <div
+                  className={`cup-matcha-fill ${cupMatcha.grade}${
+                    showBowlSettling || showSendSpotlight ? ' milk-spotlight-exempt' : ''
+                  }`}
+                  aria-hidden="true"
+                  style={(() => {
+                    const rel = toCupRelative(cupMatchaBox, cupRenderPos, cupRenderSize);
+                    return {
+                      left: `${rel.left}%`,
+                      top: `${rel.top}%`,
+                      width: `${rel.width}%`,
+                      height: `${rel.height}%`,
+                    };
+                  })()}
+                />
+              )}
+              {/* Placed ice cubes -- ONLY once the cup's actually being
+                  sent (cupSendStage !== 'idle'/'sent'), nested here so they
+                  ride along with the rest of the drink through the carry/
+                  hover/slide-off. While cupSendStage is still 'idle', placed
+                  cubes keep rendering the OLD way instead (see the
+                  ICE_BOX_SPOTS.map() further down) -- that version is what
+                  plays the "flies from the ice box into the cup" landing
+                  transition the first time a cube gets placed (a plain
+                  .ice-cube left/top CSS transition, which needs the cube to
+                  stay a top-level, absolutely-positioned element to animate
+                  across those two very different coordinate systems; it
+                  can't animate into a wrapper-relative percentage the way
+                  a plain "already sitting still" cube can). Since ice can
+                  only ever get placed while cupSendStage is still 'idle'
+                  (nothing re-enables placing once a send is underway), by
+                  the time cupSendStage leaves 'idle' every placed cube has
+                  long since finished that landing flight and is just
+                  sitting still at the cup's current (table) position --
+                  exactly where this nested version also renders it, so the
+                  handoff from the old top-level element to this new nested
+                  one is visually seamless, no jump. */}
+              {isActive &&
+                cupSendStage !== 'idle' &&
+                cupSendStage !== 'sent' &&
+                ICE_BOX_SPOTS.map((boxSpot, index) => {
+                  if (!icePlaced[index]) return null;
+                  const cubeSize = getIceCubeSize(activeCup);
+                  const abs = getIceCupSlotPos(
+                    index,
+                    cupRenderPos,
+                    cupRenderSize,
+                    CUP_TYPES[activeCup].bodyFrac,
+                    CUP_TYPES[activeCup].iceYOffsetFrac,
+                    CUP_TYPES[activeCup].iceSpreadScale,
+                    cubeSize
+                  );
+                  const rel = toCupRelative(
+                    { left: abs.left, top: abs.top, width: cubeSize.width, height: cubeSize.height },
+                    cupRenderPos,
+                    cupRenderSize
+                  );
+                  return (
+                    <img
+                      key={index}
+                      src="./IceCube.png"
+                      alt=""
+                      aria-hidden="true"
+                      // showSendSpotlight is the only walkthrough beat that
+                      // can still be up once cupSendStage has actually left
+                      // 'idle' (see its own comment above -- it stays up
+                      // through the whole carry/hover/vanish sequence), so
+                      // it's the only exempt condition that matters here --
+                      // but it still has to be applied: this nested cube is
+                      // a DIFFERENT element from the top-level placed cube
+                      // below (see the big comment above), which DOES carry
+                      // milk-spotlight-exempt during showSendSpotlight. Without
+                      // it here too, every placed cube silently lost its
+                      // exemption the instant the send sequence began and got
+                      // washed out under the pink walkthrough tint (z-index 25)
+                      // for the rest of the carry -- reading as the cubes just
+                      // vanishing mid-shrink -- even though the cup and its
+                      // milk/matcha fills right alongside it stayed correctly
+                      // exempt the whole time.
+                      className={`ice-cube placed${showSendSpotlight ? ' milk-spotlight-exempt' : ''}`}
+                      draggable={false}
+                      style={{
+                        left: `${rel.left}%`,
+                        top: `${rel.top}%`,
+                        width: `${rel.width}%`,
+                        height: `${rel.height}%`,
+                      }}
+                    />
+                  );
+                })}
+            </div>
           );
         })}
         {/* Name label above whichever cup currently has the white focus
@@ -2381,10 +2652,15 @@ const MilkSelection = ({
           })}
         {ICE_BOX_SPOTS.map((boxSpot, index) => {
           const placed = icePlaced[index];
-          // Once the finished drink's fully sent (cupSendStage 'sent'),
-          // any cube that was actually placed in the cup goes with it --
-          // an unplaced cube still sitting in the box is unaffected.
-          if (placed && cupSendStage === 'sent') return null;
+          // Once the cup's actually being sent (cupSendStage leaves
+          // 'idle'), any cube that was placed in the cup switches over to
+          // rendering nested inside the active cup's own .cup-wrap instead
+          // (see the isActive branch of the cup-type map further up) --
+          // this covers 'carrying'/'hovering'/'vanishing'/'sent' alike, so
+          // there's exactly one rendering of a given placed cube at any
+          // moment, never both. An unplaced cube still sitting in the box
+          // is unaffected either way.
+          if (placed && cupSendStage !== 'idle') return null;
           const pos = placed
             ? getIceCupSlotPos(
                 index,
@@ -2397,7 +2673,6 @@ const MilkSelection = ({
               )
             : boxSpot;
           const size = placed ? getIceCubeSize(activeCup) : ICE_BOX_SIZE;
-          const leaving = placed && cupSendStage === 'vanishing';
           return (
             <img
               key={index}
@@ -2405,8 +2680,6 @@ const MilkSelection = ({
               alt={placed ? '' : 'Ice cube. Select it and press Enter to place it in the cup.'}
               aria-hidden={placed || undefined}
               className={`ice-cube${placed ? ' placed' : ''}${
-                leaving ? ' bowl-vanishing' : ''
-              }${
                 // Per request: every still-unplaced cube gets the white
                 // focus halo the instant showIceSpotlight turns on, until
                 // the player's first arrow/Enter press (iceSpotlightMoved --
@@ -2464,63 +2737,14 @@ const MilkSelection = ({
             />
           );
         })}
-        {/* The milk fill itself -- see the big comment on CUP_MILK_BOX_FRAC/
-            cupMilk above for why this is a plain colored shape rather than
-            a swapped-in image. Rendered here, after the ice cubes above, so
-            DOM/paint order puts it on top of them -- once there's enough
-            milk in the cup the ice should read as submerged/half-hidden in
-            the liquid rather than floating on top of it. pointer-events:
-            none on .cup-milk-fill (see the CSS) means this doesn't block
-            dragging a cube back out even while it's stacked on top
-            visually. Only shown while the cup's actually on the table and
-            hasn't fully vanished yet -- cupMilk itself doesn't get cleared
-            when the cup goes back to the shelf, but there'd be nothing
-            sensible to anchor the fill to up there (CUP_MILK_BOX_FRAC is
-            only ever computed off the active cup's own table spot, via
-            cupRenderPos/cupRenderSize). Picks up
-            .bowl-vanishing the same as the cup image itself while
-            cupSendStage is 'vanishing', so the whole drink shrinks/fades as
-            one unit rather than the cup disappearing out from under a
-            still-solid fill for a frame. */}
-        {cupMilk && cupSpot === 'table' && cupSendStage !== 'sent' && (
-          <div
-            className={`cup-milk-fill ${cupMilk.type}${cupSendStage === 'vanishing' ? ' bowl-vanishing' : ''}${
-              showBowlSpotlight || showBowlSettling || showSendSpotlight ? ' milk-spotlight-exempt' : ''
-            }`}
-            aria-hidden="true"
-            style={{
-              left: `${cupMilkBox.left}%`,
-              top: `${cupMilkBox.top}%`,
-              width: `${cupMilkBox.width}%`,
-              height: `${cupMilkBox.height}%`,
-              // No --milk-fill-scale set here anymore -- the fill always
-              // renders at its original fixed height (cupMilkGrow's own
-              // default --milk-fill-scale of 1 in MilkSelection.css).
-            }}
-          />
-        )}
-        {/* Matcha poured on top of the milk -- see the big comment on
-            CUP_MATCHA_RAISE_FRAC/getMatchaBoxFor above for the box, and
-            cupMatcha above for the state. Rendered right after the milk
-            fill so it paints on top of it (same "on top of everything
-            underneath" DOM-order reasoning as the milk fill itself), using
-            the milk fill's own left/top/width so its taper lines up, just a
-            shorter height. Same cupSendStage 'sent'/'vanishing' handling as
-            the milk fill above. */}
-        {cupMatcha && cupSpot === 'table' && cupSendStage !== 'sent' && (
-          <div
-            className={`cup-matcha-fill ${cupMatcha.grade}${cupSendStage === 'vanishing' ? ' bowl-vanishing' : ''}${
-              showBowlSettling || showSendSpotlight ? ' milk-spotlight-exempt' : ''
-            }`}
-            aria-hidden="true"
-            style={{
-              left: `${cupMatchaBox.left}%`,
-              top: `${cupMatchaBox.top}%`,
-              width: `${cupMatchaBox.width}%`,
-              height: `${cupMatchaBox.height}%`,
-            }}
-          />
-        )}
+        {/* The milk fill and matcha fill used to render here as separate
+            top-level siblings, positioned from cupRenderPos on every
+            render -- they're now nested inside the active cup's own
+            .cup-wrap instead (see the isActive branch of the cup-type map
+            further up), so they ride the same wrapper the cup <img> itself
+            moves by rather than approximating its position/motion
+            independently. See the big comment on that JSX for the full
+            reasoning. */}
         {bottleItems.map((item) => {
           const pos = bottlePositions[item.key];
           // All four bottles share the same pour sequence now -- settling/
@@ -2647,16 +2871,27 @@ const MilkSelection = ({
             MatchaMaking.css is already loaded globally -- see the comment
             on the carried-over bowl/whisked-liquid images earlier in this
             file for that same reasoning). Appears once there's a base
-            poured and disappears the instant the cup actually heads there
-            (cupSendStage leaving 'idle'), same beat as the bowl's own zone
-            retiring in MatchaMaking.js. Not itself focusable -- it's a drop
+            poured and, per request (matching the same fix on MatchaMaking's
+            own zone), just STAYS on screen from then on -- through
+            'carrying'/'hovering'/'vanishing'/'sent', all the way to this
+            customer's own visit ending -- rather than unmounting the
+            instant the cup heads there. Deliberately NOT gated on
+            canSendDrink itself (which requires cupSendStage === 'idle') --
+            that condition is only for whether Enter/a drop actually SENDS
+            the cup right now, not for whether this marker should still be
+            visible; showSendSpotlight below (which already spans the whole
+            send sequence, only excluding 'sent') is what makes it lose its
+            .milk-spotlight-exempt class at exactly the point the
+            walkthrough's own next beat/label (showAdvanceSpotlight) picks
+            up, so the pink tint (first order only) simply paints over it
+            then -- covered, not removed. Not itself focusable -- it's a drop
             target the *cup* gets sent to via its own Enter press (see
             handleCupKeyDown above), same "the marker just marks a zone"
             pattern as the ice box/cup zones elsewhere on this screen. Just
             a plain gray square with a thick arrow pointing at it -- no
             text, no animation (see .make-drink-zone's own comment in
             MatchaMaking.css). */}
-        {canSendDrink && (
+        {cupSpot === 'table' && !!cupMilk && pourStage === 'idle' && (
           <div
             className={`make-drink-zone${showSendSpotlight ? ' milk-spotlight-exempt' : ''}`}
             aria-hidden="true"

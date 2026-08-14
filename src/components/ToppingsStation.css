@@ -517,6 +517,22 @@
   z-index: 26;
 }
 
+/* Compound-selector override for the "Send to Serving" marker specifically
+   (.make-drink-zone, reused from MatchaMaking.css) -- same cross-file CSS
+   declaration-order tiebreak bug already fixed identically in
+   MilkSelection.css's own .make-drink-zone.milk-spotlight-exempt. Equal-
+   specificity rules resolve by which was declared LAST, not by DOM order or
+   which file loaded first; .make-drink-zone's own z-index: 5 rule in
+   MatchaMaking.css could otherwise win that tiebreak over the plain
+   .topping-spotlight-exempt rule above depending on this file's own import
+   order relative to MatchaMaking.css, silently letting the pink walkthrough
+   tint cover the marker even while this class is applied. This compound
+   selector has higher specificity than either single-class rule, so it wins
+   outright regardless of declaration order. */
+.make-drink-zone.topping-spotlight-exempt {
+  z-index: 26;
+}
+
 /* First-order-only walkthrough callout, Order button -- see
    showStationSpotlight in ToppingsStation.js. Same pink/mint panel look as
    every other walkthrough callout, row layout (arrow at the end, closest to
