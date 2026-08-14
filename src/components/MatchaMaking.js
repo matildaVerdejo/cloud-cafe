@@ -1011,7 +1011,14 @@ const BOWL_VANISH_MS = 450;
 // every frame), it was left alone rather than risk a subtly-wrong scoop
 // reading for a comparatively small, one-shot cost.
 
-const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order, onSendToMilk, onScored }) => {
+// isWalkthrough (see CustomerOrdering.js's own big comment on this same
+// prop) is true only on order 1 of a "training day" run -- every bare
+// customerNumber comparison in this file used to double as "is this
+// the walkthrough" before a player could ever reach order 1 without the
+// walkthrough; now that "i'm trained" skips it while still playing a normal
+// order 1, this prop is the one that actually means "show the walkthrough,"
+// and customerNumber alone is back to just meaning "which order is this."
+const MatchaMaking = ({ activeStep, customerNumber, isWalkthrough, onNavigate, onAdvance, order, onSendToMilk, onScored }) => {
   const containerRef = useRef(null);
   // PERF: drives the kettle/bowl/whisk's move glide via transform instead
   // of a left/top transition -- see useFlipGlide.js's own big comment for
@@ -1201,12 +1208,43 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
         : [];
       const firstTin = tins[0] ?? null;
 
-      // Station dot -> whisk.
+      // Whether `el` is actually reachable right now -- i.e. NOT one of the
+      // tins/heater button/kettle/whisk that's been locked out of
+      // navigation after being used (orders 2-5 only, see tinsLocked/
+      // heaterLocked/kettleLocked/whiskLocked's own big comment above).
+      //
+      // canFocus alone isn't the whole fix, though -- an earlier version of
+      // this file let a keypress fall through ungated (no preventDefault)
+      // to useFlatFocusNav's own generic spatial-nav listener whenever a
+      // jump's fixed target turned out to be locked, on the theory that
+      // spatial nav would naturally route around the gap. In practice that
+      // produced exactly the kind of "unnatural" jump per request -- e.g.
+      // Left from the bowl with the heater button locked landed on the
+      // station-number dot (geometrically the nearest OTHER reachable
+      // thing in that general direction), nothing like where Left from the
+      // bowl actually leads. resolveFirst below replaces that: each jump
+      // below now names its own short, explicit chain of candidates in
+      // priority order (the same shape as a locked node's own further
+      // destination in that direction -- e.g. bowl's Left chain is
+      // "heater button, then wherever heater's own Up leg would have gone
+      // (the kettle), then wherever THAT leg's own Up leg would have gone
+      // (Settings)"), and resolveFirst just picks the first one that's
+      // still actually reachable. The keypress is always intercepted
+      // (preventDefault/stopImmediatePropagation) once a branch below is
+      // handling that specific direction, whether or not any candidate in
+      // its chain turns out reachable -- if none do, focus simply stays
+      // put rather than falling through to a geometrically-nearest-but-
+      // unrelated element.
+      const canFocus = (el) => !!el && document.contains(el) && !el.disabled && el.tabIndex >= 0;
+      const resolveFirst = (...candidates) => candidates.find((el) => canFocus(el)) || null;
+
+      // Station dot -> whisk (falling back to the bowl, never locked, if
+      // the whisk's already been used).
       if (active === document.querySelector('.progress-step.current')) {
         if (action === 'Up') {
           e.preventDefault();
           e.stopImmediatePropagation();
-          whiskRef.current?.focus();
+          resolveFirst(whiskRef.current, bowlRef.current)?.focus();
         }
         return;
       }
@@ -1222,6 +1260,45 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
       // focus back to this exact tin rather than its usual kettle default.
       const tinIndex = tins.indexOf(active);
       if (tinIndex !== -1) {
+        // Belt-and-suspenders once a grade's confirmed (orders 2-5 --
+        // tinsLocked's own big comment above): the tins lose data-focusable/
+        // tabIndex the moment they're locked, which is what actually stops
+        // fresh D-pad presses from reaching one in the first place, but
+        // that alone doesn't blur an ALREADY-focused tin (removing tabIndex
+        // never blurs, same reasoning as the kettle/whisk's own conditional
+        // just below) -- without this guard, arrowing away and then back
+        // toward a still-focused-but-now-locked tin could still fall into
+        // this branch and cycle Left/Right between tins that are supposed
+        // to be unreachable. Once locked, this collapses to the exact same
+        // graph a locked tin's Up/Down legs already point to elsewhere
+        // (Order button / whisk), no more Left/Right cycling.
+        //
+        // Checked via canFocus(active) itself (a LIVE DOM read -- does this
+        // exact element currently carry data-focusable/tabIndex), not the
+        // tinsLocked JS boolean -- this whole handler is registered once
+        // with an empty dependency array (see the effect's own comment up
+        // top), so any plain state-derived boolean like tinsLocked would be
+        // frozen at that first render (always false, nothing's locked yet
+        // at mount) and this guard would silently never fire. The DOM
+        // itself is always current, no matter how stale this closure's own
+        // captured variables are -- same reasoning cupSpotRef/icePlacedRef
+        // exist for elsewhere in this project, just solved here by reading
+        // the render output directly instead of adding another ref.
+        if (!canFocus(active)) {
+          if (action === 'Up') {
+            e.preventDefault();
+            e.stopImmediatePropagation();
+            orderButton?.focus();
+          } else if (action === 'Down') {
+            e.preventDefault();
+            e.stopImmediatePropagation();
+            whiskRef.current?.focus();
+          } else {
+            e.preventDefault();
+            e.stopImmediatePropagation();
+          }
+          return;
+        }
         if (action === 'Left' || action === 'Right') {
           e.preventDefault();
           e.stopImmediatePropagation();
@@ -1294,9 +1371,17 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
           preSettingsFocusRef.current = active;
           gearButton?.focus();
         } else if (action === 'Down') {
+          // firstTin can be locked out by now (orders 2-5, already
+          // selected) -- chain continues on to the whisk (mirroring the
+          // tin's own Down leg to the whisk, same "skip to wherever the
+          // locked node's own leg would have gone" shape resolveFirst's
+          // own comment above describes), then the bowl (never locked,
+          // always the ultimate fallback once everything else on this
+          // side is used up) rather than stranding the player at the Order
+          // button with no way back down at all.
           e.preventDefault();
           e.stopImmediatePropagation();
-          firstTin?.focus();
+          resolveFirst(firstTin, whiskRef.current, bowlRef.current)?.focus();
         }
         return;
       }
@@ -1309,23 +1394,26 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
         } else if (action === 'Down') {
           const popoverOpen = !!document.querySelector('.settings-popover');
           if (popoverOpen) return;
-          e.preventDefault();
-          e.stopImmediatePropagation();
           // Returns to wherever focus actually came from (see
           // preSettingsFocusRef's own comment above) -- the Order button's
           // own Left leg and the tin-picking walkthrough beat's own Up leg
-          // both set this right before landing here. Falls back to the
-          // kettle (this leg's original, only-ever target before the tin
-          // beat got its own way in) whenever that ref is empty or no
-          // longer points at something real -- e.g. plain old Right ->
-          // gear -> Down never went through either of those two legs at
-          // all, so there's nothing of this beat's own to return to.
-          const target = preSettingsFocusRef.current;
-          if (target && document.contains(target) && !target.disabled) {
-            target.focus();
-          } else {
-            kettleRef.current?.focus();
-          }
+          // both set this right before landing here. Chain continues on to
+          // the kettle (this leg's original, only-ever target before the
+          // tin beat got its own way in), then the heater button (mirroring
+          // the kettle's own Down leg), then the bowl (never locked, always
+          // the ultimate fallback once everything else down this chain is
+          // used up) if the recorded target/kettle/heater button are all
+          // now locked out (orders 2-5, already used) -- same "skip to
+          // wherever the locked node's own leg would have gone" shape
+          // resolveFirst's own comment above describes.
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          resolveFirst(
+            preSettingsFocusRef.current,
+            kettleRef.current,
+            heaterButtonRef.current,
+            bowlRef.current
+          )?.focus();
         }
         return;
       }
@@ -1351,9 +1439,14 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
           return;
         }
         if (action === 'Up') {
+          // firstTin can be locked out by now (orders 2-5, tins are used
+          // well before the whisk is) -- chain continues on to the Order
+          // button (mirroring the tin's own Up leg) per request, same
+          // "skip to wherever the locked node's own leg would have gone"
+          // shape resolveFirst's own comment above describes.
           e.preventDefault();
           e.stopImmediatePropagation();
-          firstTin?.focus();
+          resolveFirst(firstTin, orderButton)?.focus();
         } else if (action === 'Left') {
           e.preventDefault();
           e.stopImmediatePropagation();
@@ -1384,13 +1477,44 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
           return;
         }
         if (action === 'Left') {
+          // heaterButtonRef can be disabled by now (orders 2-5, once
+          // tempConfirmed) -- chain continues on to the kettle (mirroring
+          // the heater button's own Up leg), then Settings (mirroring the
+          // kettle's own Up leg) if the kettle's ALSO since been locked out
+          // (both fully used by the time the bowl's reachable at all), per
+          // request. Without this chain, a locked heater button used to
+          // swallow every Left press from the bowl outright, permanently
+          // stranding the player there.
           e.preventDefault();
           e.stopImmediatePropagation();
-          heaterButtonRef.current?.focus();
+          resolveFirst(heaterButtonRef.current, kettleRef.current, gearButton)?.focus();
         } else if (action === 'Right') {
+          // whiskRef is always locked by the time the bowl is reachable at
+          // all on orders 2-5 (whisking finishes right before focus lands
+          // on the bowl -- see whiskLocked's own comment above). There's no
+          // further node beyond the whisk in this direction to chain on to
+          // (unlike the Left leg above), so this simply traps -- focus
+          // stays on the bowl -- once the whisk's locked, same as it always
+          // has whenever a leg's target turns out unreachable with nothing
+          // further to try.
           e.preventDefault();
           e.stopImmediatePropagation();
-          whiskRef.current?.focus();
+          resolveFirst(whiskRef.current)?.focus();
+        } else if (action === 'Up') {
+          // Settings (gearButton) is never one of the locked-after-use
+          // items itself, so no canFocus guard needed here -- mirrors the
+          // kettle's own Up leg below, including remembering where focus
+          // came from so Settings can hand it back on close.
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          preSettingsFocusRef.current = active;
+          gearButton?.focus();
+        } else if (action === 'Down') {
+          // Mirrors the whisk's own Down leg -- straight down to the
+          // station-progress dot, same as every other idle top-row item.
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          document.querySelector('.progress-step.current')?.focus();
         } else {
           e.preventDefault();
           e.stopImmediatePropagation();
@@ -1405,14 +1529,21 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
       // whisk/bowl above do -- there's no state to gate on, so its
       // documented graph (Up -> kettle, Right -> bowl) is just always live.
       if (active === heaterButtonRef.current) {
+        // Both legs resolved through resolveFirst for consistency (see its
+        // own big comment above), even though the heater button can
+        // currently only hold focus at all while it's still unlocked
+        // itself, at which point neither the kettle nor the bowl can yet
+        // be locked either -- so these are single-candidate chains that
+        // always resolve in practice, just future-proofed against that
+        // timing ever changing.
         if (action === 'Up') {
           e.preventDefault();
           e.stopImmediatePropagation();
-          kettleRef.current?.focus();
+          resolveFirst(kettleRef.current)?.focus();
         } else if (action === 'Right') {
           e.preventDefault();
           e.stopImmediatePropagation();
-          bowlRef.current?.focus();
+          resolveFirst(bowlRef.current)?.focus();
         } else {
           e.preventDefault();
           e.stopImmediatePropagation();
@@ -1427,7 +1558,8 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
       // heater button automatically. While idle it falls through to its own
       // documented graph instead: Up -> Settings gear (mirrors the gear's
       // own Down leg above, which already defaults back to this exact ref),
-      // Down -> heater button.
+      // Down -> station-progress dot (mirrors the whisk's own Down leg,
+      // same as every other idle top-row item).
       if (active === kettleRef.current) {
         if (kettleStageRef.current === 'moving' || kettleStageRef.current === 'pouring') {
           e.preventDefault();
@@ -1435,6 +1567,8 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
           return;
         }
         if (action === 'Up') {
+          // gearButton (Settings) is never one of the locked-after-use
+          // items itself, so no canFocus guard needed on this leg.
           e.preventDefault();
           e.stopImmediatePropagation();
           preSettingsFocusRef.current = active;
@@ -1442,7 +1576,7 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
         } else if (action === 'Down') {
           e.preventDefault();
           e.stopImmediatePropagation();
-          heaterButtonRef.current?.focus();
+          document.querySelector('.progress-step.current')?.focus();
         } else {
           e.preventDefault();
           e.stopImmediatePropagation();
@@ -1476,11 +1610,11 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
   // retires showOrderHint above: once the player's opened the drawer AND
   // closed it again. Reuses that flag directly rather than tracking its
   // own separate one-way state, since the two lifecycles are identical by
-  // design. customerNumber === 1 keeps this off for the 2nd/3rd rounds,
+  // design. isWalkthrough keeps this off for the 2nd/3rd rounds,
   // same as every other beat in this walkthrough -- they still get the
   // plain flashing highlight/hint text showOrderHint already drives, just
   // without the pink tint over everything else.
-  const showStationSpotlight = customerNumber === 1 && showOrderHint;
+  const showStationSpotlight = isWalkthrough && showOrderHint;
 
   // First-order-only nav lockdown -- separate, shorter-lived flag from
   // showOrderHint/showStationSpotlight above (which stay up through as many
@@ -1495,7 +1629,7 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
   // toggle specifically (nowOpen === true) -- unlike showOrderHint's own
   // onToggle branch, which only cares about the closing one.
   const [hasOpenedOrderReceipt, setHasOpenedOrderReceipt] = useState(false);
-  const showOrderButtonLock = customerNumber === 1 && !hasOpenedOrderReceipt;
+  const showOrderButtonLock = isWalkthrough && !hasOpenedOrderReceipt;
 
   // Moves focus onto the Order receipt button the instant showOrderButtonLock
   // turns on -- pairs with suppressInitialFocus on <ProgressBar> below so
@@ -1739,20 +1873,27 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
   const [itemPositions, setItemPositions] = useState(MOVABLE_START);
 
   // Sends focus to the kettle itself the instant the temp gauge disappears
-  // (tempBarVisible flipping false, TEMP_BAR_LINGER_MS after stopBar). Same
-  // "the control that was focused is unmounting, so it must hand focus off
-  // explicitly or it falls into the void" reasoning as the scoop-bar/big-
-  // spoon pair above -- the gauge (barRef) is what's been focused since it
-  // opened, and it's about to be removed from the DOM outright -- but
-  // rather than landing back on the heater button that opened it, this
-  // sends focus straight on to the kettle, exactly where play continues
-  // next (arrow over and press Enter to pour the water, same beat
-  // showKettleHint/showKettleSpotlight below already flash on).
+  // (tempBarVisible flipping false, TEMP_BAR_LINGER_MS after stopBar) --
+  // but ONLY for the first-order walkthrough now, per request: orders 2-5
+  // shouldn't get auto-advanced from one tool to the next distinct tool
+  // (that's a "pre-select the next thing for the player" jump, not the
+  // "opening a widget focuses directly into it" handoff that's still fine
+  // to keep -- e.g. pressing Enter on the heater button still auto-focuses
+  // the temp gauge it just opened, since that's a direct consequence of the
+  // player's own action, not a skip-ahead). On orders 2-5, focus instead
+  // returns to the matcha bowl -- per follow-up request, rather than just
+  // falling away into the void, so the player always has one known,
+  // reachable anchor point to navigate the rest of the station from after
+  // any tool's own action ends. bowlRef is always mounted/focusable by this
+  // point (the bowl itself never locks out the way the tins/heater/kettle/
+  // whisk do), so this is always a safe, valid target.
   useEffect(() => {
-    if (!tempBarVisible) {
+    if (isWalkthrough && !tempBarVisible) {
       kettleRef.current?.focus();
+    } else if (!isWalkthrough && !tempBarVisible) {
+      bowlRef.current?.focus();
     }
-  }, [tempBarVisible]);
+  }, [tempBarVisible, customerNumber]);
 
   // ---- Kettle water-pour sequence: same "hover, then pour" shape as the
   // matcha spoon's dump sequence, but layered on top of the *shared*
@@ -1806,7 +1947,7 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
   // showTinSpotlight/showScoopSpotlight/showSpoonSpotlight further up.
   // Reuses showKettleHint's own boundary, exempting the kettle itself
   // instead of a hint label + flashing halo.
-  const showKettleSpotlight = customerNumber === 1 && showKettleHint;
+  const showKettleSpotlight = isWalkthrough && showKettleHint;
 
   // Sixth beat -- covers the actual pour, once the kettle's reached the
   // bowl and water starts falling (kettleStage 'pouring', the same instant
@@ -1818,7 +1959,7 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
   // pour -- see the JSX further down), and the bowl itself plus its
   // powder/water contents, so the whole "water landing in the bowl" moment
   // stays visible rather than being cut off by the tint mid-pour.
-  const showKettlePourSpotlight = customerNumber === 1 && kettleStage === 'pouring';
+  const showKettlePourSpotlight = isWalkthrough && kettleStage === 'pouring';
   // This used to also be bumped once per pour and used as bowl-water's React
   // `key`, so a repeat pour got a fresh mount and the grow animation reliably
   // replayed. Dropped entirely -- confirmed (via a live DOM count during
@@ -1993,13 +2134,13 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
   // at bowlStage === 'sent'. Ends there instead (excludes 'sent') so the
   // handoff between the two stays seamless, same "OR'd together, no gap"
   // reasoning the ProgressBar's own spotlightExempt prop already relies on.
-  const showBowlCarrySpotlight = customerNumber === 1 && whiskStage === 'done' && bowlStage !== 'sent';
+  const showBowlCarrySpotlight = isWalkthrough && whiskStage === 'done' && bowlStage !== 'sent';
 
   // Tenth and final walkthrough beat -- reuses the SAME boundary this
   // screen's own final highlight beat already uses (bowlStage === 'sent',
   // see highlightCurrentStep on <ProgressBar> further down), exempting the
   // whole ProgressBar instead of its plain currentStepHint label.
-  const showStationAdvanceSpotlight = customerNumber === 1 && bowlStage === 'sent';
+  const showStationAdvanceSpotlight = isWalkthrough && bowlStage === 'sent';
 
   useEffect(() => {
     if (bowlStage === 'carrying') {
@@ -2082,6 +2223,54 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
   // different tin swaps straight to that one instead.
   const [selectedTin, setSelectedTin] = useState(null);
 
+  // ---- "Used tool" navigation lockout (orders 2-5 only) ------------------
+  // Per request: once a player has picked their matcha grade / used the
+  // heater button / used the kettle / used the whisk, that item should no
+  // longer be reachable by D-pad navigation OR selectable via Enter --
+  // effectively removed from the controls once its one job is done, rather
+  // than staying sitting there focusable (and, in the kettle's case, even
+  // actually re-triggerable -- see beginKettleDump's own new guard below)
+  // for no further purpose. Explicitly scoped to !isWalkthrough so
+  // the first-order walkthrough keeps behaving exactly as it always has
+  // (tins stay switchable, the heater button stays re-pressable to retry
+  // the temp minigame, etc.) -- per request, only orders 2-5 get this
+  // lockdown.
+  //
+  // Each flag below flips on right when that item's own job is considered
+  // "done" and never flips back off for the rest of this station visit:
+  //   - tinsLocked: the instant ANY tin is confirmed (selectedTin set) --
+  //     the player's grade choice is final from that point, no more
+  //     switching between tins at all (see the tins' own data-focusable
+  //     below, and the guard added to handleTinKeyDown above... er, below).
+  //   - heaterLocked: the instant a temperature reading's confirmed
+  //     (tempConfirmed) -- no more re-pressing the heater button to redo
+  //     the minigame.
+  //   - kettleLocked: the instant the kettle's actually been used --
+  //     either currently mid-pour (kettleStage !== 'idle') or already
+  //     poured (bowlWater set, which stays true even after kettleStage
+  //     itself settles back to 'idle' once the glide-back finishes -- see
+  //     beginKettleDump's own stage effect). Checking bowlWater too (not
+  //     just kettleStage) is what actually closes the loophole: without
+  //     it, the kettle would silently become re-focusable/re-triggerable
+  //     again the moment it finished gliding home.
+  //   - whiskLocked: the instant the whisk's actually been used
+  //     (whiskStage leaves 'idle') -- covers 'moving'/'mixing'/'done'
+  //     alike, same one-shot-tool shape as the kettle.
+  //
+  // None of these need to worry about breaking the normal forward flow --
+  // every one of these items already gets handed focus automatically by
+  // its own effect the moment it becomes the next thing to do (scoop bar
+  // on tin-select, heater button once the scoop's poured, kettle once the
+  // temp gauge closes, whisk once the kettle's done pouring -- see each of
+  // those effects' own comments), and every one of those auto-focus calls
+  // always fires strictly BEFORE the corresponding lock flag here would
+  // ever flip true. These flags only ever block reaching a tool a second
+  // time, never the first.
+  const tinsLocked = !isWalkthrough && !!selectedTin;
+  const heaterLocked = !isWalkthrough && tempConfirmed;
+  const kettleLocked = !isWalkthrough && (kettleStage !== 'idle' || !!bowlWater);
+  const whiskLocked = !isWalkthrough && whiskStage !== 'idle';
+
   // Which tin (if any) currently has the white focus halo -- driven by
   // plain onFocus/onBlur on each tin (see the JSX below), separate from
   // selectedTin above since the halo shows up just from being
@@ -2103,6 +2292,12 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
   const handleTinKeyDown = (item) => (e) => {
     const action = getActionFromKeyEvent(e);
     if (action !== 'Enter') return;
+    // Belt-and-suspenders alongside the tins' own conditional data-focusable
+    // below (see tinsLocked's big comment above) -- that's what actually
+    // stops a locked tin from being reachable via D-pad in the first place,
+    // but this guard covers the (currently impossible, but cheap to guard
+    // against) case of Enter still somehow reaching a locked tin's handler.
+    if (tinsLocked) return;
     if (shouldDebounceEnter(e)) return;
     e.preventDefault();
     playButtonClick();
@@ -2206,10 +2401,10 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
   // hint) so the two don't show at once -- same "new pink-styled callout
   // replaces the old text hint for the first order only" treatment
   // showStationSpotlight already uses for the Order button above; orders
-  // 2/3 (customerNumber !== 1) still get exactly those old hints, untouched.
-  const showTinSpotlight = customerNumber === 1 && showTinHint;
-  const showScoopSpotlight = customerNumber === 1 && !!selectedTin && !scoopConfirmed;
-  const showSpoonSpotlight = customerNumber === 1 && scoopConfirmed && bigSpoonStage !== 'done';
+  // 2/3 (!isWalkthrough) still get exactly those old hints, untouched.
+  const showTinSpotlight = isWalkthrough && showTinHint;
+  const showScoopSpotlight = isWalkthrough && !!selectedTin && !scoopConfirmed;
+  const showSpoonSpotlight = isWalkthrough && scoopConfirmed && bigSpoonStage !== 'done';
 
   // Moves focus onto the first (cafe-grade) tin the instant showTinSpotlight
   // turns on -- same "the highlighted thing becomes the next thing
@@ -2251,7 +2446,7 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
   // Seventh and final walkthrough beat, first order only -- reuses
   // showWhiskHint's own boundary, exempting the whisk itself instead of a
   // hint label + flashing halo.
-  const showWhiskSpotlight = customerNumber === 1 && showWhiskHint;
+  const showWhiskSpotlight = isWalkthrough && showWhiskHint;
 
   // Eighth and final walkthrough beat, first order only -- picks up the
   // instant the player actually selects the whisk (showWhiskSpotlight above
@@ -2265,7 +2460,7 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
   // spill puddles, so the whole minigame -- everything the player actually
   // needs to see to play it -- stays visible while the rest of the counter
   // tints.
-  const showMixSpotlight = customerNumber === 1 && (whiskStage === 'moving' || whiskStage === 'mixing');
+  const showMixSpotlight = isWalkthrough && (whiskStage === 'moving' || whiskStage === 'mixing');
 
   const bigSpoonRef = useRef(null);
 
@@ -2453,7 +2648,7 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
   // showHeaterHint's own boundary directly (same rising/falling edge: pour
   // finished, heater not on yet), exempting the heater button itself
   // instead of a hint label + flashing halo.
-  const showHeaterSpotlight = customerNumber === 1 && showHeaterHint;
+  const showHeaterSpotlight = isWalkthrough && showHeaterHint;
 
   // Continuation of the fourth beat -- once the heater's actually switched
   // on, the spotlight stays up but its exempt target grows to also cover
@@ -2466,23 +2661,24 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
   // (tempBarVisible flipping false, after stopBar's own post-catch
   // linger) -- see showKettleSpotlight further down for the beat right
   // after this one.
-  const showTempBarSpotlight = customerNumber === 1 && heaterOn && tempBarVisible;
+  const showTempBarSpotlight = isWalkthrough && heaterOn && tempBarVisible;
 
   // Sends focus to the heater/kettle button the moment the pour finishes
-  // (bigSpoonStage settling on 'done'). Not a "guided next step" nudge like
-  // the ones that stayed removed elsewhere -- the big spoon that was
-  // focused right up until this point actually unmounts the instant
-  // bigSpoonStage hits 'done' (see the JSX below), so without handing focus
-  // off explicitly it would just fall into the void (document.body) instead
-  // of landing somewhere a player can see and act on. The heater button is
-  // also exactly where play continues next (press Enter to heat the water,
-  // same beat showHeaterHint/showHeaterSpotlight above already flash on),
-  // so its white focus halo doubles as the cue for where to go.
+  // (bigSpoonStage settling on 'done') -- but only for the first-order
+  // walkthrough now, per request (see kettleRef's own matching effect
+  // above for the full "tool-to-tool auto-advance" vs. "opening a widget
+  // focuses directly into it" distinction this now draws). For orders 2-5,
+  // the big spoon still unmounts the instant bigSpoonStage hits 'done' same
+  // as always, but focus now returns to the matcha bowl instead of falling
+  // away entirely -- same bowlRef anchor-point reasoning as kettleRef's own
+  // matching effect above.
   useEffect(() => {
-    if (bigSpoonStage === 'done') {
+    if (isWalkthrough && bigSpoonStage === 'done') {
       heaterButtonRef.current?.focus();
+    } else if (!isWalkthrough && bigSpoonStage === 'done') {
+      bowlRef.current?.focus();
     }
-  }, [bigSpoonStage]);
+  }, [bigSpoonStage, customerNumber]);
 
   // Enter picks it straight up and dumps it -- no drag/partial-placement
   // step (mouse/pointer input has been removed project-wide, see the
@@ -2544,7 +2740,17 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
   // mound, and ending by gliding back to the counter instead of
   // disappearing.
   const beginKettleDump = () => {
-    if (kettleStage !== 'idle' || !tempConfirmed) return;
+    // kettleLocked (orders 2-5 only, see its own big comment above) closes
+    // a real loophole here, not just a defensive belt-and-suspenders check
+    // like the tin guard above: kettleStage on its own goes right back to
+    // 'idle' once the pour's glided home (see the stage effect below), and
+    // this used to only check THAT plus tempConfirmed -- neither of which
+    // ever goes back to false once water's actually been poured -- so
+    // without also checking bowlWater (folded into kettleLocked), a second
+    // Enter press somehow reaching this (however unlikely, now that the
+    // kettle's own data-focusable drops the instant it's used too) would
+    // have silently poured a second helping of water into the bowl.
+    if (kettleStage !== 'idle' || !tempConfirmed || kettleLocked) return;
     setItemPositions((prev) => ({ ...prev, kettle: getKettleHoverPos(bowlPos, bowlItem, kettleItem) }));
     setKettleStage('moving');
   };
@@ -2600,11 +2806,19 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
         setItemPositions((prev) => ({ ...prev, kettle: MOVABLE_START.kettle }));
         setKettleStage('idle');
         // Sends the halo straight to the whisk once the water's actually
-        // landed -- per request, whisking is where play continues next, so
-        // this skips the bowl and lands right on the tool that does it
-        // (same beat showWhiskHint/showWhiskSpotlight below already flash
-        // on), regardless of which item was just used to fill the bowl.
-        whiskRef.current?.focus();
+        // landed -- walkthrough only now, per request (see kettleRef's own
+        // matching effect above for the "tool-to-tool auto-advance" vs.
+        // "opening a widget focuses directly into it" distinction). Orders
+        // 2-5 send focus back to the matcha bowl instead -- same bowlRef
+        // anchor-point reasoning as every other tool handoff in this file
+        // now uses; the kettle's own pour completing is exactly the "one
+        // tool's job is done" moment that shouldn't auto-select the next
+        // different tool (the whisk) for the player anymore.
+        if (isWalkthrough) {
+          whiskRef.current?.focus();
+        } else {
+          bowlRef.current?.focus();
+        }
       }, KETTLE_POUR_MS);
       return () => {
         clearTimeout(t);
@@ -2613,7 +2827,11 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
       };
     }
     return undefined;
-  }, [kettleStage]);
+    // customerNumber included per exhaustive-deps -- stable for this whole
+    // mount's lifetime, same "doesn't cause extra re-runs, just satisfies
+    // the lint rule honestly" reasoning as greenAtMs/redAtMs elsewhere in
+    // this file.
+  }, [kettleStage, customerNumber]);
 
   // ---- Whisking: begins the sequence (see whiskStage above), advances it
   // on a timer for the glide-in, then hands off to the balance-minigame
@@ -2854,9 +3072,13 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
         setItemPositions((prev) => ({ ...prev, whisk: MOVABLE_START.whisk }));
         setWhiskStage('done');
         // Same as the kettle above -- once whisking's done, the halo goes
-        // back to the bowl (not the now-put-away whisk), since that's
-        // where the next action (carrying it to the Make Drink zone)
-        // happens.
+        // back to the bowl. Left unconditional (unlike every other tool
+        // handoff in this file) because the bowl is already the same
+        // "return to this anchor point" target orders 2-5 now use for
+        // every other handoff too -- there's no separate "next distinct
+        // tool" being skipped ahead to here, whisking's own next action
+        // (carrying the bowl to the Make Drink zone) already happens ON
+        // the bowl itself, so landing there is correct for every order.
         bowlRef.current?.focus();
       }
     };
@@ -2870,7 +3092,7 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
     // mixZoneLeftFrac/mixZoneWidthFrac/mixDriftAmplitude/mixDriftAngularFreq
     // included per exhaustive-deps -- all four are stable for this whole
     // mount's lifetime, same reasoning as greenAtMs/redAtMs above.
-  }, [whiskStage, mixZoneLeftFrac, mixZoneWidthFrac, mixDriftAmplitude, mixDriftAngularFreq]);
+  }, [whiskStage, mixZoneLeftFrac, mixZoneWidthFrac, mixDriftAmplitude, mixDriftAngularFreq, customerNumber]);
 
   // ---- Falling-powder pour effect: anchored to the mound's actual position
   // within the spoon art (MOUND_CENTER_FRAC above), not the spoon's box
@@ -2924,6 +3146,22 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
             showHeaterSpotlight || showTempBarSpotlight ? ' matcha-spotlight-exempt' : ''
           }`}
           data-focusable
+          // Native disabled (not just dropping data-focusable/tabIndex, the
+          // way the tins/kettle/whisk do -- see their own comments) since
+          // this is an actual <button>, which stays natively focusable
+          // regardless of tabIndex unless explicitly disabled. Also the
+          // simplest way to close off onClick at the same time -- disabled
+          // buttons don't fire click events at all, so nothing extra is
+          // needed in the handler itself. useFlatFocusNav's own candidate
+          // query already filters out `el.disabled` elements too, so this
+          // one change covers both the generic spatial nav AND the
+          // hardcoded graph's own `heaterButtonRef.current?.focus()` calls
+          // above (browsers refuse to focus a disabled element, so those
+          // just silently no-op once this is up). See heaterLocked's own
+          // comment above for why this checks tempConfirmed specifically --
+          // once a reading's locked in, orders 2-5 don't get to redo the
+          // minigame by re-pressing this.
+          disabled={heaterLocked}
           aria-pressed={heaterOn}
           aria-label={heaterOn ? 'Turn heater off' : 'Turn heater on'}
           onClick={() => {
@@ -2941,7 +3179,7 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
             below takes over this job while showHeaterSpotlight is up. Also
             now suppressed for orders 2+ entirely, per request --
             walkthrough-only label. */}
-        {customerNumber === 1 && showHeaterHint && !showHeaterSpotlight && (
+        {isWalkthrough && showHeaterHint && !showHeaterSpotlight && (
           <p
             className="heater-button-hint"
             style={{ left: `${HEATER_HINT_LEFT}%`, top: `${HEATER_HINT_TOP}%` }}
@@ -3015,7 +3253,7 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
                 callout below takes over this job while barRunning AND
                 showTempBarSpotlight are both up. Also now suppressed for
                 orders 2+ entirely, per request -- walkthrough-only label. */}
-            {customerNumber === 1 && barRunning && !showTempBarSpotlight && (
+            {isWalkthrough && barRunning && !showTempBarSpotlight && (
               <p
                 className="heater-temp-bar-hint"
                 style={{ left: `${TEMP_BAR_BOX.left}%`, top: `${TEMP_BAR_BOX.top + TEMP_BAR_BOX.height + 2}%` }}
@@ -3058,8 +3296,17 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
             className={`station-item selectable${showTinHint ? ' tin-highlight' : ''}${
               showTinSpotlight ? ' matcha-spotlight-exempt' : ''
             }`}
-            data-focusable
-            tabIndex={0}
+            // Conditional, not unconditional like every other station-item
+            // here -- see tinsLocked's big comment above. Once a grade's
+            // been picked (orders 2-5 only), every tin (not just the chosen
+            // one) drops data-focusable/tabIndex entirely, which is what
+            // actually removes them from useFlatFocusNav's own live-queried
+            // [data-focusable] candidate list AND from the explicit nav
+            // graph's Left/Right tin-cycling above (that branch calls
+            // .focus() directly on each .selectable tin -- an <img> with no
+            // tabIndex simply can't receive focus, so it silently no-ops
+            // rather than needing its own separate lockout check there).
+            {...(tinsLocked ? {} : { 'data-focusable': true, tabIndex: 0 })}
             style={{
               left: `${item.left}%`,
               top: `${item.top}%`,
@@ -3093,7 +3340,7 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
             tins instead, and showing both at once would just be the same
             "pick a grade" message said twice. Also now suppressed for orders
             2+ entirely, per request -- walkthrough-only label. */}
-        {customerNumber === 1 && showTinHint && !showTinSpotlight && (
+        {isWalkthrough && showTinHint && !showTinSpotlight && (
           <p
             className="matcha-tin-hint"
             style={{ left: `${TIN_HINT_LEFT}%`, top: `${TIN_HINT_TOP}%` }}
@@ -3194,7 +3441,7 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
                     green callout below takes over this job while
                     showScoopSpotlight is up. Also now suppressed for orders
                     2+ entirely, per request -- walkthrough-only label. */}
-                {customerNumber === 1 && scoopRunning && !showScoopSpotlight && (
+                {isWalkthrough && scoopRunning && !showScoopSpotlight && (
                   <p className="scoop-bar-hint">
                     use your backspace key to choose the right measurement, be as accurate as possible!
                   </p>
@@ -3276,7 +3523,7 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
                 callout below takes over this job while showSpoonSpotlight
                 is up. Also now suppressed for orders 2+ entirely, per
                 request -- walkthrough-only label. */}
-            {customerNumber === 1 && showSpoonHint && !showSpoonSpotlight && (
+            {isWalkthrough && showSpoonHint && !showSpoonSpotlight && (
               <p
                 className="big-spoon-hint"
                 style={{ left: `${SPOON_HINT_LEFT}%`, top: `${SPOON_HINT_TOP}%` }}
@@ -3477,8 +3724,24 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
                     ? ' matcha-spotlight-exempt'
                     : ''
                 }`}
-                data-focusable
-                tabIndex={0}
+                // Conditional for the kettle/whisk specifically (bowl is
+                // unaffected, always focusable same as before) -- see
+                // kettleLocked/whiskLocked's own big comment above. Once
+                // either's actually been used (orders 2-5 only), it drops
+                // data-focusable/tabIndex entirely, same "remove from
+                // useFlatFocusNav's live-queried candidate list, and make
+                // the hardcoded nav graph's own direct .focus() calls to it
+                // silently no-op" reasoning as the tins' own conditional
+                // just above. Safe to flip off mid-action too (not just
+                // once fully idle again) -- removing tabIndex from an
+                // element that's already focused doesn't blur it, it only
+                // stops FUTURE .focus() calls/Tab from reaching it, so this
+                // never interrupts the kettle's own pour glide or the
+                // whisk's own mixing minigame while either is still the
+                // active element.
+                {...((isKettle && kettleLocked) || (isWhisk && whiskLocked)
+                  ? {}
+                  : { 'data-focusable': true, tabIndex: 0 })}
                 style={{
                   // Rotation lives here (inline), not in a CSS class, so
                   // KETTLE_POUR_ROTATE_DEG stays the single source of truth
@@ -3594,7 +3857,7 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
             below takes over this job while showKettleSpotlight is up. Also
             now suppressed for orders 2+ entirely, per request --
             walkthrough-only label. */}
-        {customerNumber === 1 && showKettleHint && !showKettleSpotlight && (
+        {isWalkthrough && showKettleHint && !showKettleSpotlight && (
           <p
             className="kettle-hint"
             style={{ left: `${KETTLE_HINT_LEFT}%`, top: `${KETTLE_HINT_TOP}%` }}
@@ -3629,7 +3892,7 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
             below takes over this job while showWhiskSpotlight is up. Also
             now suppressed for orders 2+ entirely, per request --
             walkthrough-only label. */}
-        {customerNumber === 1 && showWhiskHint && !showWhiskSpotlight && (
+        {isWalkthrough && showWhiskHint && !showWhiskSpotlight && (
           <p
             className="whisk-hint"
             style={{ left: `${WHISK_HINT_LEFT}%`, top: `${WHISK_HINT_TOP}%` }}
@@ -3665,7 +3928,7 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
             below takes over this job while showBowlCarrySpotlight is up.
             Also now suppressed for orders 2+ entirely, per request --
             walkthrough-only label. */}
-        {customerNumber === 1 && showBowlHint && !showBowlCarrySpotlight && (
+        {isWalkthrough && showBowlHint && !showBowlCarrySpotlight && (
           <p
             className="bowl-hint"
             style={{ left: `${bowlPos.left + bowlItem.width / 2}%`, top: `${bowlPos.top - 6}%` }}
@@ -3954,7 +4217,7 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
                 callout below takes over this job while showMixSpotlight is
                 up. Also now suppressed for orders 2+ entirely, per request --
                 walkthrough-only label. */}
-            {customerNumber === 1 && !showMixSpotlight && (
+            {isWalkthrough && !showMixSpotlight && (
               <p
                 className="mix-bar-hint"
                 style={{ left: `${mixBarPos.left + MIX_BAR_WIDTH / 2}%`, top: `${mixBarPos.top - 11}%` }}
@@ -4120,7 +4383,7 @@ const MatchaMaking = ({ activeStep, customerNumber, onNavigate, onAdvance, order
           // these plain mint-pastel hint labels are meant to be a
           // first-order-only walkthrough aid, not a permanent fixture.
           currentStepHint={
-            customerNumber === 1 && !showStationAdvanceSpotlight
+            isWalkthrough && !showStationAdvanceSpotlight
               ? 'use your right arrow key to move on to the base adding station.'
               : null
           }

@@ -2238,22 +2238,39 @@
    this overlay fades out and stays hidden for the rest of the visit -- the
    bowl itself (the plain Bowl.png image, a sibling element) is left on
    screen empty rather than still showing a full pool of matcha it no
-   longer holds. Opacity-only, no shrink (unlike .bowl-vanishing above,
-   which animates the bowl leaving MatchaMaking's own screen entirely) --
-   the bowl stays put here, just empty. Declared after .bowl-whisked-liquid
-   so it overrides that rule's own `animation` (growFromCenter) on the same
-   equal-specificity/later-in-file tiebreak .bowl-vanishing above relies
-   on. */
+   longer holds. Quick pop (scale up a touch, then snap down to nothing
+   while fading), not a plain fade -- MilkSelection.js now only adds this
+   class once the pour is actually done (bowlPoured flips true in that
+   pour's own setTimeout, not the instant it lands), so by the time this
+   plays the overlay's been sitting glued to the bowl through the whole
+   tilt/hold and this reads as the matcha visibly leaving/popping off the
+   bowl right as it settles back upright, not a gradual fade mid-pour.
+   translate(-50%, -50%) carried through every step keeps this centered on
+   the bowl's own rim (same convention as growFromCenter/this element's own
+   base rule above) instead of popping off-center -- by the time this class
+   applies, pouringKey is back to null (see MilkSelection.js), so this
+   animation is the only thing driving this element's transform, no inline
+   style to fight with. No shrink on .bowl-vanishing above (that's the bowl
+   leaving MatchaMaking's own screen entirely) -- the bowl stays put here,
+   just empty. Declared after .bowl-whisked-liquid so it overrides that
+   rule's own `animation` (growFromCenter) on the same equal-specificity/
+   later-in-file tiebreak .bowl-vanishing above relies on. */
 .bowl-whisked-liquid.emptied {
-  animation: bowlLiquidEmpty 0.4s ease-in forwards;
+  animation: bowlLiquidPop 0.3s ease-in forwards;
 }
 
-@keyframes bowlLiquidEmpty {
+@keyframes bowlLiquidPop {
   0% {
     opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+  35% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1.15);
   }
   100% {
     opacity: 0;
+    transform: translate(-50%, -50%) scale(0.2);
   }
 }
 

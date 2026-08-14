@@ -99,6 +99,19 @@ function App() {
   // Which customer (1-ORDERS_PER_SESSION) the player is currently serving
   // this session.
   const [customerNumber, setCustomerNumber] = useState(1);
+  // Which of MainPage's two Play buttons started this session -- "training
+  // day" (true) plays the walkthrough on order 1 exactly as the game always
+  // has; "i'm trained" (false) skips it, so order 1 plays like every other
+  // order (unlocked controls, no tutorial spotlights, a normal random
+  // order) while the session still runs the same ORDERS_PER_SESSION orders
+  // total either way. Set from handlePlayClick's own mode argument, read
+  // by isWalkthrough (below, in progressProps) which is what every station
+  // screen actually keys its walkthrough-only behavior off of -- see
+  // CustomerOrdering.js's own big comment on that prop. Defaults to true
+  // (same as the game's original, only-ever-a-walkthrough behavior) so
+  // nothing downstream breaks if it's ever read before a Play button is
+  // pressed.
+  const [trainingMode, setTrainingMode] = useState(true);
   // This session's customer-character rotation -- a shuffled, no-repeats
   // order of all five characters (see buildSessionCharacterOrder in
   // gameloop/customerCharacters.js), indexed by customerNumber - 1 and
@@ -554,8 +567,19 @@ function App() {
   // there's no host to resolve it at all). Guarded against re-entry so a
   // second Enter/click on an already-disabled-but-not-yet-re-rendered Play
   // button can't fire two PREROLL requests back to back.
-  const handlePlayClick = () => {
+  //
+  // mode is which of MainPage's two Play buttons was pressed -- 'training'
+  // (the "training day" button) or 'trained' (the "i'm trained" button).
+  // Sets trainingMode (above) BEFORE requesting the ad/starting the
+  // session, same "settle the mode first, everything downstream reads it"
+  // ordering handleAdvance/startNewSession already rely on for the other
+  // per-session state below -- isWalkthrough (progressProps, further down)
+  // is only ever computed off customerNumber/trainingMode at render time,
+  // so as long as this is set before the first render of the 'ordering'
+  // page, order 1 sees the right value from the start.
+  const handlePlayClick = (mode) => {
     if (adGate) return;
+    setTrainingMode(mode === 'training');
     requestAd('PREROLL', startNewSession);
   };
 
@@ -672,6 +696,12 @@ function App() {
   // way -- built once here and spread onto whichever screen is showing.
   const progressProps = {
     customerNumber,
+    // True only on order 1 of a "training day" run (trainingMode above) --
+    // the single source every station screen reads for "show the
+    // walkthrough," now that customerNumber === 1 alone no longer implies
+    // it (an "i'm trained" run also has an order 1, just not a walkthrough
+    // one). See CustomerOrdering.js's own big comment on this same prop.
+    isWalkthrough: customerNumber === 1 && trainingMode,
     onNavigate: navigateTo,
     onAdvance: handleAdvance,
   };

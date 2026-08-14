@@ -463,7 +463,11 @@ const SYRUP_MOVE_RANGE = 8;
 // same "one palette, one source of truth" idea as MatchaMaking's
 // SCOOP_FILL_COLORS/scoopColor.
 const SYRUP_STREAM_COLORS = {
-  'guava-syrup': 'rgba(224, 90, 111, 0.92)',
+  // #e88f7f per request (the pouring stream/spill color specifically --
+  // .cup-syrup-fill.guava-syrup's own gradient in ToppingsStation.css is a
+  // separate, manually-kept-in-sync value, deliberately left untouched
+  // here since the request was scoped to "the one that pours out").
+  'guava-syrup': 'rgba(232, 143, 127, 0.92)',
   'mint-syrup': 'rgba(101, 196, 155, 0.9)',
   // Honey-amber, sampled from HoneySyrup.png's own bottle-label color, same
   // "one palette, one source of truth" idea as the other two.
@@ -613,17 +617,36 @@ export function getSyrupBoxFor(milkBox) {
 // filled right up rather than the body's own rounded-but-still-a-bit-
 // pointy top edge doing all the work on its own.
 const FOAM_RAISE_FRAC = 0.42; // portion of the layer-below's own height that foam rises above it -- raised further (was 0.3) to shift the whole layer up, per request
-const FOAM_OVERLAP_FRAC = 0.02; // portion that dips into the layer below -- cut down alongside the raise increase above so the total height (and how far it actually reaches back down into the drink) stays about the same as before, i.e. this is a shift, not a stretch
+// Portion that dips into the layer below -- bottom edge of the foam body
+// works out to topBox.top + overlap (top stays pinned at topBox.top - raise,
+// unaffected by this value; see getFoamBoxFor below), so raising this alone
+// pushes just the BOTTOM of the foam layer further down into the drink
+// without moving its raised top edge at all. Raised again (was 0.02, per
+// follow-up request "move the bottom part of the foam a bit lower") --
+// previously cut down alongside the FOAM_RAISE_FRAC increase above to keep
+// the total height roughly the same as before that change; this bump grows
+// the height a touch instead of just shifting it.
+const FOAM_OVERLAP_FRAC = 0.06;
 const FOAM_WIDTH_SCALE = 1.08; // a touch wider than the layer below, to line up with the matcha layer's own raised-top width
+// Glass-cup-only narrower width scale ("shorten it on the sides a teeny
+// bit for the glass cup fit only", per request) -- the glass cup's own
+// body is noticeably straighter-walled than the plastic cup/mug, so the
+// standard 1.08 width read as visibly overhanging its rim; every other
+// cup type keeps the standard FOAM_WIDTH_SCALE above untouched.
+const FOAM_WIDTH_SCALE_GLASS = 1.03;
 
 // Same "generic, parameterized on the box underneath" shape as
 // MilkSelection.js's own getMatchaBoxFor, just with foam's own (shallower,
-// wider, higher-up) fractions above instead of matcha's. Exported for
-// FinalCombination.js, same reasoning as getSyrupBoxFor's own export above.
-export function getFoamBoxFor(topBox) {
+// wider, higher-up) fractions above instead of matcha's. cupType is
+// optional (defaults to the standard width scale for any cup type other
+// than 'glass', and for callers that don't pass one at all) -- see
+// FOAM_WIDTH_SCALE_GLASS above. Exported for FinalCombination.js, same
+// reasoning as getSyrupBoxFor's own export above.
+export function getFoamBoxFor(topBox, cupType) {
   const raise = topBox.height * FOAM_RAISE_FRAC;
   const overlap = topBox.height * FOAM_OVERLAP_FRAC;
-  const width = topBox.width * FOAM_WIDTH_SCALE;
+  const widthScale = cupType === 'glass' ? FOAM_WIDTH_SCALE_GLASS : FOAM_WIDTH_SCALE;
+  const width = topBox.width * widthScale;
   return {
     left: topBox.left - (width - topBox.width) / 2,
     top: topBox.top - raise,
@@ -668,8 +691,12 @@ const FOAM_POUR_MS = 2200;
 // How far off-center a missed lever catch can land the poured foam -- same
 // number the old cosmetic Left/Right aim used to clamp to (FOAM_MOVE_STEP,
 // the old per-keypress nudge, is gone now that the lever drives this
-// directly instead of stepped keypresses).
-const FOAM_MOVE_RANGE = 8;
+// directly instead of stepped keypresses). Exported so FinalCombination.js
+// can turn beginSendToFinal's own persisted foamPlacementFrac back into the
+// same absolute offset used here, instead of silently re-centering the
+// foam once the drink reaches the serving station -- see that file's own
+// comment on incomingFoamBox for the bug this fixes.
+export const FOAM_MOVE_RANGE = 8;
 
 // Colors for the falling foam stream -- reused directly for the
 // .cup-foam-fill/.cup-foam-cap color modifier classes too (see
@@ -721,7 +748,8 @@ const POWDER_MOVE_MS = 350;
 const POWDER_POUR_MS = 2200;
 // Same "lever drives this directly now" note as FOAM_MOVE_RANGE's own
 // comment above -- the old POWDER_MOVE_STEP per-keypress nudge is gone.
-const POWDER_MOVE_RANGE = 8;
+// Exported for the same FinalCombination.js reason FOAM_MOVE_RANGE is.
+export const POWDER_MOVE_RANGE = 8;
 
 // Colors for the falling powder stream and the settled flecks alike (see
 // .cup-powder-fleck in ToppingsStation.css), same "one palette, one source
@@ -844,7 +872,7 @@ function leverMissFor(offset, moveRange) {
 // copy of .syrup-spill-puddle's own rules) so the two don't share a literal
 // class name despite being visually the same kind of thing. Returns null
 // (nothing rendered) for a null spill, i.e. a centered catch.
-function renderToppingSpill(spill, color, key) {
+function renderToppingSpill(spill, color, key, exempt) {
   if (!spill) return null;
   const base = spill.side === 'right' ? SYRUP_RIGHT_SPILL_BASE : SYRUP_LEFT_SPILL_BASE;
   const dims = SYRUP_SPILL_DIMS[spill.bucket];
@@ -853,7 +881,7 @@ function renderToppingSpill(spill, color, key) {
     <span
       key={key}
       aria-hidden="true"
-      className="topping-spill-puddle"
+      className={`topping-spill-puddle${exempt ? ' topping-spotlight-exempt' : ''}`}
       style={{
         left: `${INCOMING_DRINK_SPOT.left + base.leftFrac * INCOMING_DRINK_SIZE.width}%`,
         top: `${INCOMING_DRINK_SPOT.top + base.topFrac * INCOMING_DRINK_SIZE.height}%`,
@@ -886,27 +914,115 @@ function renderToppingSpill(spill, color, key) {
 // exported for FinalCombination.js, same reasoning as getSyrupBoxFor's own
 // export above -- the carried-over drink there needs to reproduce the
 // exact same powder-fleck placement, not just the fill layers.
+// Expanded (8 -> 42 points) per request for a genuine sprinkled-powder
+// texture instead of a handful of visible dots -- generated with a fixed
+// (not random) sunflower/golden-angle spiral (deterministic for a given
+// index, so re-generating this exact list from the same formula always
+// reproduces it byte-for-byte) filling the same unit-circle-ish footprint
+// (r < ~0.36, so still comfortably inside the 0.4-ish radius the foam
+// cap's visual ellipse covers) the original 8-point set used, just far
+// denser. Paired with .cup-powder-fleck's own much smaller dot size in
+// ToppingsStation.css so the density reads as fine powder, not confetti.
 export const POWDER_FLECK_OFFSETS_ELLIPSE = [
-  { dx: 0, dy: 0 },
-  { dx: -0.28, dy: -0.05 },
-  { dx: 0.3, dy: 0.02 },
-  { dx: -0.15, dy: 0.22 },
-  { dx: 0.17, dy: -0.2 },
-  { dx: -0.05, dy: -0.28 },
-  { dx: 0.08, dy: 0.28 },
-  { dx: -0.32, dy: 0.12 },
+  { dx: 0.039, dy: 0 },
+  { dx: -0.05, dy: 0.046 },
+  { dx: 0.008, dy: -0.087 },
+  { dx: 0.063, dy: 0.082 },
+  { dx: -0.116, dy: -0.021 },
+  { dx: 0.11, dy: -0.07 },
+  { dx: -0.037, dy: 0.137 },
+  { dx: -0.07, dy: -0.135 },
+  { dx: 0.152, dy: 0.056 },
+  { dx: -0.158, dy: 0.065 },
+  { dx: 0.076, dy: -0.163 },
+  { dx: 0.056, dy: 0.18 },
+  { dx: -0.17, dy: -0.098 },
+  { dx: 0.199, dy: -0.044 },
+  { dx: -0.122, dy: 0.173 },
+  { dx: -0.028, dy: -0.217 },
+  { dx: 0.173, dy: 0.145 },
+  { dx: -0.232, dy: 0.01 },
+  { dx: 0.169, dy: -0.169 },
+  { dx: -0.011, dy: 0.245 },
+  { dx: -0.161, dy: -0.193 },
+  { dx: 0.255, dy: 0.034 },
+  { dx: -0.216, dy: 0.15 },
+  { dx: 0.059, dy: -0.263 },
+  { dx: 0.137, dy: 0.239 },
+  { dx: -0.267, dy: -0.085 },
+  { dx: 0.26, dy: -0.12 },
+  { dx: -0.112, dy: 0.269 },
+  { dx: -0.1, dy: -0.279 },
+  { dx: 0.267, dy: 0.14 },
+  { dx: -0.297, dy: 0.078 },
+  { dx: 0.169, dy: -0.262 },
+  { dx: 0.054, dy: 0.312 },
+  { dx: -0.254, dy: -0.197 },
+  { dx: 0.325, dy: -0.027 },
+  { dx: -0.225, dy: 0.243 },
+  { dx: 0.002, dy: -0.336 },
+  { dx: 0.229, dy: 0.252 },
+  { dx: -0.343, dy: -0.032 },
+  { dx: 0.278, dy: -0.211 },
+  { dx: -0.063, dy: 0.348 },
+  { dx: -0.191, dy: -0.303 },
 ];
+// Expanded (10 -> 50 points) per the same request, this time via a
+// fixed low-discrepancy (golden-ratio-increment) scatter across the
+// fuller rectangle -- still fixed/deterministic, still keeps the same
+// margin off the tapered glass walls the original 10-point set had
+// (|dx| <= 0.38, |dy| <= 0.42).
 export const POWDER_FLECK_OFFSETS_LIQUID = [
-  { dx: -0.3, dy: -0.38 },
-  { dx: 0.25, dy: -0.3 },
-  { dx: -0.1, dy: -0.15 },
-  { dx: 0.32, dy: -0.05 },
-  { dx: -0.35, dy: 0.05 },
-  { dx: 0.05, dy: 0.1 },
-  { dx: -0.2, dy: 0.25 },
-  { dx: 0.28, dy: 0.3 },
-  { dx: 0.02, dy: 0.38 },
-  { dx: -0.3, dy: 0.4 },
+  { dx: -0.38, dy: -0.42 },
+  { dx: 0.09, dy: 0.214 },
+  { dx: -0.201, dy: 0.008 },
+  { dx: 0.269, dy: -0.198 },
+  { dx: -0.021, dy: -0.404 },
+  { dx: -0.311, dy: 0.23 },
+  { dx: 0.158, dy: 0.025 },
+  { dx: -0.132, dy: -0.181 },
+  { dx: 0.338, dy: -0.387 },
+  { dx: 0.047, dy: 0.247 },
+  { dx: -0.243, dy: 0.041 },
+  { dx: 0.227, dy: -0.165 },
+  { dx: -0.064, dy: -0.371 },
+  { dx: -0.354, dy: 0.263 },
+  { dx: 0.116, dy: 0.057 },
+  { dx: -0.174, dy: -0.149 },
+  { dx: 0.295, dy: -0.354 },
+  { dx: 0.005, dy: 0.28 },
+  { dx: -0.285, dy: 0.074 },
+  { dx: 0.184, dy: -0.132 },
+  { dx: -0.106, dy: -0.338 },
+  { dx: 0.364, dy: 0.296 },
+  { dx: 0.074, dy: 0.09 },
+  { dx: -0.217, dy: -0.116 },
+  { dx: 0.253, dy: -0.322 },
+  { dx: -0.037, dy: 0.312 },
+  { dx: -0.328, dy: 0.107 },
+  { dx: 0.142, dy: -0.099 },
+  { dx: -0.148, dy: -0.305 },
+  { dx: 0.321, dy: 0.329 },
+  { dx: 0.031, dy: 0.123 },
+  { dx: -0.259, dy: -0.083 },
+  { dx: 0.211, dy: -0.289 },
+  { dx: -0.08, dy: 0.345 },
+  { dx: -0.37, dy: 0.139 },
+  { dx: 0.1, dy: -0.067 },
+  { dx: -0.191, dy: -0.272 },
+  { dx: 0.279, dy: 0.362 },
+  { dx: -0.011, dy: 0.156 },
+  { dx: -0.301, dy: -0.05 },
+  { dx: 0.168, dy: -0.256 },
+  { dx: -0.122, dy: 0.378 },
+  { dx: 0.348, dy: 0.172 },
+  { dx: 0.057, dy: -0.034 },
+  { dx: -0.233, dy: -0.24 },
+  { dx: 0.237, dy: 0.394 },
+  { dx: -0.054, dy: 0.188 },
+  { dx: -0.344, dy: -0.017 },
+  { dx: 0.126, dy: -0.223 },
+  { dx: -0.164, dy: 0.411 },
 ];
 
 // Maps a set of normalized offsets onto an actual box, in the same
@@ -1085,6 +1201,12 @@ export function getBlossomBoxFor(topBox, offset = 0) {
 const ToppingsStation = ({
   activeStep,
   customerNumber,
+  // True only on order 1 of a "training day" run -- see
+  // CustomerOrdering.js's own big comment on this same prop. Every bare
+  // customerNumber comparison throughout this file now reads
+  // isWalkthrough/!isWalkthrough instead, so "i'm trained" can skip the
+  // walkthrough while still playing a normal (unlocked, unhinted) order 1.
+  isWalkthrough,
   onNavigate,
   onAdvance,
   order,
@@ -1349,6 +1471,30 @@ const ToppingsStation = ({
       const orderButton = document.querySelector('.order-receipt-button');
       const gearButton = document.querySelector('.settings-toggle-button');
 
+      // Whether `el` is actually reachable right now -- i.e. NOT one of the
+      // syrup/foam/powder items or garnish pots that's been locked out of
+      // navigation after being used (orders 2-5 only, see syrupLocked/
+      // foamLocked/powderLocked/leafLocked/chipLocked/blossomLocked's own
+      // big comment near canPourSyrup above). A LIVE DOM read (does THIS
+      // element currently carry data-focusable/tabIndex), not any of those
+      // JS booleans directly -- this whole handler is registered once with
+      // an empty dependency array (see this effect's own comment up top),
+      // so a plain state-derived boolean would be frozen at that very first
+      // render (always false, nothing's locked yet at mount) and any guard
+      // built on it would silently never fire. The DOM itself is always
+      // current regardless of how stale this closure's own captured
+      // variables are -- same "identical bug, identical fix" reasoning
+      // Matcha Making's own tinIndex branch guard and Milk Selection's own
+      // bottleIndex/iceIndex branch guards already document.
+      //
+      // resolveFirst picks the first candidate in priority order that's
+      // still actually reachable, same "explicit short chain, not a
+      // generic spatial fallback" shape (and same reasoning -- see Matcha
+      // Making's own resolveFirst comment for the full "unnatural jump"
+      // writeup) used throughout this whole project's nav graphs now.
+      const canFocus = (el) => !!el && document.contains(el) && !el.disabled && el.tabIndex >= 0;
+      const resolveFirst = (...candidates) => candidates.find((el) => canFocus(el)) || null;
+
       // Station dot -> cup.
       if (active === document.querySelector('.progress-step.current')) {
         if (action === 'Up') {
@@ -1370,11 +1516,30 @@ const ToppingsStation = ({
         if (action === 'Left') {
           e.preventDefault();
           e.stopImmediatePropagation();
-          regFoam?.focus();
+          if (!isWalkthrough) {
+            // Orders 2-5 only -- routes around the whole foam row (and, if
+            // that's ALSO locked, the whole syrup row above it) once
+            // they've been used, so this doesn't silently no-op once
+            // regFoam's lost its own tabIndex (foamLocked's own big
+            // comment near canPourSyrup above). The walkthrough
+            // (isWalkthrough) keeps its exact original single
+            // target below -- untouched.
+            resolveFirst(regFoam, guavaSyrup, gearButton)?.focus();
+          } else {
+            regFoam?.focus();
+          }
         } else if (action === 'Right') {
           e.preventDefault();
           e.stopImmediatePropagation();
-          matchaPowder?.focus();
+          if (!isWalkthrough) {
+            // Orders 2-5 only -- same reasoning as Left just above, just
+            // routing around the powder row and, beyond that, the whole
+            // pot row (powderLocked's own big comment near canPourSyrup
+            // above).
+            resolveFirst(matchaPowder, mintLeavesPot, bananaChipsPot, cherryBlossomsPot, orderButton)?.focus();
+          } else {
+            matchaPowder?.focus();
+          }
         } else if (action === 'Down') {
           e.preventDefault();
           e.stopImmediatePropagation();
@@ -1384,6 +1549,36 @@ const ToppingsStation = ({
           e.stopImmediatePropagation();
           preSettingsFocusRef.current = active;
           gearButton?.focus();
+        }
+        return;
+      }
+
+      // Belt-and-suspenders once ANY foam's landed in the cup (orders 2-5
+      // -- foamLocked's own big comment near canPourSyrup above): the whole
+      // foam row loses data-focusable/tabIndex the moment it's locked,
+      // which is what actually stops fresh D-pad presses from reaching one
+      // in the first place, but that alone doesn't blur an ALREADY-focused
+      // item (removing tabIndex never blurs -- see the identical fix on
+      // Matcha Making's own tins/Milk Selection's own bottles). Checked via
+      // canFocus(active) itself (a live DOM read), not the foamLocked JS
+      // boolean -- see canFocus's own comment above for why. Covers all
+      // five foam items in one shot (rather than repeating this in each of
+      // their five branches below) since they all lock/unlock together as
+      // one group. Once locked, this collapses to just Up/Down (routing
+      // around the whole row, same fallback chain as the cup's own Left
+      // leg above), no more Left/Right cycling.
+      if ([regFoam, matchaFoam, bananaFoam, strawberryFoam, blueberryFoam].includes(active) && !canFocus(active)) {
+        if (action === 'Up') {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          resolveFirst(guavaSyrup, gearButton)?.focus();
+        } else if (action === 'Down') {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          document.querySelector('.progress-step.current')?.focus();
+        } else {
+          e.preventDefault();
+          e.stopImmediatePropagation();
         }
         return;
       }
@@ -1513,6 +1708,32 @@ const ToppingsStation = ({
           guavaSyrup?.focus();
         } else if (action === 'Down') {
           document.querySelector('.progress-step.current')?.focus();
+        }
+        return;
+      }
+
+      // Belt-and-suspenders once ANY syrup's landed in the cup (orders 2-5
+      // -- syrupLocked's own big comment near canPourSyrup above), same
+      // "whole group locks/unlocks together, checked live via canFocus"
+      // reasoning as the foam row's own guard just above. Up is always
+      // reachable regardless (gearButton is never itself one of the locked
+      // items), Down falls through to the foam row if it's still open,
+      // then the cup if that's ALSO locked.
+      if (
+        [mintSyrup, guavaSyrup, honeySyrup, mangoSyrup, lavenderSyrup, peachSyrup].includes(active) &&
+        !canFocus(active)
+      ) {
+        if (action === 'Up') {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          gearButton?.focus();
+        } else if (action === 'Down') {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          resolveFirst(matchaFoam, cup)?.focus();
+        } else {
+          e.preventDefault();
+          e.stopImmediatePropagation();
         }
         return;
       }
@@ -1675,6 +1896,29 @@ const ToppingsStation = ({
         return;
       }
 
+      // Belt-and-suspenders once ANY powder's landed in the cup (orders 2-5
+      // -- powderLocked's own big comment near canPourSyrup above), same
+      // "whole group locks/unlocks together, checked live via canFocus"
+      // reasoning as the foam/syrup rows' own guards above. Up always goes
+      // to the Order button (never itself locked), Down falls through to
+      // the pot row (whichever pot's still open, checked left to right) and
+      // then the cup as the ultimate fallback.
+      if ([matchaPowder, guavaPowder, chocoPowder].includes(active) && !canFocus(active)) {
+        if (action === 'Up') {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          orderButton?.focus();
+        } else if (action === 'Down') {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          resolveFirst(mintLeavesPot, bananaChipsPot, cherryBlossomsPot, cup)?.focus();
+        } else {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+        }
+        return;
+      }
+
       // Matcha-powder: Right -> guava-powder (the only leg still allowed
       // once restrictPowderNavRef.current is true -- see its own comment
       // above), Up -> order button, Down -> the mint-leaves pot (order 3+
@@ -1775,8 +2019,25 @@ const ToppingsStation = ({
       if (active === mintLeavesPot) {
         e.preventDefault();
         e.stopImmediatePropagation();
+        // Unlike syrup/foam/powder, each pot locks INDEPENDENTLY (per
+        // request -- placing a mint leaf shouldn't lock the OTHER pots),
+        // so this can't share one pre-check across the whole row the way
+        // those three groups do above -- checked per-branch instead, same
+        // live canFocus(active) read (not the leafLocked JS boolean --
+        // see canFocus's own comment above for why). No customerNumber
+        // gate needed here (unlike every other guard in this effect): no
+        // pot ever renders at all on order 1 (mintLeavesUnlocked requires
+        // order 2+), so this branch is simply unreachable there regardless.
+        if (!canFocus(active)) {
+          if (action === 'Up') {
+            resolveFirst(matchaPowder, orderButton)?.focus();
+          } else if (action === 'Down') {
+            cup?.focus();
+          }
+          return;
+        }
         if (action === 'Up') {
-          matchaPowder?.focus();
+          resolveFirst(matchaPowder, orderButton)?.focus();
         } else if (action === 'Right') {
           bananaChipsPot?.focus();
         } else if (action === 'Down') {
@@ -1791,12 +2052,23 @@ const ToppingsStation = ({
       if (active === bananaChipsPot) {
         e.preventDefault();
         e.stopImmediatePropagation();
+        // Same independent-per-pot guard as mint-leaves pot's own above --
+        // no customerNumber gate needed here either (this pot never
+        // renders at all before order 4, bananaChipsUnlocked's own gate).
+        if (!canFocus(active)) {
+          if (action === 'Up') {
+            resolveFirst(matchaPowder, orderButton)?.focus();
+          } else if (action === 'Down') {
+            cup?.focus();
+          }
+          return;
+        }
         if (action === 'Left') {
           mintLeavesPot?.focus();
         } else if (action === 'Right') {
           cherryBlossomsPot?.focus();
         } else if (action === 'Up') {
-          matchaPowder?.focus();
+          resolveFirst(matchaPowder, orderButton)?.focus();
         } else if (action === 'Down') {
           cup?.focus();
         }
@@ -1809,10 +2081,22 @@ const ToppingsStation = ({
       if (active === cherryBlossomsPot) {
         e.preventDefault();
         e.stopImmediatePropagation();
+        // Same independent-per-pot guard as the other two pots' own above
+        // -- no customerNumber gate needed here either (this pot never
+        // renders at all before order 5, cherryBlossomsUnlocked's own
+        // gate).
+        if (!canFocus(active)) {
+          if (action === 'Up') {
+            resolveFirst(matchaPowder, orderButton)?.focus();
+          } else if (action === 'Down') {
+            cup?.focus();
+          }
+          return;
+        }
         if (action === 'Left') {
           bananaChipsPot?.focus();
         } else if (action === 'Up') {
-          matchaPowder?.focus();
+          resolveFirst(matchaPowder, orderButton)?.focus();
         } else if (action === 'Down') {
           cup?.focus();
         }
@@ -1849,7 +2133,18 @@ const ToppingsStation = ({
         if (action === 'Down') {
           e.preventDefault();
           e.stopImmediatePropagation();
-          matchaPowder?.focus();
+          if (!isWalkthrough) {
+            // Orders 2-5 only -- routes around the whole powder row (and,
+            // if that's ALSO locked, the whole pot row, then the cup) once
+            // it's been used, so this doesn't silently no-op once
+            // matchaPowder's lost its own tabIndex (powderLocked's own big
+            // comment near canPourSyrup above). The walkthrough
+            // (isWalkthrough) keeps its exact original single
+            // target below -- untouched.
+            resolveFirst(matchaPowder, mintLeavesPot, bananaChipsPot, cherryBlossomsPot, cup)?.focus();
+          } else {
+            matchaPowder?.focus();
+          }
         }
         return;
       }
@@ -1859,12 +2154,14 @@ const ToppingsStation = ({
       // preSettingsFocusRef at all), Down goes back to wherever focus
       // actually came from (see preSettingsFocusRef's own comment above --
       // every restricted walkthrough beat's own Up leg sets it right
-      // before landing here), falling back to guava-syrup (this leg's
-      // original, only-ever target before any of those beats had their own
-      // direct way in) whenever that ref is empty or no longer points at
-      // something real. Down only actually moves focus while the
-      // popover's closed; while open, SettingsPanel's own handler owns
-      // Down (moving into the volume controls instead).
+      // before landing here), falling back to guava-syrup, then the foam
+      // row, then the cup (this leg's original, only-ever target before
+      // any of those beats had their own direct way in, extended into a
+      // full resolveFirst chain per canFocus's own comment above) whenever
+      // that ref is empty or no longer points at something real. Down only
+      // actually moves focus while the popover's closed; while open,
+      // SettingsPanel's own handler owns Down (moving into the volume
+      // controls instead).
       if (active === gearButton) {
         if (action === 'Right') {
           e.preventDefault();
@@ -1874,11 +2171,15 @@ const ToppingsStation = ({
           e.preventDefault();
           e.stopImmediatePropagation();
           const target = preSettingsFocusRef.current;
-          if (target && document.contains(target) && !target.disabled) {
-            target.focus();
-          } else {
-            guavaSyrup?.focus();
-          }
+          // canFocus (not the old "!target.disabled" check) so a target
+          // that's since lost data-focusable/tabIndex (orders 2-5, once
+          // locked) correctly falls through the rest of the chain instead
+          // of silently no-oping on a .focus() call that can no longer
+          // land anywhere -- an <img> has no .disabled property at all, so
+          // that old check was always true for one of these and never
+          // actually caught this case (same bug, same fix, as Milk
+          // Selection's own gear Down leg).
+          resolveFirst(target, guavaSyrup, matchaFoam, cup)?.focus();
         }
         return;
       }
@@ -1961,7 +2262,15 @@ const ToppingsStation = ({
   // zone (see the big comment on incomingDrinkRenderPos above), and
   // incomingDrinkSize (not always TABLE_SIZE) so it fits whichever cup
   // type actually arrived (glass, plastic, or mug).
-  const incomingMilkBox = incomingDrink?.milk ? getMilkBoxFor(incomingDrinkRenderPos, incomingDrinkSize, CUP_TYPES[incomingCupType].bodyFrac) : null;
+  const incomingMilkBox = incomingDrink?.milk
+    ? getMilkBoxFor(
+        incomingDrinkRenderPos,
+        incomingDrinkSize,
+        CUP_TYPES[incomingCupType].bodyFrac,
+        CUP_TYPES[incomingCupType].bottomExtraFrac,
+        CUP_TYPES[incomingCupType].leftExtraFrac
+      )
+    : null;
   const incomingMatchaBox = incomingDrink?.matcha && incomingMilkBox ? getMatchaBoxFor(incomingMilkBox) : null;
   const incomingSyrupBox = incomingMilkBox ? getSyrupBoxFor(incomingMilkBox) : null;
   // Foam always lands on whatever the drink's current top layer is -- the
@@ -1977,7 +2286,7 @@ const ToppingsStation = ({
   // renderedFoamCapBox) is computed later instead, once that state exists --
   // see the big comment there for why a missed lever catch shifts this at
   // all now, unlike syrup's own purely-cosmetic pourOffset.
-  const incomingFoamBox = incomingTopBox ? getFoamBoxFor(incomingTopBox) : null;
+  const incomingFoamBox = incomingTopBox ? getFoamBoxFor(incomingTopBox, incomingCupType) : null;
   // The whole visible liquid column -- only used for powder's own "no foam
   // to catch it" scatter case, see getPowderLiquidBoxFor above.
   const incomingPowderLiquidBox =
@@ -2060,11 +2369,11 @@ const ToppingsStation = ({
   // js's/MatchaMaking.js's own showStationSpotlight -- lands on this screen
   // already pink-tinted, exempting only the Order receipt button, and
   // clears on the exact same rising edge that retires showOrderHint above.
-  // customerNumber === 1 keeps this off for the 2nd/3rd rounds, same as
+  // isWalkthrough keeps this off for the 2nd/3rd rounds, same as
   // every other beat in this walkthrough -- they still get nothing extra
   // (this station never had a plain-text version of this particular hint),
   // just no pink tint over everything else.
-  const showStationSpotlight = customerNumber === 1 && showOrderHint;
+  const showStationSpotlight = isWalkthrough && showOrderHint;
 
   // First-order-only nav lockdown -- separate, shorter-lived flag from
   // showOrderHint/showStationSpotlight above (which stay up through as many
@@ -2078,7 +2387,7 @@ const ToppingsStation = ({
   // specifically (nowOpen === true) -- unlike showOrderHint's own onToggle
   // branch, which only cares about the closing one.
   const [hasOpenedOrderReceipt, setHasOpenedOrderReceipt] = useState(false);
-  const showOrderButtonLock = customerNumber === 1 && !hasOpenedOrderReceipt;
+  const showOrderButtonLock = isWalkthrough && !hasOpenedOrderReceipt;
 
   // Moves focus onto the Order receipt button the instant showOrderButtonLock
   // turns on -- pairs with suppressInitialFocus on <ProgressBar> further
@@ -2132,7 +2441,7 @@ const ToppingsStation = ({
   // to null -- see that same effect), cupSyrup is already set and
   // pouringKey is null, so both halves of the condition go false together
   // and the beat ends cleanly.
-  const showSyrupSpotlight = customerNumber === 1 && !showOrderHint && (!cupSyrup || pouringKey !== null);
+  const showSyrupSpotlight = isWalkthrough && !showOrderHint && (!cupSyrup || pouringKey !== null);
 
   // Whether the player has actually pressed an arrow key or Enter yet
   // during this beat -- per request, both syrup bottles show the white
@@ -2269,7 +2578,7 @@ const ToppingsStation = ({
   // touched. !showOrderHint closes that gap directly, the same way it
   // does on showSyrupSpotlight itself.
   const showFoamSpotlight =
-    customerNumber === 1 && !showOrderHint && !showSyrupSpotlight && (!cupFoam || foamPouringKey !== null);
+    isWalkthrough && !showOrderHint && !showSyrupSpotlight && (!cupFoam || foamPouringKey !== null);
 
   // Same "every item shows the halo until the first move" rule as
   // syrupSpotlightMoved above, just for the foam pair during this beat --
@@ -2365,7 +2674,7 @@ const ToppingsStation = ({
   // light up right alongside the foam pair during that beat instead of
   // staying covered.
   const showPowderSpotlight =
-    customerNumber === 1 &&
+    isWalkthrough &&
     !showOrderHint &&
     !showSyrupSpotlight &&
     !showFoamSpotlight &&
@@ -2422,7 +2731,7 @@ const ToppingsStation = ({
   // also incorrectly light up (the cup/make-drink-zone exempted, nothing
   // else) during the order-check beat.
   const showSendSpotlight =
-    customerNumber === 1 &&
+    isWalkthrough &&
     !showOrderHint &&
     !showSyrupSpotlight &&
     !showFoamSpotlight &&
@@ -2454,9 +2763,33 @@ const ToppingsStation = ({
   // takes over from the bar's old plain-text currentStepHint, same "new
   // pink-styled callout replaces the old text hint for the first order
   // only" treatment every other final beat in this project's walkthrough
-  // system already uses. Orders 2/3 (customerNumber !== 1) never set this
+  // system already uses. Orders 2/3 (!isWalkthrough) never set this
   // and keep that old hint exactly as before.
-  const showAdvanceSpotlight = customerNumber === 1 && drinkSendStage === 'sent';
+  const showAdvanceSpotlight = isWalkthrough && drinkSendStage === 'sent';
+
+  // Bug fix: mirrors the topping-spotlight-overlay's own render condition
+  // further down (showStationSpotlight || showSyrupSpotlight ||
+  // showFoamSpotlight || showPowderSpotlight || showSendSpotlight ||
+  // showAdvanceSpotlight) -- the overlay itself stays up across the WHOLE
+  // walkthrough (any one of those beats keeps it rendered), but persisted
+  // spills (syrupSpills, and the one-shot foam/powder mess-up puddles from
+  // renderToppingSpill) used to only stay exempt while their OWN single
+  // beat's flag was still true. The instant a pour finished and the very
+  // next beat took over (e.g. showSyrupSpotlight -> showFoamSpotlight),
+  // any syrup spill still sitting on screen from mess-ups made during that
+  // pour lost its exemption in that same render and dropped underneath the
+  // still-present pink tint -- "mint syrup spills getting covered by the
+  // pink screen when poured" (mint is the walkthrough's hard-locked first
+  // syrup, so this is the only syrup that can ever actually spill during
+  // order 1). Used wherever a spill/element needs to stay exempt across a
+  // beat handoff, not just its own beat.
+  const showAnyToppingSpotlight =
+    showStationSpotlight ||
+    showSyrupSpotlight ||
+    showFoamSpotlight ||
+    showPowderSpotlight ||
+    showSendSpotlight ||
+    showAdvanceSpotlight;
 
   // ---- Mint-leaves pot: Enter picks up a leaf, which lands on the drink
   // after a short pause -- see the big comment above MINT_LEAVES_POT_ITEM/
@@ -2668,8 +3001,31 @@ const ToppingsStation = ({
   // would both fire off a single keypress -- and on drinkSendStage being
   // 'idle' too, so nothing can be poured onto the drink once it's already
   // mid-carry/vanishing off to Serving.
+  // Navigation lockout for used-up topping GROUPS, orders 2-5 only -- same
+  // pattern (and same reasoning) as Matcha Making's own tinsLocked/
+  // heaterLocked/kettleLocked/whiskLocked and Milk Selection's own
+  // cupsLocked/baseLocked/iceLocked: once a group's done its job, it drops
+  // out of the D-pad/tab nav graph entirely instead of staying reachable
+  // for no further purpose. Doesn't affect the walkthrough
+  // (isWalkthrough) at all -- every flag below is hard-gated on
+  // !isWalkthrough, same as every *Locked flag in those two files.
+  //
+  // Syrup/foam/powder lock the WHOLE group (all bottles/tins in that row,
+  // not just whichever one was actually poured) the instant ANY one of
+  // them lands in the cup -- per request, once you've poured A syrup you
+  // can no longer navigate back to ANY syrup, not just the one used. The
+  // three garnish pots (mint leaves/banana chips/cherry blossoms) are the
+  // opposite -- three INDEPENDENT locks, one per pot, since a player might
+  // still want to place a different garnish type after placing one.
+  const syrupLocked = !isWalkthrough && !!cupSyrup;
+  const foamLocked = !isWalkthrough && !!cupFoam;
+  const powderLocked = !isWalkthrough && !!cupPowder;
+  const leafLocked = !isWalkthrough && cupMintLeaf;
+  const chipLocked = !isWalkthrough && cupBananaChip;
+  const blossomLocked = !isWalkthrough && cupCherryBlossom;
   const canPourSyrup =
     !!incomingDrink &&
+    !syrupLocked &&
     pourStage === 'idle' &&
     foamPourStage === 'idle' &&
     powderPourStage === 'idle' &&
@@ -2679,6 +3035,7 @@ const ToppingsStation = ({
     drinkSendStage === 'idle';
   const canPourFoam =
     !!incomingDrink &&
+    !foamLocked &&
     foamPourStage === 'idle' &&
     pourStage === 'idle' &&
     powderPourStage === 'idle' &&
@@ -2688,6 +3045,7 @@ const ToppingsStation = ({
     drinkSendStage === 'idle';
   const canPourPowder =
     !!incomingDrink &&
+    !powderLocked &&
     powderPourStage === 'idle' &&
     pourStage === 'idle' &&
     foamPourStage === 'idle' &&
@@ -2702,6 +3060,7 @@ const ToppingsStation = ({
   const canPlaceLeaf =
     mintLeavesUnlocked &&
     !!incomingDrink &&
+    !leafLocked &&
     leafStage === 'idle' &&
     pourStage === 'idle' &&
     foamPourStage === 'idle' &&
@@ -2715,6 +3074,7 @@ const ToppingsStation = ({
   const canPlaceChip =
     bananaChipsUnlocked &&
     !!incomingDrink &&
+    !chipLocked &&
     chipStage === 'idle' &&
     pourStage === 'idle' &&
     foamPourStage === 'idle' &&
@@ -2725,6 +3085,7 @@ const ToppingsStation = ({
   const canPlaceBlossom =
     cherryBlossomsUnlocked &&
     !!incomingDrink &&
+    !blossomLocked &&
     blossomStage === 'idle' &&
     pourStage === 'idle' &&
     foamPourStage === 'idle' &&
@@ -2778,6 +3139,16 @@ const ToppingsStation = ({
         setPourStage('idle');
         setPouringKey(null);
         setPourOffset(0);
+        // Orders 2-5 only -- per request, once a pour/placement finishes,
+        // focus goes back to the drink cup (never locked, always
+        // reachable) rather than lingering on the now-locked syrup row or
+        // disappearing into nothing, so the player can navigate on from
+        // there to whatever's still available. The walkthrough
+        // (isWalkthrough) keeps its own existing focus handling
+        // (showSyrupSpotlight/showFoamSpotlight/etc.) untouched.
+        if (!isWalkthrough) {
+          containerRef.current?.querySelector('[data-topping-key="cup"]')?.focus();
+        }
       }, SYRUP_POUR_MS);
       return () => {
         clearTimeout(t);
@@ -3030,6 +3401,11 @@ const ToppingsStation = ({
         // landed foam fill (see incomingFoamBox below), which stays on
         // screen long after this pour's own animation ends, so it has to
         // persist. Only beginFoamPour (a fresh pour) resets it.
+        // Orders 2-5 only -- same "focus goes back to the cup" reasoning as
+        // the syrup pour's own finish above.
+        if (!isWalkthrough) {
+          containerRef.current?.querySelector('[data-topping-key="cup"]')?.focus();
+        }
       }, FOAM_POUR_MS);
       return () => {
         clearTimeout(t);
@@ -3104,6 +3480,11 @@ const ToppingsStation = ({
         // powderPourOffset intentionally NOT reset here -- same "now
         // positions the final landed flecks, has to persist past this
         // pour's own animation" reasoning as foamPourOffset above.
+        // Orders 2-5 only -- same "focus goes back to the cup" reasoning as
+        // the syrup/foam pours' own finish above.
+        if (!isWalkthrough) {
+          containerRef.current?.querySelector('[data-topping-key="cup"]')?.focus();
+        }
       }, POWDER_POUR_MS);
       return () => {
         clearTimeout(t);
@@ -3165,6 +3546,11 @@ const ToppingsStation = ({
     const t = setTimeout(() => {
       setCupMintLeaf(true);
       setLeafStage('idle');
+      // Orders 2-5 only -- same "focus goes back to the cup" reasoning as
+      // the syrup/foam/powder pours' own finish above.
+      if (!isWalkthrough) {
+        containerRef.current?.querySelector('[data-topping-key="cup"]')?.focus();
+      }
     }, LEAF_PLACE_MS);
     return () => clearTimeout(t);
   }, [leafStage]);
@@ -3189,6 +3575,11 @@ const ToppingsStation = ({
     const t = setTimeout(() => {
       setCupBananaChip(true);
       setChipStage('idle');
+      // Orders 2-5 only -- same "focus goes back to the cup" reasoning as
+      // the syrup/foam/powder pours' own finish above.
+      if (!isWalkthrough) {
+        containerRef.current?.querySelector('[data-topping-key="cup"]')?.focus();
+      }
     }, LEAF_PLACE_MS);
     return () => clearTimeout(t);
   }, [chipStage]);
@@ -3209,6 +3600,11 @@ const ToppingsStation = ({
     const t = setTimeout(() => {
       setCupCherryBlossom(true);
       setBlossomStage('idle');
+      // Orders 2-5 only -- same "focus goes back to the cup" reasoning as
+      // the syrup/foam/powder pours' own finish above.
+      if (!isWalkthrough) {
+        containerRef.current?.querySelector('[data-topping-key="cup"]')?.focus();
+      }
     }, LEAF_PLACE_MS);
     return () => clearTimeout(t);
   }, [blossomStage]);
@@ -3260,6 +3656,17 @@ const ToppingsStation = ({
       // "known simplification, now fixed" reasoning as this screen's own
       // incomingCupType above.
       cupType: incomingCupType,
+      // Bug fix: these two used to only get computed for the onScored/
+      // scoreToppings call just below (for GRADING the catch), never
+      // actually forwarded here to the object that becomes FinalCombination's
+      // own incomingDrink -- so however off-center the player's actual lever
+      // catch landed, FinalCombination always re-centered the foam/powder
+      // from scratch (foamPlacementFrac/powderPlacementFrac always read as
+      // undefined there), the "pops back into place" bug. Same -1..1
+      // fraction shape (offset / MOVE_RANGE) as the scoreToppings call
+      // below reads, and same null-when-never-applied convention.
+      foamPlacementFrac: cupFoam ? foamPourOffset / FOAM_MOVE_RANGE : null,
+      powderPlacementFrac: cupPowder ? powderPourOffset / POWDER_MOVE_RANGE : null,
     });
     // Grades this station's own toppings (syrup/foam/powder/leaf) against
     // the placed order -- see gameloop/scoring.js's own scoreToppings. Same
@@ -3496,9 +3903,16 @@ const ToppingsStation = ({
                 }${
                   showSyrupSpotlight ? ' topping-spotlight-exempt' : ''
                 }`}
-                data-focusable
+                // Once ANY syrup's landed in the cup (orders 2-5 only --
+                // syrupLocked's own big comment above), the WHOLE row loses
+                // data-focusable/tabIndex, not just the one poured -- per
+                // request, once you've poured a syrup you can't navigate
+                // back to any of them. Same "remove from useFlatFocusNav's
+                // live-queried candidate list, and make the hardcoded nav
+                // graph's own direct .focus() calls to it silently no-op"
+                // reasoning as every other *Locked flag in this project.
+                {...(syrupLocked ? {} : { 'data-focusable': true, tabIndex: 0 })}
                 data-topping-key={item.key}
-                tabIndex={0}
                 draggable={false}
                 style={{
                   ...(isPouring ? { transform: `rotate(${WHISK_FLIP_DEG}deg)` } : {}),
@@ -3559,9 +3973,13 @@ const ToppingsStation = ({
                   }${
                     showFoamSpotlight ? ' topping-spotlight-exempt' : ''
                   }`}
-                  data-focusable
+                  // Once ANY foam's landed in the cup (orders 2-5 only --
+                  // foamLocked's own big comment near syrupLocked above),
+                  // the WHOLE row loses data-focusable/tabIndex, same
+                  // "whole group, not just the one used" reasoning as the
+                  // syrup row above.
+                  {...(foamLocked ? {} : { 'data-focusable': true, tabIndex: 0 })}
                   data-topping-key={item.key}
-                  tabIndex={0}
                   draggable={false}
                   style={{
                     ...(isPouring ? { transform: `rotate(${WHISK_FLIP_DEG}deg)` } : {}),
@@ -3618,9 +4036,13 @@ const ToppingsStation = ({
                 }${
                   showPowderSpotlight ? ' topping-spotlight-exempt' : ''
                 }`}
-                data-focusable
+                // Once ANY powder's landed in the cup (orders 2-5 only --
+                // powderLocked's own big comment near syrupLocked above),
+                // the WHOLE row loses data-focusable/tabIndex, same "whole
+                // group, not just the one used" reasoning as the syrup/foam
+                // rows above.
+                {...(powderLocked ? {} : { 'data-focusable': true, tabIndex: 0 })}
                 data-topping-key={item.key}
-                tabIndex={0}
                 draggable={false}
                 style={{
                   ...(isPouring ? { transform: `rotate(${WHISK_FLIP_DEG}deg)` } : {}),
@@ -3649,15 +4071,21 @@ const ToppingsStation = ({
               : item.key === 'cherry-blossoms-pot'
               ? 'pick up a cherry blossom and place it on the drink'
               : 'pick up a leaf and place it on the drink';
+          // Unlike the syrup/foam/powder rows above, each pot locks
+          // INDEPENDENTLY (leafLocked/chipLocked/blossomLocked, see their
+          // own big comment near syrupLocked above) -- placing a mint leaf
+          // doesn't lock the banana-chips or cherry-blossoms pots, since a
+          // player might still want to place a different garnish type.
+          const thisPotLocked =
+            item.key === 'banana-chips-pot' ? chipLocked : item.key === 'cherry-blossoms-pot' ? blossomLocked : leafLocked;
           return (
             <img
               key={item.key}
               src={item.src}
               alt={`${item.alt}. Select it and press Enter to ${potAlt}.`}
               className="station-item selectable"
-              data-focusable
+              {...(thisPotLocked ? {} : { 'data-focusable': true, tabIndex: 0 })}
               data-topping-key={item.key}
-              tabIndex={0}
               style={{
                 left: `${item.left}%`,
                 top: `${item.top}%`,
@@ -4136,12 +4564,15 @@ const ToppingsStation = ({
         )}
         {/* Syrup pour balance minigame -- only up while a syrup's actually
             'pouring' (see the physics effect above). Reuses MatchaMaking.
-            css's .mix-bar/.mix-bar-zone/.mix-ball/.mix-bar-highlight/
-            .mix-bar-hint classes directly (already loaded globally, since
-            App.js imports MatchaMaking.js regardless of which page is
-            showing) rather than re-declaring the same gray-bar/green-zone
-            look a third time -- same reasoning ToppingsStation.js already
-            uses for reusing MilkSelection.css's fill classes. The ball's
+            css's .mix-bar/.mix-bar-zone/.mix-ball/.mix-bar-highlight
+            classes directly (already loaded globally, since App.js imports
+            MatchaMaking.js regardless of which page is showing) rather
+            than re-declaring the same gray-bar/green-zone look a third
+            time -- same reasoning ToppingsStation.js already uses for
+            reusing MilkSelection.css's fill classes (.mix-bar-hint used to
+            be reused here too, for orders 2-5's plain-text hint, but that
+            was removed entirely per request -- see the removed-block
+            comments further down). The ball's
             left position and in-zone glow are both written directly to
             syrupBallRef's DOM node every animation frame rather than
             through React props here, same "only needs to exist, not
@@ -4187,26 +4618,18 @@ const ToppingsStation = ({
                 }}
               />
             </div>
-            {/* Old plain-text hint (MatchaMaking.css's .mix-bar-hint,
-                already loaded globally) -- stays exactly as before for
-                orders 2/3. Suppressed for order 1 (showSyrupSpotlight is up
-                the entire time this minigame can render, per that beat's
-                own extended condition above) in favor of the new pink
-                walkthrough callout just below, same "new pink-styled
-                callout replaces the old text hint for the first order only"
-                treatment every other beat in this project's walkthrough
-                system already uses. */}
-            {!showSyrupSpotlight && (
-              <p
-                className="mix-bar-hint"
-                style={{
-                  left: `${syrupMixBarPos.left + SYRUP_MIX_BAR_WIDTH / 2}%`,
-                  top: `${syrupMixBarPos.top - 11}%`,
-                }}
-              >
-                use your arrow keys to balance the ball inside the green area and pour without spilling.
-              </p>
-            )}
+            {/* The old plain-text .mix-bar-hint that used to render here for
+                orders 2-5 (MatchaMaking.css's .mix-bar-hint, green
+                dashed-border/pale-green-fill callout) has been removed
+                entirely per request -- it was a leftover from before the
+                new pink walkthrough callout (topping-pour-callout, order 1
+                only, just below) existed, and unlike every other beat in
+                this project it was never actually replaced for orders 2-5,
+                just left showing indefinitely alongside/after it. Orders
+                2-5 now show no hint text here at all for the syrup pour,
+                matching "eliminate them" -- no other beat in this project
+                shows both an order-1 callout AND a standing orders-2-5
+                hint, so there's no equivalent replacement to add back. */}
             {/* New first-order-only walkthrough callout, replacing the hint
                 above -- see showSyrupSpotlight's own comment for why this
                 beat now spans the whole pour, not just the pre-pour pick.
@@ -4297,34 +4720,22 @@ const ToppingsStation = ({
                 }}
               />
             </div>
-            {/* Old plain-text hint (MatchaMaking.css's .mix-bar-hint, already
-                loaded globally) -- stays exactly as before for orders 2-5,
-                foam's own turn on the lever specifically (leverFor). Same
-                "suppressed for order 1 in favor of the new pink walkthrough
-                callout just below" shape as the syrup pour's own
-                mix-bar-hint/topping-pour-callout split above -- was shared
-                with powder's own version below (same text, same element)
-                until each got split out to carry its own topping name in
-                the new order-1 callout below. */}
-            {!showFoamSpotlight && leverFor === 'foam' && (
-              <p
-                className="mix-bar-hint"
-                style={{ left: `${leverBarPos.left + LEVER_BAR_WIDTH / 2}%`, top: `${leverBarPos.top - 11}%` }}
-              >
-                press enter/center right on the middle to land it clean.
-              </p>
-            )}
+            {/* The old plain-text .mix-bar-hint for foam's own turn on the
+                lever has been removed entirely per request -- same
+                "leftover, never actually replaced for orders 2-5" reasoning
+                as the syrup pour's own removed hint just above. */}
             {/* Foam's own turn on the lever gets the same upgraded pink-panel-
                 plus-arrow treatment the syrup pour's own mix-bar-hint
                 already got (topping-pour-callout, reused directly here --
                 its left/top are already set inline rather than fixed in
                 CSS, see that class's own comment, so reusing it for a
                 different bar just means feeding it leverBarPos instead of
-                syrupMixBarPos), per request -- order 1 only, same as
-                syrup's own split; the plain hint just above still covers
-                orders 2-5. Column layout, text above, arrow below pointing
-                down at the lever bar, same shape/position math as the
-                syrup callout (top - 18 clears the bar's own top edge). */}
+                syrupMixBarPos), per request -- order 1 only; orders 2-5 no
+                longer show any hint here at all (the old plain-text one
+                that used to cover them was removed just above). Column
+                layout, text above, arrow below pointing down at the lever
+                bar, same shape/position math as the syrup callout
+                (top - 18 clears the bar's own top edge). */}
             {showFoamSpotlight && leverFor === 'foam' && (
               <div
                 className="topping-pour-callout"
@@ -4341,16 +4752,9 @@ const ToppingsStation = ({
                 </svg>
               </div>
             )}
-            {/* Same plain-text/pink-callout split as foam's own pair just
-                above, for powder's own turn on the lever instead. */}
-            {!showPowderSpotlight && leverFor === 'powder' && (
-              <p
-                className="mix-bar-hint"
-                style={{ left: `${leverBarPos.left + LEVER_BAR_WIDTH / 2}%`, top: `${leverBarPos.top - 11}%` }}
-              >
-                press enter/center right on the middle to land it clean.
-              </p>
-            )}
+            {/* Same removal as foam's own hint above -- the old plain-text
+                .mix-bar-hint that used to cover orders 2-5 for powder's own
+                turn on the lever has been removed entirely per request. */}
             {showPowderSpotlight && leverFor === 'powder' && (
               <div
                 className="topping-pour-callout"
@@ -4382,12 +4786,17 @@ const ToppingsStation = ({
             syrupSpills only ever gets populated during an actual pour and
             only ever reset at the start of a fresh one (see that effect
             above), so rendering whenever it's non-empty is sufficient on
-            its own. Exempted from the walkthrough tint whenever
-            showSyrupSpotlight is up, per request -- same
-            topping-spotlight-exempt treatment every other element actually
-            involved in this beat already gets (the bottle, the stream,
-            the cup); without it these would render invisibly under the
-            pink tint for the rest of the syrup beat once it appeared. */}
+            its own. Exempted from the walkthrough tint via
+            showAnyToppingSpotlight (see that flag's own big comment above)
+            rather than just showSyrupSpotlight -- since these puddles
+            persist PAST the syrup beat itself (they keep sitting there
+            once the pour finishes, as this same comment says), tying the
+            exemption to showSyrupSpotlight alone meant it dropped the
+            instant the NEXT beat (showFoamSpotlight) took over, even
+            though the pink tint itself stayed up the whole time -- "mint
+            syrup spills getting covered by the pink screen when poured"
+            (mint is the walkthrough's hard-locked first/only syrup, see
+            the pre-select effect above). */}
         {syrupSpills.length > 0 &&
           (() => {
             const spillColor = SYRUP_STREAM_COLORS[cupSyrup?.key ?? pouringKey ?? 'guava-syrup'];
@@ -4399,7 +4808,7 @@ const ToppingsStation = ({
                 <span
                   key={i}
                   aria-hidden="true"
-                  className={`syrup-spill-puddle${showSyrupSpotlight ? ' topping-spotlight-exempt' : ''}`}
+                  className={`syrup-spill-puddle${showAnyToppingSpotlight ? ' topping-spotlight-exempt' : ''}`}
                   style={{
                     left: `${spill.left}%`,
                     top: `${spill.top}%`,
@@ -4418,9 +4827,17 @@ const ToppingsStation = ({
             above these are a single one-shot value (foamSpill/powderSpill/
             leafSpill, computed from the persisted *PourOffset once the
             lever is caught, see leverMissFor above) rather than an
-            accumulating array, since each topping is only placed once. */}
-        {renderToppingSpill(foamSpill, FOAM_STREAM_COLORS[cupFoam?.key], 'foam-spill')}
-        {renderToppingSpill(powderSpill, POWDER_STREAM_COLORS[cupPowder?.key], 'powder-spill')}
+            accumulating array, since each topping is only placed once.
+            Same showAnyToppingSpotlight fix as syrupSpills just above --
+            foamSpill/powderSpill persist for as long as cupFoam/cupPowder
+            stay set (i.e. well past their own beat, same "sits there once
+            it appears" precedent), so exempting only via their own single
+            beat's flag (showFoamSpotlight/showPowderSpotlight) meant they
+            dropped out from under the tint's exemption the instant a LATER
+            beat took over while the overlay itself stayed up -- same class
+            of bug as syrupSpills' own, see that flag's big comment above. */}
+        {renderToppingSpill(foamSpill, FOAM_STREAM_COLORS[cupFoam?.key], 'foam-spill', showAnyToppingSpotlight)}
+        {renderToppingSpill(powderSpill, POWDER_STREAM_COLORS[cupPowder?.key], 'powder-spill', showAnyToppingSpotlight)}
         {renderToppingSpill(leafSpill, LEAF_SPILL_COLOR, 'leaf-spill')}
         {renderToppingSpill(chipSpill, CHIP_SPILL_COLOR, 'chip-spill')}
         {renderToppingSpill(blossomSpill, BLOSSOM_SPILL_COLOR, 'blossom-spill')}
@@ -4736,7 +5153,7 @@ const ToppingsStation = ({
           // specifically. Also now suppressed for orders 2+ entirely, per
           // request -- walkthrough-only label.
           currentStepHint={
-            customerNumber === 1 && !showAdvanceSpotlight
+            isWalkthrough && !showAdvanceSpotlight
               ? 'use your right arrow key to move on to the serving station.'
               : null
           }
@@ -4753,12 +5170,7 @@ const ToppingsStation = ({
           // MilkSelection.js/ProgressBar.js for the shared reasoning).
           spotlightExempt={showAdvanceSpotlight}
         />
-        {(showStationSpotlight ||
-          showSyrupSpotlight ||
-          showFoamSpotlight ||
-          showPowderSpotlight ||
-          showSendSpotlight ||
-          showAdvanceSpotlight) && <div className="topping-spotlight-overlay" aria-hidden="true" />}
+        {showAnyToppingSpotlight && <div className="topping-spotlight-overlay" aria-hidden="true" />}
       </div>
     </div>
   );

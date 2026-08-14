@@ -259,10 +259,12 @@ function joinWithAndSegments(items) {
 // per customer (see the useState lazy initializer in the component below),
 // not re-rolled on every render.
 //
-// customerNumber === 1 (the very first order of a session) caps the topping
-// count lower -- a random max of 2 or 3, rather than the full 0-7 range --
-// so a brand-new player's first order is a simpler one to read and build.
-// Every later round uses the full range as before.
+// isWalkthrough (order 1 of a "training day" run -- see the big comment on
+// this prop in the component below) caps the topping count lower -- a
+// random max of 2 or 3, rather than the full 0-7 range -- so a brand-new
+// player's walkthrough order is a simpler one to read and build. Every
+// other round (including order 1 on an "i'm trained" run) uses the full
+// range as before.
 //
 // gradeOptions/baseOptions/toppingOptions are passed in (rather than this
 // reading the module-level GRADE_OPTIONS_BASE/BASE_OPTIONS_BASE/
@@ -272,17 +274,17 @@ function joinWithAndSegments(items) {
 // 1/2/3 can never randomly speak an ingredient (hojicha, strawberry milk,
 // sparkling yuzu, honey syrup, mint leaves) the player hasn't seen on the
 // counter yet.
-function generateSpokenOrder(customerNumber, gradeOptions, baseOptions, toppingOptions) {
+function generateSpokenOrder(isWalkthrough, gradeOptions, baseOptions, toppingOptions) {
   // First order only -- fixed at exactly 3 (rather than rolled) so the
   // walkthrough's own ice-placement beat on Milk Selection (see
   // showIceSpotlight/showBaseSpotlight there, which waits for exactly/at
   // least 3 cubes) always has the same, predictable amount to actually
   // teach; orders 2/3 keep rolling the full ICE_OPTIONS range, 0 included,
   // same as before.
-  const ice = customerNumber === 1 ? 3 : pickRandom(ICE_OPTIONS).value;
+  const ice = isWalkthrough ? 3 : pickRandom(ICE_OPTIONS).value;
   // First order only -- rather than a random-sized/random-mix subset, pick
   // exactly one syrup, one foam, and one powder topping (toppingOptions is
-  // exactly TOPPING_OPTIONS_BASE for customerNumber === 1: two of each, see
+  // exactly TOPPING_OPTIONS_BASE for isWalkthrough: two of each, see
   // that list's own value suffixes), still randomized which specific one of
   // each pair gets asked for, and in a random order in the sentence. This
   // guarantees the walkthrough's toppings step always has one clear example
@@ -292,7 +294,7 @@ function generateSpokenOrder(customerNumber, gradeOptions, baseOptions, toppingO
   // flavor category so an order can never ask for e.g. both honey syrup and
   // mint syrup at once.
   const toppings =
-    customerNumber === 1
+    isWalkthrough
       ? [
           pickRandom(toppingOptions.filter((t) => t.value.endsWith('-syrup'))),
           pickRandom(toppingOptions.filter((t) => t.value.endsWith('-foam'))),
@@ -504,6 +506,18 @@ function Dropdown({ placeholder, options, value, onSelect, isOpen, onToggle, tog
 const CustomerOrdering = ({
   activeStep,
   customerNumber,
+  // True only on order 1 of a "training day" run (see App.js's own
+  // trainingMode state, set from which of MainPage's two Play buttons was
+  // pressed) -- every walkthrough-only tutorial beat and order 1's fixed/
+  // simplified content in this file used to just check customerNumber === 1
+  // directly (there was only ever one way to reach order 1, so the two were
+  // always the same thing). Now that a player can pick "i'm trained" and
+  // skip the walkthrough while still playing a normal order 1, those two
+  // concepts split: customerNumber === 1 alone no longer means "show the
+  // walkthrough," so every one of those checks throughout this file (and
+  // MatchaMaking.js/MilkSelection.js/ToppingsStation.js, which get this same
+  // prop) now reads isWalkthrough instead.
+  isWalkthrough,
   customerCharacter: assignedCharacter,
   onNavigate,
   onAdvance,
@@ -867,7 +881,7 @@ const CustomerOrdering = ({
   // Rolled once per mount (i.e. once per customer -- see the big comment
   // above generateSpokenOrder) via the lazy initializer, so it doesn't
   // re-roll on every re-render (opening a dropdown, picking a value, etc).
-  const [spokenOrder] = useState(() => generateSpokenOrder(customerNumber, gradeOptions, baseOptions, toppingOptions));
+  const [spokenOrder] = useState(() => generateSpokenOrder(isWalkthrough, gradeOptions, baseOptions, toppingOptions));
   const speechSegments = buildSpeechSegments(spokenOrder, gradeOptions, baseOptions);
   const speechText = flattenSegments(speechSegments);
 
@@ -916,13 +930,13 @@ const CustomerOrdering = ({
   // First-order-only walkthrough, "read the order" phase -- drives the
   // callout (arrow + label) and the spotlight's own character/bubble
   // cutouts (see .ordering-spotlight-overlay further down). Starts true
-  // only for customerNumber === 1 (2nd/3rd orders never show it), and
+  // only for isWalkthrough (2nd/3rd orders never show it), and
   // switches off 2 seconds after the typewriter above actually finishes --
   // not the instant it finishes, so there's a real beat to read the order
   // before this phase ends and the "button" phase below takes over.
-  const [showReadPhase, setShowReadPhase] = useState(customerNumber === 1);
+  const [showReadPhase, setShowReadPhase] = useState(isWalkthrough);
   useEffect(() => {
-    if (customerNumber !== 1 || !typingDone) return undefined;
+    if (!isWalkthrough || !typingDone) return undefined;
     const READ_PHASE_LINGER_MS = 2000;
     const timeoutId = setTimeout(() => setShowReadPhase(false), READ_PHASE_LINGER_MS);
     return () => clearTimeout(timeoutId);
@@ -1076,7 +1090,7 @@ const CustomerOrdering = ({
   useEffect(() => {
     if (orderFormOpen) setHasOpenedOrderForm(true);
   }, [orderFormOpen]);
-  const showButtonPhase = customerNumber === 1 && !showReadPhase && !hasOpenedOrderForm;
+  const showButtonPhase = isWalkthrough && !showReadPhase && !hasOpenedOrderForm;
 
   // Moves focus onto the play button the instant showButtonPhase turns on,
   // same "rising edge only" pattern as orderFormOpen's own grade-toggle
@@ -1113,7 +1127,7 @@ const CustomerOrdering = ({
   // directly to orderFormOpen, so it starts the instant the modal opens and
   // ends the instant it closes (either by placing the order or backing out
   // via the backdrop click) -- no separate linger/one-way flag needed here.
-  const showFormPhase = customerNumber === 1 && orderFormOpen;
+  const showFormPhase = isWalkthrough && orderFormOpen;
 
   // Half a second after landing on this screen, the play button becomes
   // enabled/focusable (see disabled={!tabletPromptActive} below) -- used to
@@ -1166,7 +1180,7 @@ const CustomerOrdering = ({
   // itself (see spotlightExempt passed to <ProgressBar> further down)
   // instead of the character/button, with its own down-pointing callout
   // above the bar telling the player where to go next.
-  const showProgressPhase = customerNumber === 1 && showStationHint;
+  const showProgressPhase = isWalkthrough && showStationHint;
 
   // Whether the spotlight overlay itself renders at all -- any of the
   // three "pink over the whole screen" phases (the fourth, showFormPhase,
@@ -1531,7 +1545,7 @@ const CustomerOrdering = ({
           // for orders 2+ entirely, per request -- these plain mint-pastel
           // hint labels are meant to be a first-order-only walkthrough aid,
           // not a permanent fixture of every order.
-          currentStepHint={customerNumber === 1 && !showProgressPhase ? 'use your right arrow key to head to the matcha station.' : null}
+          currentStepHint={isWalkthrough && !showProgressPhase ? 'use your right arrow key to head to the matcha station.' : null}
           spotlightExempt={showProgressPhase}
           // See ProgressBar's own comment on this prop -- suppresses the
           // station dot's autoFocus while the first two walkthrough beats
@@ -1558,7 +1572,7 @@ const CustomerOrdering = ({
             later-rendered overlay; the explicit z-index is what puts them
             back on top of it, fully untinted, regardless of DOM order.
 
-            Three-phase lifecycle for customerNumber === 1 only (see
+            Three-phase lifecycle for isWalkthrough only (see
             showReadPhase/showButtonPhase/showProgressPhase above): the
             overlay itself stays up for all three (showSpotlight = any of
             them), but which element is exempt changes each time -- phase 1

@@ -167,6 +167,12 @@
   touch-action: none;
   -webkit-user-select: none;
   user-select: none;
+  /* Below .cup-milk-fill/.cup-matcha-fill's own z-index (3/4) -- see the
+     big comment on .cup-milk-fill for the bug this fixes: placed ice
+     cubes (both the top-level idle-stage version and the nested
+     send-sequence copy) were painting on top of the liquid fills purely
+     because of DOM order, instead of reading as submerged beneath them. */
+  z-index: 2;
   /* See the matching comment on .glass-cup -- the two zero-strength
      drop-shadows here exist purely so the filter transitions smoothly into
      the :focus-visible glow instead of popping. */
@@ -913,6 +919,25 @@
   position: absolute;
   box-sizing: border-box;
   pointer-events: none;
+  /* z-index 3 (both here and on .cup-matcha-fill just below, at 4 so
+     matcha stacks on top of milk the same "poured after" order as their
+     own DOM order) fixes a real bug: placed ice cubes are rendered as
+     TOP-LEVEL siblings of .cup-wrap (see the ICE_BOX_SPOTS.map() further
+     down in MilkSelection.js, used the whole time cupSendStage is
+     'idle' -- i.e. basically always, while the drink is still being
+     built at this station) rather than nested inside it, and that
+     top-level block comes AFTER the cup-wrap map in the JSX. With no
+     z-index anywhere in this stack, plain DOM order wins the paint
+     order, so those already-placed ice cubes were rendering on TOP of
+     these fills instead of underneath them -- the opposite of the
+     "ice reads as submerged once there's enough liquid" intent described
+     in the big comment on this element in MilkSelection.js, and the
+     opposite of how Toppings Station's equivalent layering behaves.
+     .ice-cube's own z-index (2, see that rule in this file) sits below
+     both fill z-indexes, so ice -- placed or not, top-level or the
+     send-sequence's nested copy -- now consistently paints underneath
+     both liquid layers regardless of DOM order. */
+  z-index: 3;
   clip-path: polygon(
     6% 0%, 14.8% 1.4%, 23.6% 2.6%, 32.4% 3.6%, 41.2% 4.3%,
     50% 4.5%,
@@ -986,6 +1011,13 @@
   position: absolute;
   box-sizing: border-box;
   pointer-events: none;
+  /* z-index 4, one above .cup-milk-fill's own 3 -- see that rule's big
+     comment for the ice-cube-layering bug this (and .ice-cube's z-index:
+     2) fixes. Matcha stacks above milk here the same "poured after"
+     order their DOM order already put them in; this just makes both
+     explicit instead of relying on DOM order, which is what let the
+     top-level placed-ice-cube siblings slip on top by accident. */
+  z-index: 4;
   clip-path: polygon(
     3% 0%, 12.4% 2.05%, 21.8% 3.89%, 31.2% 5.36%, 40.6% 6.3%,
     50% 6.62%,
@@ -1071,6 +1103,51 @@
    higher-specificity override sidesteps that uncertainty entirely, same
    fix as MatchaMaking.css's own .spoon-pour.matcha-spotlight-exempt. */
 .spoon-pour.milk-spotlight-exempt {
+  z-index: 26;
+}
+
+/* Same higher-specificity-override fix, needed the instant .cup-milk-fill/
+   .cup-matcha-fill/.ice-cube picked up their own plain z-index (3/4/2,
+   see those rules' own big comments -- added to fix ice cubes not reading
+   as submerged under the poured liquid). Those plain single-class rules
+   are equal specificity to this file's own plain .milk-spotlight-exempt
+   (26), so on the walkthrough's own milk/bowl/send beats -- when the fill
+   or a placed cube also carries milk-spotlight-exempt to punch through
+   .milk-spotlight-overlay's own 25 -- the cascade tiebreak came down to
+   source order, not which number is bigger, and .cup-milk-fill/
+   .cup-matcha-fill/.ice-cube's own rules happen to sit later in this file
+   than .milk-spotlight-exempt's, so THEY won instead: the fill/cube
+   dropped back to z-index 3/4/2, well below the pink tint's own 25, and
+   silently vanished under it for the rest of that walkthrough beat
+   (reappearing again once the beat ended and the tint's own z-index no
+   longer mattered -- e.g. once the drink moved on to Toppings Station).
+
+   First pass here pinned all three to the same 26 every other exempt
+   element in this file uses -- but that reintroduced the exact "ice
+   floats on top of the liquid" bug from a different angle: during any
+   beat where BOTH a placed cube and the fill are exempt at once (e.g.
+   showBowlSpotlight/showBowlSettling/showSendSpotlight -- see the ice
+   cube's own exempt condition in MilkSelection.js, which includes several
+   beats the fills' own exempt condition doesn't), tying both at 26 just
+   moves the tiebreak from "z-index vs z-index" to "equal z-index, so
+   DOM order decides" -- and the top-level placed-ice-cube block renders
+   AFTER the cup-wrap (fill) block in the JSX, so ice still won and
+   painted on top. The fills need to outrank the ice cube even in the
+   exempt case, the same way their own non-exempt 3/4 already outrank
+   ice's non-exempt 2 -- so the fills get one tier above the file's
+   standard exempt value (27) while the ice cube keeps the standard one
+   (26, still comfortably above the tint's own 25). Matcha and milk fill
+   tie at 27 between themselves, same as their normal case -- DOM order
+   (matcha renders after milk) correctly keeps matcha on top there too. */
+.cup-milk-fill.milk-spotlight-exempt {
+  z-index: 27;
+}
+
+.cup-matcha-fill.milk-spotlight-exempt {
+  z-index: 27;
+}
+
+.ice-cube.milk-spotlight-exempt {
   z-index: 26;
 }
 

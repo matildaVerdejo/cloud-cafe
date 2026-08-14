@@ -19,6 +19,8 @@ import {
   getBlossomBoxFor,
   POWDER_FLECK_OFFSETS_ELLIPSE,
   POWDER_FLECK_OFFSETS_LIQUID,
+  FOAM_MOVE_RANGE,
+  POWDER_MOVE_RANGE,
 } from './ToppingsStation';
 
 // Display name per customer character key -- CustomerOrdering.js's own
@@ -392,21 +394,49 @@ const FinalCombination = ({
   // cupMilk/cupMatcha use, foam/syrup/powder are that screen's own cupFoam/
   // cupSyrup/cupPowder shapes ({ key } | null each), and cupType is which
   // cup this all needs to render inside of.
-  const incomingMilkBox = incomingDrink?.milk ? getMilkBoxFor(finalDrinkSpot, finalDrinkSize, CUP_TYPES[finalCupType].bodyFrac) : null;
+  const incomingMilkBox = incomingDrink?.milk
+    ? getMilkBoxFor(
+        finalDrinkSpot,
+        finalDrinkSize,
+        CUP_TYPES[finalCupType].bodyFrac,
+        CUP_TYPES[finalCupType].bottomExtraFrac,
+        CUP_TYPES[finalCupType].leftExtraFrac
+      )
+    : null;
   const incomingMatchaBox = incomingDrink?.matcha && incomingMilkBox ? getMatchaBoxFor(incomingMilkBox) : null;
   const incomingSyrupBox = incomingDrink?.syrup && incomingMilkBox ? getSyrupBoxFor(incomingMilkBox) : null;
   const incomingTopBox = incomingMatchaBox || incomingMilkBox;
-  const incomingFoamBox = incomingDrink?.foam && incomingTopBox ? getFoamBoxFor(incomingTopBox) : null;
-  const incomingFoamCapBox = incomingFoamBox ? getFoamCapBoxFor(incomingFoamBox) : null;
+  // incomingFoamBox is the perfectly-centered box (same math ToppingsStation
+  // uses before its own foamPourOffset gets added there); renderedFoamBox
+  // below is the one actually used for placement/rendering, offset by
+  // whatever foamPlacementFrac beginSendToFinal persisted for this drink --
+  // see that function's own comment in ToppingsStation.js. Without this,
+  // the offset the player actually landed the lever catch at (or missed it
+  // by) got silently discarded here and the foam re-centered itself the
+  // instant the drink arrived at this screen, "popping back into the
+  // correct place" instead of keeping whatever placement the player got.
+  const incomingFoamBox = incomingDrink?.foam && incomingTopBox ? getFoamBoxFor(incomingTopBox, finalCupType) : null;
+  const foamOffset = incomingDrink?.foamPlacementFrac != null ? incomingDrink.foamPlacementFrac * FOAM_MOVE_RANGE : 0;
+  const renderedFoamBox = incomingFoamBox ? { ...incomingFoamBox, left: incomingFoamBox.left + foamOffset } : null;
+  const incomingFoamCapBox = renderedFoamBox ? getFoamCapBoxFor(renderedFoamBox) : null;
   const incomingPowderLiquidBox =
     incomingDrink?.powder && incomingTopBox && incomingMilkBox
       ? getPowderLiquidBoxFor(incomingTopBox, incomingMilkBox)
       : null;
   // Same "settle on the foam's own top ellipse if there's foam to catch it,
   // otherwise scatter through the whole liquid column instead" choice as
-  // ToppingsStation.js's own powderLandingBox/powderFleckOffsets.
-  const powderLandingBox =
+  // ToppingsStation.js's own powderLandingBox/powderFleckOffsets. Same
+  // powderPlacementFrac offset applied here too, same reasoning as
+  // foamOffset above -- see ToppingsStation.js's own powderLandingBox for
+  // the matching "add the offset directly to whatever base box it landed
+  // on" shape.
+  const powderLandingBoxBase =
     incomingDrink?.powder && incomingDrink?.foam && incomingFoamCapBox ? incomingFoamCapBox : incomingPowderLiquidBox;
+  const powderOffset =
+    incomingDrink?.powderPlacementFrac != null ? incomingDrink.powderPlacementFrac * POWDER_MOVE_RANGE : 0;
+  const powderLandingBox = powderLandingBoxBase
+    ? { ...powderLandingBoxBase, left: powderLandingBoxBase.left + powderOffset }
+    : null;
   const powderFleckOffsets =
     incomingDrink?.foam && incomingFoamCapBox ? POWDER_FLECK_OFFSETS_ELLIPSE : POWDER_FLECK_OFFSETS_LIQUID;
   const powderFleckPositions =
@@ -582,15 +612,15 @@ const FinalCombination = ({
                 }}
               />
             )}
-            {incomingDrink.foam && incomingFoamBox && (
+            {incomingDrink.foam && renderedFoamBox && (
               <div
                 className={`cup-foam-fill ${incomingDrink.foam.key}${finalSpotlightExempt ? ' final-spotlight-exempt' : ''}`}
                 aria-hidden="true"
                 style={{
-                  left: `${incomingFoamBox.left}%`,
-                  top: `${incomingFoamBox.top}%`,
-                  width: `${incomingFoamBox.width}%`,
-                  height: `${incomingFoamBox.height}%`,
+                  left: `${renderedFoamBox.left}%`,
+                  top: `${renderedFoamBox.top}%`,
+                  width: `${renderedFoamBox.width}%`,
+                  height: `${renderedFoamBox.height}%`,
                 }}
               />
             )}

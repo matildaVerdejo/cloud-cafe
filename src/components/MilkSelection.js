@@ -167,7 +167,22 @@ const MUG_CUP_SPOTS = {
 // syrup/foam/powder fills and ice cubes all rendered too far right and too
 // wide, encroaching into the handle's own empty space instead of sitting
 // inside the mug's actual opening.
-const MUG_CUP_BODY_FRAC = { left: 0.028, right: 0.712 };
+// Widened a bit further out (0.028-0.712 -> 0.01-0.74, per follow-up
+// request "widen the base liquid and matcha placement on the mug so that
+// it fills it better") -- getMatchaBoxFor derives its own width straight
+// from the milk box's width (see that function above), so this one change
+// widens both fills together without either needing its own separate
+// adjustment. Still comfortably inside the handle's own empty space
+// (MUG_CUP_CANVAS_ASPECT's own comment above), just less conservative
+// than the original alpha-channel measurement.
+// Widened again (0.01-0.74 -> 0-0.79, per follow-up request "widen the
+// liquid inside the mug more") -- same reasoning as the step above, still
+// well clear of the handle loop (MUG_CUP_CANVAS_ASPECT's own comment), and
+// still shared by every downstream box (getMatchaBoxFor, ToppingsStation's
+// getFoamBoxFor/getSyrupBoxFor/getPowderLiquidBoxFor/getLeafBoxFor) so this
+// one change widens the whole drink column together on every screen it
+// appears on (MilkSelection, ToppingsStation, FinalCombination).
+const MUG_CUP_BODY_FRAC = { left: 0, right: 0.79 };
 
 // One entry per cup type -- all three sit in the cubby, but only one is ever
 // "the" cup actually in play (see activeCup in the component below).
@@ -204,6 +219,16 @@ export const CUP_TYPES = {
     // against the plastic cup's own art/proportions. This nudges ice cubes
     // down by this fraction of the cup's own height, glass/mug untouched.
     iceYOffsetFrac: 0.05,
+    // Per request, plastic cup only -- extends the base liquid's (milk/
+    // matcha fill's) own bottom edge further down by this fraction of the
+    // cup's own height (see getMilkBoxFor's own bottomExtraFrac param),
+    // closing a visible gap between the fill's bottom and the plastic
+    // cup's own art's visible floor that CUP_MILK_BOX_FRAC.bottomFrac's
+    // shared 0.94 doesn't quite reach for this cup type. Glass/mug
+    // untouched (no bottomExtraFrac of their own, so getMilkBoxFor's
+    // default of 0 applies). Nudged up a touch further (0.03 -> 0.05) per
+    // follow-up request ("just a little further down").
+    bottomExtraFrac: 0.05,
   },
   mug: {
     src: './MugCup.png',
@@ -223,6 +248,16 @@ export const CUP_TYPES = {
     iceYOffsetFrac: 0.01,
     iceSizeScale: 1.15,
     iceSpreadScale: 1.4,
+    // Per request, mug only -- widens the liquid (and everything derived
+    // from its box: matcha fill, foam, syrup, powder-liquid) on its LEFT
+    // side specifically (see getMilkBoxFor's own leftExtraFrac param),
+    // leaving the right edge exactly where it already was.
+    leftExtraFrac: 0.05,
+    // Per request ("lower it a bit"), mug only -- extends the liquid
+    // further down rather than shifting it (same bottomExtraFrac mechanism
+    // CUP_TYPES.plastic already uses above), stretching the bottom edge
+    // down while the top stays put.
+    bottomExtraFrac: 0.04,
   },
 };
 
@@ -544,14 +579,31 @@ const MILK_STREAM_COLORS = {
 // left/width rather than the cup's directly) automatically inherits the
 // same narrower, left-shifted placement with no changes of their own
 // needed.
-export function getMilkBoxFor(cupPos, cupSize, bodyFrac = { left: 0, right: 1 }) {
+//
+// bottomExtraFrac (0-1, fraction of cupSize.height) pushes the box's own
+// bottom edge down past CUP_MILK_BOX_FRAC.bottomFrac's usual 0.94, plastic
+// cup only (see CUP_TYPES.plastic.bottomExtraFrac's own comment) -- that
+// cup's own art has more visible "floor" below the shared 0.94 line than
+// glass/mug do, which read as a gap between the base liquid's own bottom
+// edge and the cup's actual visible bottom. Defaults to 0 (no change) for
+// every other cup type/caller.
+//
+// leftExtraFrac (0-1, fraction of bodyWidth) pushes the box's own left edge
+// further left past CUP_MILK_BOX_FRAC.leftFrac's usual 0.08 inset, widening
+// the visible liquid only on its left side (the right edge, and everything
+// derived from this box's own width elsewhere, is untouched) -- mug only
+// (see CUP_TYPES.mug.leftExtraFrac's own comment), per request "widen
+// liquid in cup on the left side". Defaults to 0 (no change) for every
+// other cup type/caller, same shape as bottomExtraFrac above.
+export function getMilkBoxFor(cupPos, cupSize, bodyFrac = { left: 0, right: 1 }, bottomExtraFrac = 0, leftExtraFrac = 0) {
   const bodyLeft = cupPos.left + bodyFrac.left * cupSize.width;
   const bodyWidth = (bodyFrac.right - bodyFrac.left) * cupSize.width;
+  const leftExtra = leftExtraFrac * bodyWidth;
   return {
-    left: bodyLeft + CUP_MILK_BOX_FRAC.leftFrac * bodyWidth,
+    left: bodyLeft + CUP_MILK_BOX_FRAC.leftFrac * bodyWidth - leftExtra,
     top: cupPos.top + CUP_MILK_BOX_FRAC.topFrac * cupSize.height,
-    width: (CUP_MILK_BOX_FRAC.rightFrac - CUP_MILK_BOX_FRAC.leftFrac) * bodyWidth,
-    height: (CUP_MILK_BOX_FRAC.bottomFrac - CUP_MILK_BOX_FRAC.topFrac) * cupSize.height,
+    width: (CUP_MILK_BOX_FRAC.rightFrac - CUP_MILK_BOX_FRAC.leftFrac) * bodyWidth + leftExtra,
+    height: (CUP_MILK_BOX_FRAC.bottomFrac - CUP_MILK_BOX_FRAC.topFrac + bottomExtraFrac) * cupSize.height,
   };
 }
 
@@ -808,6 +860,12 @@ const SEND_DRINK_ZONE = { left: 89.7, top: 85, width: 7.3, height: 13 };
 const MilkSelection = ({
   activeStep,
   customerNumber,
+  // True only on order 1 of a "training day" run -- see
+  // CustomerOrdering.js's own big comment on this same prop. Every bare
+  // customerNumber comparison throughout this file now reads
+  // isWalkthrough/!isWalkthrough instead, so "i'm trained" can skip the
+  // walkthrough while still playing a normal (unlocked, unhinted) order 1.
+  isWalkthrough,
   onNavigate,
   onAdvance,
   order,
@@ -974,16 +1032,18 @@ const MilkSelection = ({
       const iceCubes = containerRef.current
         ? Array.from(containerRef.current.querySelectorAll('.ice-cube'))
         : [];
-      // First cube that ISN'T already placed in the cup -- placed cubes are
-      // fully inert now (see the big comment on the ice-cube JSX further
-      // down) and can no longer take focus at all, so "Left from the bowl"
-      // has to skip over them to land on an actual selectable cube. If
-      // every cube's already placed, this is null and the .focus() call
-      // below is a no-op -- same "nothing left to land on, so the press
-      // just does nothing" trap-at-the-end shape used elsewhere in this
-      // graph, rather than incorrectly focusing (and highlighting) a
-      // placed one.
-      const firstIceCube = iceCubes.find((el, i) => !icePlacedRef.current[i]) ?? null;
+      // First cube that ISN'T already placed in the cup AND is still
+      // actually reachable (canFocus, defined below) -- placed cubes are
+      // fully inert (see the big comment on the ice-cube JSX further down)
+      // and can no longer take focus at all, and once there's already
+      // liquid in the cup (orders 2-5 only -- iceLocked's own big comment
+      // near cupHasContents) every remaining cube loses data-focusable/
+      // tabIndex too, so "Left from the bowl" has to skip both kinds to
+      // land on an actual selectable cube. If nothing qualifies, this is
+      // null and the .focus() call below is a no-op -- same "nothing left
+      // to land on, so the press just does nothing" trap-at-the-end shape
+      // used elsewhere in this graph, rather than incorrectly focusing (and
+      // highlighting) an unreachable one.
       const gearButton = document.querySelector('.settings-toggle-button');
       // All three shelf cups (glass, plastic, mug) share the .glass-cup
       // class (see their shared JSX below) -- glass is always first in DOM
@@ -993,14 +1053,52 @@ const MilkSelection = ({
         ? Array.from(containerRef.current.querySelectorAll('.glass-cup'))
         : [];
       const firstCup = shelfCups[0] ?? null;
+      // Whichever cup type is ACTUALLY in play right now, wherever it
+      // currently sits (shelf or table) -- looked up by activeCupRef's own
+      // position in the same three-cup DOM order shelfCups above already
+      // walks (['glass', 'plastic', 'mug']), same indexing showSendSpotlight's
+      // own focus effect further down uses. Read through activeCupRef, NOT
+      // the plain activeCup state value -- this handler is registered once
+      // with an empty dependency array (see this effect's own comment up
+      // top), so activeCup itself would be frozen at that first render
+      // (always 'glass', the initial state) -- same "stale closure" fix
+      // shape as cupSpotRef/icePlacedRef elsewhere in this file.
+      const activeCupEl = shelfCups[['glass', 'plastic', 'mug'].indexOf(activeCupRef.current)] ?? null;
       const orderButton = document.querySelector('.order-receipt-button');
 
-      // Station dot -> oat milk.
+      // Whether `el` is actually reachable right now -- i.e. NOT one of the
+      // cups/bottles/ice cubes that's been locked out of navigation after
+      // being used (orders 2-5 only, see cupsLocked/baseLocked/iceLocked's
+      // own big comment near cupHasContents above). A LIVE DOM read (does
+      // THIS element currently carry data-focusable/tabIndex), not any of
+      // those three JS booleans directly -- this whole handler is
+      // registered once with an empty dependency array (see this effect's
+      // own comment up top, on why), so a plain state-derived boolean like
+      // cupsLocked would be frozen at that very first render (always false,
+      // nothing's locked yet at mount) and any guard built on it would
+      // silently never fire. The DOM itself is always current regardless of
+      // how stale this closure's own captured variables are -- same
+      // "identical bug, identical fix" reasoning Matcha Making's own
+      // tinIndex branch guard now documents.
+      //
+      // resolveFirst picks the first candidate in priority order that's
+      // still actually reachable, same "explicit short chain, not a
+      // generic spatial fallback" shape (and same reasoning -- see Matcha
+      // Making's own resolveFirst comment for the full "unnatural jump"
+      // writeup) used throughout this whole project's nav graphs now.
+      const canFocus = (el) => !!el && document.contains(el) && !el.disabled && el.tabIndex >= 0;
+      const resolveFirst = (...candidates) => candidates.find((el) => canFocus(el)) || null;
+
+      const firstIceCube = iceCubes.find((el, i) => !icePlacedRef.current[i] && canFocus(el)) ?? null;
+
+      // Station dot -> oat milk (falling back to the bowl, never locked, if
+      // every bottle's already been locked out -- baseLocked's own big
+      // comment above).
       if (active === document.querySelector('.progress-step.current')) {
         if (action === 'Up') {
           e.preventDefault();
           e.stopImmediatePropagation();
-          firstBottle?.focus();
+          resolveFirst(firstBottle, bowl)?.focus();
         }
         return;
       }
@@ -1029,6 +1127,25 @@ const MilkSelection = ({
         // arrow press, then it collapses to just the focused one -- see
         // baseSpotlightMoved's own comment above.
         setBaseSpotlightMoved(true);
+        // Belt-and-suspenders once a base has actually been poured (orders
+        // 2-5 -- baseLocked's own big comment near cupHasContents): every
+        // bottle loses data-focusable/tabIndex the moment it's locked,
+        // which is what actually stops fresh D-pad presses from reaching
+        // one in the first place, but that alone doesn't blur an
+        // ALREADY-focused bottle (removing tabIndex never blurs -- see the
+        // identical fix on Matcha Making's own tins). Checked via
+        // canFocus(active) itself (a live DOM read), not the baseLocked JS
+        // boolean -- see canFocus's own comment above for why. Once
+        // locked, this collapses to just the Up/Down legs, no more
+        // Left/Right cycling or "continue to the bowl" from Left.
+        if (!canFocus(active)) {
+          if (action === 'Up') {
+            resolveFirst(activeCupEl, orderButton)?.focus();
+          } else if (action === 'Down') {
+            document.querySelector('.progress-step.current')?.focus();
+          }
+          return;
+        }
         if (action === 'Left' && bottleIndex === 0) {
           if (!restrictBaseNavRef.current) bowl?.focus();
         } else if (action === 'Left' || action === 'Right') {
@@ -1042,6 +1159,16 @@ const MilkSelection = ({
           if (restrictBaseNavRef.current) {
             preSettingsFocusRef.current = active;
             gearButton?.focus();
+          } else if (!isWalkthrough) {
+            // Orders 2-5 only -- routes to whichever cup is actually in
+            // play (falling back to the glass cup, then the Order button)
+            // instead of always the glass one, so this doesn't silently
+            // no-op once the player's switched to plastic/mug and that
+            // glass cup itself has since been locked out (cupsLocked's own
+            // big comment near cupHasContents). The walkthrough
+            // (isWalkthrough) keeps its exact original single
+            // target below -- untouched.
+            resolveFirst(activeCupEl, firstCup, orderButton)?.focus();
           } else {
             firstCup?.focus();
           }
@@ -1113,6 +1240,28 @@ const MilkSelection = ({
         setIceSpotlightMoved(true);
         const dirKey = action.toLowerCase();
         const target = ICE_ADJACENCY[iceIndex]?.[dirKey];
+        // Belt-and-suspenders once there's already liquid in the cup
+        // (orders 2-5 -- iceLocked's own big comment near cupHasContents):
+        // every still-unplaced cube loses data-focusable/tabIndex the
+        // moment ice locks, which is what actually stops fresh D-pad
+        // presses from reaching one in the first place, but that alone
+        // doesn't blur an ALREADY-focused cube (removing tabIndex never
+        // blurs -- same reasoning as the bottles' own guard above).
+        // Checked via canFocus(active) itself (a live DOM read), not the
+        // iceLocked JS boolean -- see canFocus's own comment above for
+        // why. Once locked, this collapses to just the 'gear'/'station'
+        // escape routes (still both always reachable -- neither target is
+        // ever itself one of the locked items), no more moving between
+        // cubes.
+        if (!canFocus(active)) {
+          if (target === 'gear') {
+            preSettingsFocusRef.current = active;
+            gearButton?.focus();
+          } else if (target === 'station') {
+            document.querySelector('.progress-step.current')?.focus();
+          }
+          return;
+        }
         if (target === 'gear') {
           preSettingsFocusRef.current = active;
           gearButton?.focus();
@@ -1235,7 +1384,19 @@ const MilkSelection = ({
         if (action === 'Down') {
           e.preventDefault();
           e.stopImmediatePropagation();
-          firstCup?.focus();
+          if (!isWalkthrough) {
+            // Orders 2-5 only -- routes to whichever cup is actually in
+            // play (falling back to the glass cup, then the first bottle)
+            // instead of always the glass one, so this doesn't silently
+            // no-op once a cup's been confirmed onto the table and the
+            // OTHER (inactive) cups have since been locked out
+            // (cupsLocked's own big comment near cupHasContents). The
+            // walkthrough (isWalkthrough) keeps its exact original
+            // single target below -- untouched.
+            resolveFirst(activeCupEl, firstCup, firstBottle)?.focus();
+          } else {
+            firstCup?.focus();
+          }
         }
         return;
       }
@@ -1257,7 +1418,15 @@ const MilkSelection = ({
           e.preventDefault();
           e.stopImmediatePropagation();
           const target = preSettingsFocusRef.current;
-          if (target && document.contains(target) && !target.disabled) {
+          // canFocus (not the old "!target.disabled" check) so a target
+          // that's since lost data-focusable/tabIndex (orders 2-5, once
+          // locked -- cupsLocked/baseLocked/iceLocked's own big comment
+          // near cupHasContents) correctly falls through to the bowl
+          // instead of silently no-oping on a .focus() call that can no
+          // longer land anywhere -- an <img> has no .disabled property at
+          // all, so that old check was always true for one of these and
+          // never actually caught this case.
+          if (canFocus(target)) {
             target.focus();
           } else {
             bowl?.focus();
@@ -1282,18 +1451,16 @@ const MilkSelection = ({
   // whisked-liquid image, just anchored to this screen's own
   // INCOMING_BOWL_SPOT instead of wherever the bowl happened to be dragged
   // on that screen, so the whisked matcha lines up with the bowl's rim
-  // here the same way it does there. incomingBowlItem.width/height
-  // (incomingBowlFullWidth/Height below) are MOVABLE_ITEMS' own sizing for
-  // MatchaMaking's counter -- the bowl's true, full size, used while it's
-  // actually being handled (see bowlIsBig further down). At rest on this
-  // screen's counter it instead renders at incomingBowlRestWidth/Height,
-  // shrunk to about one milk bottle's own width (BOTTLE_WIDTH) so it reads
-  // as "roughly the size of one of the bottles" sitting alongside them,
-  // rather than its old flat 0.6x scale (which read too big and sat up
-  // against the back wall/cabinet instead of on the counter).
+  // here the same way it does there. Renders at incomingBowlRestWidth/
+  // Height, shrunk to about one milk bottle's own width (BOTTLE_WIDTH) so
+  // it reads as "roughly the size of one of the bottles" sitting alongside
+  // them, rather than its old flat 0.6x scale (which read too big and sat
+  // up against the back wall/cabinet instead of on the counter) -- and,
+  // per request, stays this same size the whole time including while
+  // pouring (it used to grow to incomingBowlItem's own true MatchaMaking-
+  // counter size mid-pour; see incomingBowlWidth/Height's own comment
+  // further down).
   const incomingBowlItem = MOVABLE_ITEMS.find((item) => item.key === 'bowl');
-  const incomingBowlFullWidth = incomingBowlItem.width;
-  const incomingBowlFullHeight = incomingBowlItem.height;
   const incomingBowlRestWidth = BOTTLE_WIDTH;
   const incomingBowlRestHeight = incomingBowlItem.height * (BOTTLE_WIDTH / incomingBowlItem.width);
 
@@ -1362,6 +1529,15 @@ const MilkSelection = ({
   useEffect(() => {
     cupSpotRef.current = cupSpot;
   }, [cupSpot]);
+  // Same "stale closure" reasoning, mirrored for activeCup -- the big
+  // keyboard-nav effect's own activeCupEl (which cup type is actually in
+  // play right now, used to route Up/Down legs around locked cups on
+  // orders 2-5) needs the *current* activeCup, not whatever it was on that
+  // handler's first render (always 'glass', the initial state).
+  const activeCupRef = useRef(activeCup);
+  useEffect(() => {
+    activeCupRef.current = activeCup;
+  }, [activeCup]);
 
   // First-visit highlight on the Order receipt button (top-right, see
   // OrderReceiptButton.js/.css) -- the very first thing that flashes here,
@@ -1378,12 +1554,12 @@ const MilkSelection = ({
   // First-order-only walkthrough spotlight, same pattern as MatchaMaking's
   // own showStationSpotlight -- lands on this screen already pink-tinted,
   // exempting only the Order receipt button, and clears on the exact same
-  // rising edge that retires showOrderHint above. customerNumber === 1
+  // rising edge that retires showOrderHint above. isWalkthrough
   // keeps this off for the 2nd/3rd rounds, same as every other beat in this
   // walkthrough -- they still get the plain flashing highlight/hint text
   // showOrderHint already drives, just without the pink tint over
   // everything else.
-  const showStationSpotlight = customerNumber === 1 && showOrderHint;
+  const showStationSpotlight = isWalkthrough && showOrderHint;
 
   // First-order-only nav lockdown -- separate, shorter-lived flag from
   // showOrderHint/showStationSpotlight above (which stay up through as many
@@ -1397,7 +1573,7 @@ const MilkSelection = ({
   // specifically (nowOpen === true) -- unlike showOrderHint's own onToggle
   // branch, which only cares about the closing one.
   const [hasOpenedOrderReceipt, setHasOpenedOrderReceipt] = useState(false);
-  const showOrderButtonLock = customerNumber === 1 && !hasOpenedOrderReceipt;
+  const showOrderButtonLock = isWalkthrough && !hasOpenedOrderReceipt;
 
   // Moves focus onto the Order receipt button the instant showOrderButtonLock
   // turns on -- pairs with suppressInitialFocus on <ProgressBar> further
@@ -1437,7 +1613,7 @@ const MilkSelection = ({
   // first beat, above) so cup-picking doesn't start until the order's
   // actually been checked -- same "next beat waits for the previous one's
   // retirement" shape as MatchaMaking's own showTinHint.
-  const showCupSpotlight = customerNumber === 1 && !showOrderHint && cupSpot === 'shelf';
+  const showCupSpotlight = isWalkthrough && !showOrderHint && cupSpot === 'shelf';
 
   // Moves focus onto the first (glass) shelf cup the instant showCupSpotlight
   // turns on -- pairs with suppressInitialFocus on <ProgressBar> further
@@ -1549,6 +1725,13 @@ const MilkSelection = ({
     if (action !== 'Enter') return;
     if (shouldDebounceEnter(e)) return;
     if (cupSendStage !== 'idle') return;
+    // Belt-and-suspenders alongside the inactive cup's own conditional
+    // data-focusable below (see cupsLocked's own big comment above) --
+    // that's what actually stops a locked cup from being reachable via
+    // D-pad in the first place, but this guard covers the (currently
+    // impossible, but cheap to guard against) case of Enter still somehow
+    // reaching a locked cup's handler.
+    if (cupsLocked) return;
     e.preventDefault();
     playButtonClick();
     resetCupContents();
@@ -1573,7 +1756,13 @@ const MilkSelection = ({
   // was dragged or carried away. cupMatchaBox is the shallower box the
   // matcha layer renders into on top of it -- see getMatchaBoxFor/
   // CUP_MATCHA_HEIGHT_FRAC above.
-  const cupMilkBox = getMilkBoxFor(cupRenderPos, cupRenderSize, CUP_TYPES[activeCup].bodyFrac);
+  const cupMilkBox = getMilkBoxFor(
+    cupRenderPos,
+    cupRenderSize,
+    CUP_TYPES[activeCup].bodyFrac,
+    CUP_TYPES[activeCup].bottomExtraFrac,
+    CUP_TYPES[activeCup].leftExtraFrac
+  );
   const cupMatchaBox = getMatchaBoxFor(cupMilkBox);
 
   // ---- Ice cubes: ice box -> cup ----------------------------------------
@@ -1602,11 +1791,11 @@ const MilkSelection = ({
   // cubes -- same "reuse an existing state boundary" reasoning
   // showCupSpotlight itself already documents. generateSpokenOrder in
   // CustomerOrdering.js fixes the spoken ice count at exactly 3 for
-  // customerNumber === 1 specifically so this beat always has the same,
+  // isWalkthrough specifically so this beat always has the same,
   // predictable amount to teach -- without that, a differently-rolled
   // order would leave this beat waiting on a number the walkthrough itself
   // never actually told the player.
-  const showIceSpotlight = customerNumber === 1 && cupSpot === 'table' && icePlacedCount < 3;
+  const showIceSpotlight = isWalkthrough && cupSpot === 'table' && icePlacedCount < 3;
 
   // Whether the player has actually pressed an arrow key or Enter yet
   // during this beat -- per request, every still-unplaced cube shows the
@@ -1658,6 +1847,13 @@ const MilkSelection = ({
     if (action !== 'Enter') return;
     if (shouldDebounceEnter(e)) return;
     if (cupSpot !== 'table') return;
+    // Belt-and-suspenders alongside the cube's own conditional
+    // data-focusable below (see iceLocked's own big comment above) -- that's
+    // what actually stops a locked cube from being reachable via D-pad in
+    // the first place, but this guard covers the (currently impossible, but
+    // cheap to guard against) case of Enter still somehow reaching a locked
+    // cube's handler.
+    if (iceLocked) return;
     // Guards against placing a cube once the cup's already mid-send --
     // same "idle only" gate canPourMilk/canSendDrink already use. Without
     // this, a newly-placed cube during 'carrying'/'hovering'/'vanishing'
@@ -1735,30 +1931,18 @@ const MilkSelection = ({
   // itself runs longer than a single pour's on-screen duration.
   const pourAudioRef = useRef(null);
 
-  // The bowl grows to its true, full MatchaMaking size (incomingBowlFull
-  // Width/Height) the moment it's actually being handled -- partway through
-  // the automated glide-to-cup/pour sequence (pouringKey === 'bowl', true
-  // across both the 'moving' and 'pouring' beats above, only clearing once
-  // the whole cycle finishes and it's back home) -- and shrinks back down to
-  // its small counter-resting size (incomingBowlRestWidth/Height) otherwise.
-  // incomingBowlWidth/Height (used below for the rim overlay, and further
-  // down in the JSX for the bowl's own rendered size) always reflect
-  // whichever of the two currently applies. Placed here, after pouringKey/
-  // pourStage are declared, rather than back up alongside bowlPos, since
-  // this depends on both.
-  const bowlIsBig = pouringKey === 'bowl';
-  const incomingBowlWidth = bowlIsBig ? incomingBowlFullWidth : incomingBowlRestWidth;
-  const incomingBowlHeight = bowlIsBig ? incomingBowlFullHeight : incomingBowlRestHeight;
-
-  // Rim math follows the bowl's own live position -- bowlPos (its resting
-  // or gliding-to-pour spot) -- and its own current (possibly grown) size,
-  // so the whisked-matcha overlay travels, tilts, and resizes together with
-  // the bowl through the automated pour glide.
-  const incomingBowlRenderPos = bowlPos;
-  const incomingRimLeft = incomingBowlRenderPos.left + BOWL_INNER_RIM_CENTER.leftFrac * incomingBowlWidth;
-  const incomingRimTop = incomingBowlRenderPos.top + BOWL_INNER_RIM_CENTER.topFrac * incomingBowlHeight;
-  const incomingRimWidth = BOWL_INNER_RIM_WIDTH_FRAC * incomingBowlWidth;
-  const incomingRimHeight = BOWL_INNER_RIM_HEIGHT_FRAC * incomingBowlHeight;
+  // Bug fix, per request ("keep the bowl the same size when it pours"):
+  // this used to grow to its true, full MatchaMaking size
+  // (incomingBowlFullWidth/Height) the moment it started its automated
+  // glide-to-cup/pour sequence (pouringKey === 'bowl') and shrink back down
+  // to its small counter-resting size otherwise -- now it just stays at its
+  // counter-resting size (incomingBowlRestWidth/Height) the whole time, pour
+  // included. incomingBowlWidth/Height are kept as their own names (rather
+  // than inlining incomingBowlRestWidth/Height everywhere below) since
+  // several call sites already reference them and the rest/full distinction
+  // may come back for a different reason later.
+  const incomingBowlWidth = incomingBowlRestWidth;
+  const incomingBowlHeight = incomingBowlRestHeight;
 
   // The cup's own persistent "has milk been poured in" state -- doesn't
   // reset on its own (only a fresh pour re-sets it), same "second pour just
@@ -1780,6 +1964,34 @@ const MilkSelection = ({
   // not just the first-order walkthrough.
   const cupHasContents = icePlacedCount > 0 || !!cupMilk;
 
+  // Navigation lockout for used-up items, orders 2-5 only -- same pattern
+  // (and same reasoning) as Matcha Making's own tinsLocked/heaterLocked/
+  // kettleLocked/whiskLocked: once each of these has done its job, it drops
+  // out of the D-pad/tab nav graph entirely instead of staying reachable
+  // for no further purpose. Doesn't affect the walkthrough
+  // (isWalkthrough) at all -- every flag below is hard-gated on
+  // !isWalkthrough, same as every *Locked flag in MatchaMaking.js.
+  //   - cupsLocked: the instant a cup's been confirmed onto the table
+  //     (cupSpot 'table'). This only actually locks the two OTHER
+  //     (inactive) cup types still sitting on the shelf (see the isActive
+  //     check on the cup <img>'s own data-focusable below) -- switching to
+  //     one of those resets all progress (resetCupContents, see
+  //     handleCupSwitchKeyDown), which is exactly the "go back to the
+  //     cups" this is meant to prevent. The ACTIVE cup itself stays
+  //     reachable the whole time it's on the table -- it's still needed
+  //     later to actually send the drink.
+  //   - baseLocked: the instant a base has actually been poured (cupMilk
+  //     set) -- no more switching liquids once one's already in the cup.
+  //   - iceLocked: deliberately NOT the instant a single cube's placed --
+  //     per request, the player still needs to navigate among the
+  //     remaining cubes to place several in a row. Only locks once a base
+  //     has actually been poured (cupMilk set), matching "ice goes in
+  //     before the liquid, not after" -- any cubes still sitting in the box
+  //     become unreachable once there's already liquid in the cup.
+  const cupsLocked = !isWalkthrough && cupSpot === 'table';
+  const baseLocked = !isWalkthrough && !!cupMilk;
+  const iceLocked = !isWalkthrough && !!cupMilk;
+
   // Third first-order-only walkthrough beat, picking up the instant
   // showIceSpotlight above ends (all 3 ice cubes placed) and retiring the
   // instant a base is actually poured (cupMilk flips non-null). Same
@@ -1787,7 +1999,7 @@ const MilkSelection = ({
   // screen already documents. Declared here, after cupMilk itself, rather
   // than back up alongside showCupSpotlight/showIceSpotlight, since it
   // needs that state in scope.
-  const showBaseSpotlight = customerNumber === 1 && cupSpot === 'table' && icePlacedCount >= 3 && !cupMilk;
+  const showBaseSpotlight = isWalkthrough && cupSpot === 'table' && icePlacedCount >= 3 && !cupMilk;
 
   // Same "every item shows the halo until the first move" rule as
   // iceSpotlightMoved above, just for the bottles during this beat -- see
@@ -1831,7 +2043,7 @@ const MilkSelection = ({
   // once bowlPoured is true this is moot, showBowlSpotlight's job is
   // already done by then).
   const showBaseSettling =
-    customerNumber === 1 && cupSpot === 'table' && !!cupMilk && !bowlPoured && pourStage !== 'idle';
+    isWalkthrough && cupSpot === 'table' && !!cupMilk && !bowlPoured && pourStage !== 'idle';
 
   // Fourth first-order-only walkthrough beat, picking up once the base
   // bottle's pour has fully finished -- both cupMilk actually set AND
@@ -1843,7 +2055,7 @@ const MilkSelection = ({
   // cupMatcha itself is set -- see that state's own comment further
   // down).
   const showBowlSpotlight =
-    customerNumber === 1 && cupSpot === 'table' && !!cupMilk && !bowlPoured && pourStage === 'idle';
+    isWalkthrough && cupSpot === 'table' && !!cupMilk && !bowlPoured && pourStage === 'idle';
 
   // Moves focus onto the matcha bowl the instant showBowlSpotlight turns
   // on -- same pairing/reasoning as showBaseSpotlight's own focus effect
@@ -1875,7 +2087,7 @@ const MilkSelection = ({
   // "without this the tint/exemptions would flicker" reasoning as
   // showBaseSettling's own comment.
   const showBowlSettling =
-    customerNumber === 1 &&
+    isWalkthrough &&
     cupSpot === 'table' &&
     !!cupMilk &&
     bowlPoured &&
@@ -1899,7 +2111,7 @@ const MilkSelection = ({
   // the sixth and actually-final beat that takes over once there's
   // nothing left on screen to exempt.
   const showSendSpotlight =
-    customerNumber === 1 &&
+    isWalkthrough &&
     cupSpot === 'table' &&
     !!cupMilk &&
     bowlPoured &&
@@ -1956,9 +2168,9 @@ const MilkSelection = ({
   // over from the bar's old plain-text currentStepHint, same "new
   // pink-styled callout replaces the old text hint for the first order
   // only" treatment every other beat on this screen already uses -- orders
-  // 2/3 (customerNumber !== 1) never set this and keep that old hint
+  // 2/3 (!isWalkthrough) never set this and keep that old hint
   // exactly as before.
-  const showAdvanceSpotlight = customerNumber === 1 && cupSendStage === 'sent';
+  const showAdvanceSpotlight = isWalkthrough && cupSendStage === 'sent';
 
   // Matcha poured on top of the milk -- same shape as cupMilk, just its own
   // state so a fresh milk pour doesn't wipe out matcha already poured (or
@@ -2041,17 +2253,15 @@ const MilkSelection = ({
     const activeTableSize = CUP_TYPES[activeCup].tableSize;
     if (key === 'bowl') {
       if (!canPourMatcha) return;
-      // Uses the bowl's true full size (incomingBowlFullWidth/Height)
-      // explicitly here, not the current incomingBowlWidth/Height (which
-      // may still reflect the small counter-resting size at this exact
-      // moment) -- the bowl is about to grow to full size the instant
-      // pouringKey becomes 'bowl' just below, so the hover position needs
-      // to already be computed for that final, grown size to land
-      // correctly over the cup instead of being off by the size delta.
+      // Bowl no longer grows to its full MatchaMaking size while pouring
+      // (see incomingBowlWidth/Height's own comment above -- per request,
+      // it now stays at its small counter-resting size the whole time), so
+      // the hover position is computed against that same rest size instead
+      // of the old full-size anticipation this used to need.
       setBowlPos(
         getBottleHoverPos(activeTableSpot, activeTableSize, {
-          width: incomingBowlFullWidth,
-          height: incomingBowlFullHeight,
+          width: incomingBowlRestWidth,
+          height: incomingBowlRestHeight,
         })
       );
     } else {
@@ -2086,11 +2296,16 @@ const MilkSelection = ({
       pourAudioRef.current = playLiquidPouring();
       if (pouringKey === 'bowl') {
         setCupMatcha({ grade: incomingBowl?.grade ?? 'classic-grade' });
-        // The matcha has now left the bowl and landed in the cup -- fade
-        // the whisked-liquid overlay out (see .bowl-whisked-liquid.emptied
-        // in MatchaMaking.css) so the bowl reads as empty for the rest of
-        // this visit, same moment the cup's own matcha fill appears.
-        setBowlPoured(true);
+        // bowlPoured (below) used to flip true right here, the instant the
+        // pour lands, which triggered .bowl-whisked-liquid.emptied's fade
+        // immediately -- while the bowl was still tilted mid-pour for the
+        // rest of BOTTLE_POUR_MS. Moved to the setTimeout below instead, so
+        // the whisked-liquid overlay stays fully visible and glued to the
+        // bowl (rotating together, per the transform fix on this element's
+        // own style block above) for the ENTIRE tilt/hold, and only pops
+        // off the instant the pour actually finishes and the bowl untilts
+        // -- reads as the matcha leaving the bowl right as the pour ends,
+        // not partway through it.
       } else {
         // The fill always renders at its original fixed height (see
         // .cup-milk-fill's own cupMilkGrow keyframe in MilkSelection.css).
@@ -2101,6 +2316,12 @@ const MilkSelection = ({
         pourAudioRef.current = null;
         if (pouringKey === 'bowl') {
           setBowlPos(INCOMING_BOWL_SPOT);
+          // The matcha has now left the bowl and landed in the cup -- pop
+          // the whisked-liquid overlay off (see
+          // .bowl-whisked-liquid.emptied's bowlLiquidPop animation in
+          // MatchaMaking.css) so the bowl reads as empty for the rest of
+          // this visit, right as it settles back to upright.
+          setBowlPoured(true);
         } else {
           setBottlePositions((prev) => ({ ...prev, [pouringKey]: bottleHome[pouringKey] }));
         }
@@ -2193,6 +2414,13 @@ const MilkSelection = ({
     const action = getActionFromKeyEvent(e);
     if (action !== 'Enter') return;
     if (shouldDebounceEnter(e)) return;
+    // Belt-and-suspenders alongside the bottles' own conditional
+    // data-focusable below (see baseLocked's own big comment above) --
+    // that's what actually stops a locked bottle from being reachable via
+    // D-pad in the first place, but this guard covers the (currently
+    // impossible, but cheap to guard against) case of Enter still somehow
+    // reaching a locked bottle's handler.
+    if (baseLocked) return;
     e.preventDefault();
     // Same "first move collapses the halo down to just the focused one"
     // rule as the nav-graph effect's own bottle leg -- Enter counts as a
@@ -2245,34 +2473,50 @@ const MilkSelection = ({
             are both defined in MatchaMaking.css, which is already loaded
             globally since MatchaMaking.js is always imported by App.js --
             reused here rather than duplicated so the look can't drift out
-            of sync between the two screens. */}
+            of sync between the two screens.
+
+            Bug fix: .bowl-whisked-liquid used to be a separate top-level
+            sibling here, positioned every render from bowlPos via its own
+            incomingRimLeft/Top/Width/Height (container-relative %) -- same
+            "separately-dragged layers" bug MatchaMaking.js's own bowl +
+            whisked-liquid used to have before THAT screen nested them into
+            one wrapper (see the big comment on its own bowl-whisked-liquid
+            JSX). The bowl's wrapper here moves via useFlipGlide's
+            transform-based glide (registerFlip below), a completely
+            different mechanism than .bowl-whisked-liquid's own CSS
+            left/top transition -- so during the automated glide-to-cup
+            pour sequence the two visibly drifted apart, one easing via a
+            transform trick, the other via a plain left/top transition,
+            never quite in sync. Nested inside this same .station-item-wrap
+            now (left/top/width/height as plain percentages of the
+            wrapper's own box, exact same fix shape as MatchaMaking.js's
+            own), so it only ever moves because the wrapper does -- the two
+            are physically locked together, not just timed to match. */}
         {incomingBowl && (
-          <>
-            <div
-              ref={(el) => registerFlip('incoming-bowl', el)}
-              className="station-item-wrap"
+          <div
+            ref={(el) => registerFlip('incoming-bowl', el)}
+            className="station-item-wrap"
+            style={{
+              left: `${bowlPos.left}%`,
+              top: `${bowlPos.top}%`,
+              width: `${incomingBowlWidth}%`,
+              height: `${incomingBowlHeight}%`,
+            }}
+          >
+            <img
+              src={incomingBowlItem.src}
+              alt="Bowl of whisked matcha. Select it and press Enter to pour it in once there's milk or water in the cup."
+              draggable={false}
+              data-focusable
+              tabIndex={0}
+              className={`station-item movable incoming-bowl${
+                pouringKey === 'bowl' ? ' settling' : ''
+              }${showBowlSpotlight ? ' milk-spotlight-exempt' : ''}`}
               style={{
-                left: `${bowlPos.left}%`,
-                top: `${bowlPos.top}%`,
-                width: `${incomingBowlWidth}%`,
-                height: `${incomingBowlHeight}%`,
+                ...(pouringKey === 'bowl' ? { transform: `rotate(${BOTTLE_POUR_ROTATE_DEG}deg)` } : {}),
               }}
-            >
-              <img
-                src={incomingBowlItem.src}
-                alt="Bowl of whisked matcha. Select it and press Enter to pour it in once there's milk or water in the cup."
-                draggable={false}
-                data-focusable
-                tabIndex={0}
-                className={`station-item movable incoming-bowl${
-                  pouringKey === 'bowl' ? ' settling' : ''
-                }${showBowlSpotlight ? ' milk-spotlight-exempt' : ''}`}
-                style={{
-                  ...(pouringKey === 'bowl' ? { transform: `rotate(${BOTTLE_POUR_ROTATE_DEG}deg)` } : {}),
-                }}
-                onKeyDown={handleBowlKeyDown}
-              />
-            </div>
+              onKeyDown={handleBowlKeyDown}
+            />
             <img
               src={WHISKED_LIQUID_IMAGES[incomingBowl.grade] ?? WHISKED_LIQUID_IMAGES['classic-grade']}
               alt=""
@@ -2292,14 +2536,38 @@ const MilkSelection = ({
                 showBowlSpotlight ? ' milk-spotlight-exempt' : ''
               }`}
               style={{
-                left: `${incomingRimLeft}%`,
-                top: `${incomingRimTop}%`,
-                width: `${incomingRimWidth}%`,
-                height: `${incomingRimHeight}%`,
-                ...(pouringKey === 'bowl' ? { transform: `rotate(${BOTTLE_POUR_ROTATE_DEG}deg)` } : {}),
+                // Wrapper-relative percentages now (see this block's own
+                // big comment above) instead of incomingRimLeft/Top/Width/
+                // Height's old container-relative math -- left/top are
+                // still the ellipse's own CENTER point, same centering
+                // convention as MatchaMaking.js's own nested version
+                // (translate(-50%, -50%), baked into .bowl-whisked-liquid's
+                // own growFromCenter animation in MatchaMaking.css).
+                left: `${BOWL_INNER_RIM_CENTER.leftFrac * 100}%`,
+                top: `${BOWL_INNER_RIM_CENTER.topFrac * 100}%`,
+                width: `${BOWL_INNER_RIM_WIDTH_FRAC * 100}%`,
+                height: `${BOWL_INNER_RIM_HEIGHT_FRAC * 100}%`,
+                // Bug fix: this used to set transform to JUST the tilt
+                // (`rotate(...)`, no translate) the instant a pour started,
+                // clobbering the translate(-50%, -50%) that centers this
+                // element on its own left/top (see this style block's own
+                // comment above, and growFromCenter/.bowl-whisked-liquid in
+                // MatchaMaking.css, which bake that same translate into
+                // every other state this element is ever in). Losing it
+                // mid-pour snapped the ellipse from "centered on left/top"
+                // to "top-left corner AT left/top" -- a visible jump away
+                // from the bowl (and a bogus rotation origin) right as the
+                // pour began, reading as the matcha "opening" away from the
+                // bowl instead of tilting together with it. Keeping the
+                // translate in the same transform as the rotate keeps this
+                // rigidly centered on the bowl's own rim through the whole
+                // tilt, exactly like every other state.
+                ...(pouringKey === 'bowl'
+                  ? { transform: `translate(-50%, -50%) rotate(${BOTTLE_POUR_ROTATE_DEG}deg)` }
+                  : {}),
               }}
             />
-          </>
+          </div>
         )}
         {/* Three cup graphics -- glass (slot 1), plastic (slot 2), and mug
             (slot 3) of the same shelf cubby, see CUP_TYPES above -- but
@@ -2458,8 +2726,16 @@ const MilkSelection = ({
                     ? ' milk-spotlight-exempt'
                     : ''
                 }`}
-                data-focusable
-                tabIndex={0}
+                // Once a cup's confirmed onto the table (orders 2-5 only --
+                // cupsLocked's own big comment above), the two OTHER
+                // (inactive) cup types lose data-focusable/tabIndex
+                // entirely, same "remove from useFlatFocusNav's live-
+                // queried candidate list, and make the hardcoded nav
+                // graph's own direct .focus() calls to it silently no-op"
+                // reasoning as Matcha Making's own tins/kettle/whisk. The
+                // ACTIVE cup is never affected by this -- it stays fully
+                // focusable the whole time it's on the table.
+                {...(!isActive && cupsLocked ? {} : { 'data-focusable': true, tabIndex: 0 })}
                 draggable={false}
                 style={{
                   ...(sending ? { pointerEvents: 'none' } : {}),
@@ -2721,7 +2997,13 @@ const MilkSelection = ({
               // one instead, so nothing in this file needs to focus a
               // placed cube anymore. Cubes still in the ice box are
               // unaffected either way.
-              {...(placed ? {} : { 'data-focusable': true, tabIndex: 0 })}
+              // Once there's already liquid in the cup (orders 2-5 only --
+              // iceLocked's own big comment above), any cube still sitting
+              // in the box loses data-focusable/tabIndex too, same
+              // reasoning as a placed cube's own removal just below --
+              // there's nothing left for the player to do with the ice box
+              // at that point.
+              {...(placed || iceLocked ? {} : { 'data-focusable': true, tabIndex: 0 })}
               draggable={false}
               style={{
                 left: `${pos.left}%`,
@@ -2783,8 +3065,13 @@ const MilkSelection = ({
                 }${
                   showBaseSpotlight ? ' milk-spotlight-exempt' : ''
                 }`}
-                data-focusable
-                tabIndex={0}
+                // Once a base has actually been poured (orders 2-5 only --
+                // baseLocked's own big comment above), every bottle loses
+                // data-focusable/tabIndex, same "remove from useFlatFocusNav's
+                // live-queried candidate list, and make the hardcoded nav
+                // graph's own direct .focus() calls to it silently no-op"
+                // reasoning as Matcha Making's own tins/kettle/whisk.
+                {...(baseLocked ? {} : { 'data-focusable': true, tabIndex: 0 })}
                 draggable={false}
                 style={{
                   ...(pouring ? { transform: `rotate(${BOTTLE_POUR_ROTATE_DEG}deg)` } : {}),
@@ -2963,7 +3250,7 @@ const MilkSelection = ({
           // order specifically. Also now suppressed for orders 2+ entirely,
           // per request -- walkthrough-only label.
           currentStepHint={
-            customerNumber === 1 && !showAdvanceSpotlight
+            isWalkthrough && !showAdvanceSpotlight
               ? 'use your right arrow key to move on to the toppings station.'
               : null
           }

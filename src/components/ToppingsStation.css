@@ -113,7 +113,14 @@
 }
 
 .cup-syrup-fill.guava-syrup {
-  background: linear-gradient(to top, rgba(224, 90, 111, 0.88) 0%, rgba(224, 90, 111, 0.88) 30%, rgba(224, 90, 111, 0) 100%);
+  /* #e88f7f (rgb 232, 143, 127) per follow-up request -- brings the
+     resting fill in the cup in line with the pouring stream/spill color
+     (SYRUP_STREAM_COLORS['guava-syrup'] in ToppingsStation.js), which
+     already got this same hex updated in an earlier pass; this rule was
+     deliberately left as the old rgba(224, 90, 111, ...) at the time
+     since that request was scoped to "the one that pours out" only, but
+     the resting fill needs it too now. */
+  background: linear-gradient(to top, rgba(232, 143, 127, 0.88) 0%, rgba(232, 143, 127, 0.88) 30%, rgba(232, 143, 127, 0) 100%);
 }
 
 .cup-syrup-fill.mint-syrup {
@@ -169,7 +176,28 @@
   position: absolute;
   box-sizing: border-box;
   pointer-events: none;
-  border-radius: 50% 50% 10% 10% / 48% 48% 10% 10%;
+  /* Body shape (the cap ellipse further down, .cup-foam-cap, is the
+     separate "top part" already made fully opaque per an earlier
+     request) -- this whole shape was flipped vertically per follow-up
+     request ("flip the bottom part of the foam upside down"): every
+     point below is the previous pass's polygon with y replaced by
+     (100 - y), same x values, same point order. That previous pass had a
+     rounded dome (half-ellipse, Rx 50%/Ry 42%) at the TOP (y near 0) and
+     a straight-taper-then-flat-line bottom (y near 100, x tapering
+     100%->94% on the right / 0%->6% on the left -- see the original
+     "angle the slides" request); flipped, the rounded dome now sits at
+     the BOTTOM (y near 100) -- reading as a rounded, gently tapered
+     underside that fits the cup's own curve -- while the top (y near 0,
+     mostly hidden under the cap anyway) is the flat-line/taper edge
+     instead. Same taper amount, same dome radii, same overall height as
+     before -- purely a vertical mirror, nothing else changed. */
+  clip-path: polygon(
+    0% 58%, 10% 83.2%, 20% 91.6%, 30% 96.49%, 40% 99.15%,
+    50% 100%,
+    60% 99.15%, 70% 96.49%, 80% 91.6%, 90% 83.2%, 100% 58%,
+    94% 0%,
+    6% 0%
+  );
   transform-origin: top center;
   animation: cupMilkGrow 0.5s ease-out both;
 }
@@ -232,10 +260,12 @@
    drink's surface" cue that actually sells "filled to the top", not just
    a rounded edge on the body. Solid-ish (opacity a little higher than the
    body's own 0.7) since it's meant to look like the one truly flat, fully-
-   poured surface, not a fading transition. Same colors as the body/stream
-   (see FOAM_STREAM_COLORS in ToppingsStation.js). No clip-path/taper math
-   needed here since it's just a plain ellipse, independent of the glass's
-   own taper. */
+   poured surface, not a fading transition. Fully opaque (opacity 100%,
+   was 0.85) per request, so the flat poured-surface cap reads as
+   completely solid while the body beneath it keeps its own low opacity.
+   Same colors as the body/stream (see FOAM_STREAM_COLORS in
+   ToppingsStation.js). No clip-path/taper math needed here since it's
+   just a plain ellipse, independent of the glass's own taper. */
 .cup-foam-cap {
   position: absolute;
   border-radius: 50%;
@@ -244,23 +274,23 @@
 }
 
 .cup-foam-cap.matcha-cold-foam {
-  background: rgba(200, 213, 171, 0.85);
+  background: rgba(200, 213, 171, 1);
 }
 
 .cup-foam-cap.reg-cold-foam {
-  background: rgba(234, 232, 227, 0.85);
+  background: rgba(234, 232, 227, 1);
 }
 
 .cup-foam-cap.banana-foam {
-  background: rgba(240, 219, 137, 0.85);
+  background: rgba(240, 219, 137, 1);
 }
 
 .cup-foam-cap.strawberry-foam {
-  background: rgba(247, 175, 199, 0.85);
+  background: rgba(247, 175, 199, 1);
 }
 
 .cup-foam-cap.blueberry-foam {
-  background: rgba(138, 152, 214, 0.85);
+  background: rgba(138, 152, 214, 1);
 }
 
 /* Matcha-powder/guava-powder settled flecks (see getFleckPositions/
@@ -272,12 +302,15 @@
    rather than anchoring its own top-left corner there. Sized off the
    viewport the same relative way MatchaMaking.css's own .spoon-pour-grain
    is (min(px, vw) so it scales down on smaller windows but never balloons
-   on huge ones), just a touch bigger so a sprinkled powder still reads
-   clearly at this zoomed-out a scale. */
+   on huge ones). Shrunk considerably (was min(14px, 0.75vw)) now that
+   there are far more flecks (POWDER_FLECK_OFFSETS_ELLIPSE/_LIQUID went
+   from 8/10 points to 42/50) -- at the old size that many dots read as a
+   pile of confetti; at this miniscule size the dense scatter instead
+   reads as an actual sprinkled-powder texture. */
 .cup-powder-fleck {
   position: absolute;
-  width: min(14px, 0.75vw);
-  height: min(14px, 0.75vw);
+  width: min(4px, 0.22vw);
+  height: min(4px, 0.22vw);
   border-radius: 50%;
   transform: translate(-50%, -50%);
   pointer-events: none;

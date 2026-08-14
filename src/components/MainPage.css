@@ -69,23 +69,22 @@
   }
 }
 
-/* Was positioned over a "PLAY" sign drawn in at pixel box x 640-770,
-   y 467-533 on the 1024x924 art (62.5%/50.54%/12.7%/7.14% of the IMAGE
-   itself, next to the door). Moved per feedback to sit centered
-   horizontally and right under the "cloud cafe" cloud sign instead --
-   overlapping the striped awning just below it. New image-relative box:
-   left 43.65%, top 35.17%, width 12.7% (unchanged), height 7.14%
-   (unchanged) -- the cloud's bottom scallop sits around y=295px and the
-   awning's own bottom (scalloped) edge around y=421px on the 924px-tall
-   art, so top=35.17%/height=7.14% (325-391px) centers the button in that
-   band; left=43.65% centers the same-width button on the image's own
-   horizontal midline (1024/2 = 512px).
+/* Was a single "start" button positioned over a "PLAY" sign drawn in at
+   pixel box x 640-770, y 467-533 on the 1024x924 art (62.5%/50.54%/12.7%/
+   7.14% of the IMAGE itself, next to the door). Moved per feedback to sit
+   centered horizontally and right under the "cloud cafe" cloud sign
+   instead -- overlapping the striped awning just below it. That single
+   button's own image-relative box was left 43.65%, top 35.17%, width
+   12.7%, height 7.14% -- the cloud's bottom scallop sits around y=295px and
+   the awning's own bottom (scalloped) edge around y=421px on the 924px-
+   tall art, so top=35.17%/height=7.14% (325-391px) centered the button in
+   that band; left=43.65% centered it on the image's own horizontal
+   midline (1024/2 = 512px).
 
-   Since .main-container is now a fixed 16:9 and the 1024x924 art is
+   Since .main-container is a fixed 16:9 and the 1024x924 art is
    letterboxed (pillarboxed, in this case) inside it via object-fit:
-   contain, the button's percentages here are relative to the CONTAINER,
-   not the image, and need one extra conversion step vs. the image-relative
-   numbers above:
+   contain, on-screen percentages need one extra conversion step vs. the
+   image-relative numbers above:
      scale         = (imgW/imgH) / (16/9)
      containerLeft = (1 - scale) / 2 * 100 + imageLeft% * scale
      containerWidth = imageWidth% * scale
@@ -94,15 +93,27 @@
        swap the axis (recompute top/height, leave left/width unchanged) if
        a future image is WIDER than 16:9 and gets letterboxed top/bottom
        instead.
-   For this art: scale = (1024/924)/(16/9) = 0.6233 ->
-     left = 46.04%, width = 7.92% (unchanged), top/height unchanged
-     (35.17%/7.14%). left+width/2 = 50.00%, confirming it's centered on
-     the container. */
+   For this art: scale = (1024/924)/(16/9) = 0.6233, so the single button's
+   own top/height carried over unchanged (35.17%/7.14%) -- reused as-is
+   below for both of the two buttons that replaced it (same vertical band,
+   over the awning).
+
+   Per request, replaced with two buttons ("training day" / "i'm trained")
+   side by side instead of one -- .play-button now holds every property
+   the two share (fill/border/font/pulse/hover/active/disabled, the same
+   "Back button on Customer Ordering" look the original single button
+   matched), while .play-button-training/.play-button-trained (below) hold
+   only the position that differs between them. Widened from the original
+   single button's 7.92% to 13% each to comfortably fit the longer labels
+   ("training day"/"i'm trained" vs. "start") without shrinking the font
+   down further than necessary. Laid out symmetrically around the same
+   50% horizontal center the single button was centered on: two 13%-wide
+   buttons plus a 2% gap between them is 28% total, so the pair starts at
+   (100 - 28) / 2 = 36% and ends at 64%, still centered on 50% overall. */
 .play-button {
   position: absolute;
-  left: 46.04%;
   top: 35.17%;
-  width: 7.92%;
+  width: 13%;
   height: 7.14%;
   padding: 0;
   display: flex;
@@ -123,11 +134,28 @@
   color: #5c4a3a;
   font-family: 'Pixelify Sans', cursive;
   font-weight: 600;
+  white-space: nowrap;
   /* Scales with the game card (width: 1920px; max-width: 92vw on
      .main-container) instead of a fixed px size, so button text stays
-     proportional to the button itself as the window is resized/zoomed. */
-  font-size: min(22px, 1.0542vw);
+     proportional to the button itself as the window is resized/zoomed.
+     Sized down a touch from the original single button's 22px/1.0542vw --
+     these two are wider (13% vs. 7.92%) but also hold longer text
+     ("training day"/"i'm trained" vs. "start"), so this keeps a
+     comfortable margin inside each pill instead of running edge to edge. */
+  font-size: min(19px, 0.9vw);
   border-radius: 999px;
+}
+
+/* Left button -- see the big comment on .play-button above for the 36%/
+   64% symmetric-pair math. */
+.play-button-training {
+  left: 36%;
+}
+
+/* Right button -- starts right after the left button's own 13% width plus
+   the 2% gap (36% + 13% + 2% = 51%). */
+.play-button-trained {
+  left: 51%;
 }
 
 @keyframes playButtonPulse {
